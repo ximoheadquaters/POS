@@ -64,4 +64,5 @@ Starter, Business, Professional, and Enterprise mappings are in `supabase/seed.s
 
 - `0001_initial_schema.sql` — relational schema, indexes, triggers, RLS, and helper functions
 - `0002_storage_policies.sql` — product-image bucket and read policy
+- `0003_platform_api.sql` — hashed API clients and immutable platform audit history
 - `seed.sql` — repeatable development structural data

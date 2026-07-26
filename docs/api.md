@@ -70,3 +70,56 @@ original receipt with `replayed: true`.
 The error codes most useful to the mobile UI are `BRANCH_ACCESS_DENIED`, `MODULE_DISABLED`,
 `PERMISSION_DENIED`, `INSUFFICIENT_INVENTORY`, `PAYMENT_MISMATCH`, `SHIFT_ALREADY_OPEN`,
 `INVALID_CHECKOUT_CONTEXT`, and `RETURN_QUANTITY_EXCEEDED`.
+
+## Platform API
+
+The platform API is for a trusted server-side integration such as the firm's existing e-commerce
+Super Admin. It uses a separate server-to-server token, not a POS user's Supabase token. Store the
+raw token only in the website server environment as `XIMO_POS_API_TOKEN`. Never expose it through
+browser JavaScript or a public environment variable.
+
+Create a token after applying `0003_platform_api.sql`:
+
+```powershell
+npx.cmd --yes pnpm@11.9.0 --filter @ximo/api platform:token:create --name "Main website" --expires-days 365
+```
+
+The command prints the token once. The database stores only its SHA-256 hash. Send it as:
+
+```http
+Authorization: Bearer ximo_platform_<secret>
+```
+
+The website server may include `X-Platform-Actor-Id` and `X-Platform-Actor-Email` so the immutable
+platform audit record identifies which signed-in Super Admin initiated a change.
+
+| Method | Route                                                         | Purpose                                      |
+| ------ | ------------------------------------------------------------- | -------------------------------------------- |
+| GET    | `/platform/plans`                                             | List plans and their included modules        |
+| GET    | `/platform/modules`                                           | List the module catalog                      |
+| GET    | `/platform/organizations`                                     | Search and paginate organizations            |
+| GET    | `/platform/organizations/:organizationId`                     | Organization and subscription details        |
+| GET    | `/platform/organizations/:organizationId/modules`             | Plan, override, and effective module states  |
+| PATCH  | `/platform/organizations/:organizationId/subscription`        | Change the plan and subscription status      |
+| PUT    | `/platform/organizations/:organizationId/modules/:moduleCode` | Set an enabled/disabled module override      |
+| DELETE | `/platform/organizations/:organizationId/modules/:moduleCode` | Remove an override and follow the plan again |
+| GET    | `/platform/audit`                                             | Paginated platform audit history             |
+
+Module override body:
+
+```json
+{
+  "enabled": false,
+  "reason": "Not included in the client's agreement"
+}
+```
+
+Subscription body:
+
+```json
+{
+  "planCode": "business",
+  "status": "active",
+  "currentPeriodEndsAt": "2027-07-27T00:00:00+08:00"
+}
+```

@@ -70,6 +70,18 @@ npx.cmd --yes pnpm@11.9.0 build
 
 To reset local data, use `npx supabase db reset`, then rerun the secure user seed command.
 
+## Super Admin website integration
+
+After applying the migrations, issue a server-to-server token for the firm's website backend:
+
+```powershell
+npx.cmd --yes pnpm@11.9.0 --filter @ximo/api platform:token:create --name "Main website" --expires-days 365
+```
+
+Save the printed value as `XIMO_POS_API_TOKEN` only in the website server environment. The website
+server calls `/api/v1/platform`; the token must never be included in a browser bundle. See
+[api.md](docs/api.md#platform-api) for endpoint contracts.
+
 ## Workspaces
 
 - `apps/mobile` — Expo Router iOS/Android phone and tablet application

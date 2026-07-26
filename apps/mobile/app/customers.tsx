@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Alert, FlatList, Text, TextInput, View } from 'react-native';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Button, EmptyState, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import { Button, EmptyState, Header, Screen } from '@/components/ui';
 
 interface Customer {
   id: string;
@@ -35,12 +35,7 @@ export default function CustomersScreen() {
   const customers = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
   return (
     <Screen>
-      <Header
-        title="Customers"
-        showBack
-        backLabel="More"
-        fallbackHref="/(tabs)/more"
-      />
+      <Header title="Customers" showBack backLabel="More" fallbackHref="/(tabs)/more" />
       <View className="gap-3 border-b border-slate-200 bg-white p-4">
         <TextInput
           value={search}

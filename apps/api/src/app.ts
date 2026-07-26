@@ -16,6 +16,7 @@ import { branchesRouter } from './modules/branches/routes.js';
 import { customersRouter } from './modules/customers/routes.js';
 import { inventoryRouter } from './modules/inventory/routes.js';
 import { organizationsRouter } from './modules/organizations/routes.js';
+import { platformRouter } from './modules/platform/routes.js';
 import { categoriesRouter, productsRouter } from './modules/products/routes.js';
 import { registersRouter } from './modules/registers/routes.js';
 import { reportsRouter } from './modules/reports/routes.js';
@@ -42,7 +43,15 @@ export function createApp(dependencies: AppDependencies) {
     response.setHeader('x-request-id', response.locals.requestId);
     next();
   });
-  app.use(pinoHttp({ quietReqLogger: process.env.NODE_ENV === 'test' }));
+  app.use(
+    pinoHttp({
+      quietReqLogger: process.env.NODE_ENV === 'test',
+      redact: {
+        paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+        censor: '[REDACTED]',
+      },
+    }),
+  );
 
   app.get('/health', async (_request, response) => {
     await dependencies.database.query('select 1');
@@ -66,6 +75,7 @@ export function createApp(dependencies: AppDependencies) {
     },
   );
   app.use('/api/v1/auth', auth);
+  app.use('/api/v1/platform', platformRouter(dependencies.database));
 
   const protectedApi = express.Router();
   protectedApi.use(authenticate(dependencies.database, dependencies.verifyToken));
