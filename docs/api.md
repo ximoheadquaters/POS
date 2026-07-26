@@ -78,7 +78,7 @@ Super Admin. It uses a separate server-to-server token, not a POS user's Supabas
 raw token only in the website server environment as `XIMO_POS_API_TOKEN`. Never expose it through
 browser JavaScript or a public environment variable.
 
-Create a token after applying `0003_platform_api.sql`:
+Create a token after applying the Platform API migrations:
 
 ```powershell
 npx.cmd --yes pnpm@11.9.0 --filter @ximo/api platform:token:create --name "Main website" --expires-days 365
@@ -98,12 +98,42 @@ platform audit record identifies which signed-in Super Admin initiated a change.
 | GET    | `/platform/plans`                                             | List plans and their included modules        |
 | GET    | `/platform/modules`                                           | List the module catalog                      |
 | GET    | `/platform/organizations`                                     | Search and paginate organizations            |
+| POST   | `/platform/organizations`                                     | Provision an organization and invite owner   |
 | GET    | `/platform/organizations/:organizationId`                     | Organization and subscription details        |
 | GET    | `/platform/organizations/:organizationId/modules`             | Plan, override, and effective module states  |
 | PATCH  | `/platform/organizations/:organizationId/subscription`        | Change the plan and subscription status      |
 | PUT    | `/platform/organizations/:organizationId/modules/:moduleCode` | Set an enabled/disabled module override      |
 | DELETE | `/platform/organizations/:organizationId/modules/:moduleCode` | Remove an override and follow the plan again |
 | GET    | `/platform/audit`                                             | Paginated platform audit history             |
+
+### Organization provisioning
+
+`POST /platform/organizations` requires an `Idempotency-Key` header containing 8–200 characters:
+
+```json
+{
+  "name": "New Client Business",
+  "currency": "PHP",
+  "timezone": "Asia/Manila",
+  "planCode": "business",
+  "subscriptionStatus": "active",
+  "ownerEmail": "owner@example.com",
+  "ownerName": "Client Owner"
+}
+```
+
+The first successful request returns `201`. An identical retry returns `200`, the original response,
+and `Idempotent-Replayed: true`. Reusing the key with changed details returns `409`.
+
+Provisioning creates the organization, subscription, settings, system roles and permissions, owner
+profile, Main Branch, and Main Counter in one PostgreSQL transaction. Plan modules remain plan
+defaults; onboarding does not insert `organization_modules` overrides. Supabase Auth invitation is
+an external operation. If the database transaction fails after invitation, the API compensates by
+deleting the invited Auth user.
+
+The optional server-only `PLATFORM_OWNER_INVITE_REDIRECT_URL` controls where Supabase sends the
+owner after accepting the email invitation. Supabase email delivery must be configured for
+production.
 
 Module override body:
 

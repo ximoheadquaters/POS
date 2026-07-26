@@ -13,5 +13,6 @@ export interface AuthActions {
     password: string;
     displayName: string;
   }): Promise<VerifiedAuthUser>;
+  inviteUser(input: { email: string; displayName: string }): Promise<VerifiedAuthUser>;
   deleteUser(userId: string): Promise<void>;
 }

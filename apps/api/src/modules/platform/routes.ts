@@ -3,6 +3,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { moduleCodeSchema, paginationSchema, uuidSchema } from '@ximo/shared';
 import { z } from 'zod';
+import type { AuthActions } from '../../auth/types.js';
 import type { Database, Queryable } from '../../database/types.js';
 import { validateBody, validateQuery } from '../../middleware/validation.js';
 import {
@@ -10,7 +11,11 @@ import {
   requirePlatformScope,
   type PlatformApiClient,
 } from '../../platform/auth.js';
-import { notFound } from '../../shared/errors.js';
+import {
+  PlatformProvisioningService,
+  provisionOrganizationRequestSchema,
+} from '../../platform/provisioning-service.js';
+import { badRequest, notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
 
 const subscriptionStatusSchema = z.enum(['trialing', 'active', 'past_due', 'cancelled']);
@@ -84,8 +89,9 @@ async function moduleStatus(database: Queryable, organizationId: string, moduleC
   return moduleCode ? result.rows[0] : result.rows;
 }
 
-export function platformRouter(database: Database): Router {
+export function platformRouter(database: Database, authActions: AuthActions): Router {
   const router = Router();
+  const provisioning = new PlatformProvisioningService(database, authActions);
   router.use(
     rateLimit({
       windowMs: 60_000,
@@ -98,8 +104,15 @@ export function platformRouter(database: Database): Router {
 
   router.get('/plans', requirePlatformScope('platform:read'), async (_request, response) => {
     const result = await database.query(
-      `select p.code,p.name,p.price_monthly::text as "priceMonthly",p.is_active as "isActive",
-          coalesce(array_agg(m.code order by m.code) filter (where m.code is not null),'{}') as modules
+      `select p.code,p.name,p.description,p.price_monthly::text as "priceMonthly",
+          p.billing_interval as "billingInterval",p.is_active as "isActive",
+          p.is_available_for_onboarding as "isAvailableForOnboarding",
+          p.allowed_onboarding_statuses::text[] as "allowedOnboardingStatuses",
+          coalesce(
+            jsonb_agg(jsonb_build_object('code',m.code,'name',m.name) order by m.name)
+              filter (where m.id is not null),
+            '[]'::jsonb
+          ) as modules
          from plans p
          left join plan_modules pm on pm.plan_id=p.id
          left join modules m on m.id=pm.module_id
@@ -156,6 +169,34 @@ export function platformRouter(database: Database): Router {
         pageSize,
         total,
       );
+    },
+  );
+
+  router.post(
+    '/organizations',
+    requirePlatformScope('platform:write'),
+    validateBody(provisionOrganizationRequestSchema),
+    async (request, response) => {
+      const idempotencyKey = request.header('idempotency-key')?.trim();
+      if (!idempotencyKey) {
+        throw badRequest(
+          'MISSING_IDEMPOTENCY_KEY',
+          'Idempotency-Key is required for organization provisioning',
+        );
+      }
+      if (idempotencyKey.length < 8 || idempotencyKey.length > 200) {
+        throw badRequest(
+          'INVALID_IDEMPOTENCY_KEY',
+          'Idempotency-Key must contain between 8 and 200 characters',
+        );
+      }
+      const result = await provisioning.provision(request.body, {
+        apiClient: platformClient(response),
+        idempotencyKey,
+        auditMetadata: auditMetadata(request, response),
+      });
+      if (result.replayed) response.setHeader('idempotent-replayed', 'true');
+      sendData(response, result.data, result.replayed ? 200 : 201);
     },
   );
 

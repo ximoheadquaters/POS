@@ -147,6 +147,10 @@ const authActions = {
     id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     email: input.email,
   }),
+  inviteUser: async (input: { email: string }) => ({
+    id: '99999999-9999-4999-8999-999999999999',
+    email: input.email,
+  }),
   deleteUser: async () => undefined,
 };
 

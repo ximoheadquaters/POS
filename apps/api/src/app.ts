@@ -47,7 +47,13 @@ export function createApp(dependencies: AppDependencies) {
     pinoHttp({
       quietReqLogger: process.env.NODE_ENV === 'test',
       redact: {
-        paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'req.headers.idempotency-key',
+          'req.headers.x-platform-actor-email',
+          'res.headers["set-cookie"]',
+        ],
         censor: '[REDACTED]',
       },
     }),
@@ -75,7 +81,7 @@ export function createApp(dependencies: AppDependencies) {
     },
   );
   app.use('/api/v1/auth', auth);
-  app.use('/api/v1/platform', platformRouter(dependencies.database));
+  app.use('/api/v1/platform', platformRouter(dependencies.database, dependencies.authActions));
 
   const protectedApi = express.Router();
   protectedApi.use(authenticate(dependencies.database, dependencies.verifyToken));

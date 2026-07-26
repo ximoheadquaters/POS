@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { AppConfig } from '../config.js';
-import { conflict, unauthorized } from '../shared/errors.js';
+import { conflict, serviceUnavailable, unauthorized } from '../shared/errors.js';
 import type { AuthActions, VerifyToken } from './types.js';
 
 export function createSupabaseAuth(config: AppConfig): {
@@ -47,6 +47,35 @@ export function createSupabaseAuth(config: AppConfig): {
           throw conflict(
             'AUTH_USER_CREATE_FAILED',
             error?.message ?? 'The employee account could not be created',
+          );
+        }
+        return { id: data.user.id, email: data.user.email };
+      },
+      async inviteUser(input) {
+        const options = {
+          data: { display_name: input.displayName },
+          ...(config.PLATFORM_OWNER_INVITE_REDIRECT_URL
+            ? { redirectTo: config.PLATFORM_OWNER_INVITE_REDIRECT_URL }
+            : {}),
+        };
+        const { data, error } = await adminClient.auth.admin.inviteUserByEmail(
+          input.email,
+          options,
+        );
+        if (error || !data.user?.email) {
+          if (
+            error?.status === 422 ||
+            error?.message.toLowerCase().includes('already') ||
+            error?.message.toLowerCase().includes('registered')
+          ) {
+            throw conflict(
+              'OWNER_ALREADY_EXISTS',
+              'An authentication account already exists for this owner email',
+            );
+          }
+          throw serviceUnavailable(
+            'OWNER_INVITATION_UNAVAILABLE',
+            'The owner invitation service is temporarily unavailable',
           );
         }
         return { id: data.user.id, email: data.user.email };

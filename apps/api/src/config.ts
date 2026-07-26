@@ -16,6 +16,7 @@ const envSchema = z.object({
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_STORAGE_BUCKET: z.string().default('product-images'),
+  PLATFORM_OWNER_INVITE_REDIRECT_URL: z.url().optional(),
   LOG_LEVEL: z.string().default('info'),
 });
 
