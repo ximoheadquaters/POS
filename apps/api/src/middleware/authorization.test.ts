@@ -14,6 +14,8 @@ const authActions = {
     id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     email: input.email,
   }),
+  resendOwnerInvitation: async () => undefined,
+  getUser: async () => null,
   deleteUser: async () => undefined,
 };
 

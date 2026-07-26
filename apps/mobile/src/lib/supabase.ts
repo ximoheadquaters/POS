@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import * as SecureStore from 'expo-secure-store';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -11,11 +12,18 @@ const secureStorage = {
   removeItem: (key: string) => SecureStore.deleteItemAsync(key),
 };
 
+const webStorage = {
+  getItem: async (key: string) => globalThis.localStorage?.getItem(key) ?? null,
+  setItem: async (key: string, value: string) => globalThis.localStorage?.setItem(key, value),
+  removeItem: async (key: string) => globalThis.localStorage?.removeItem(key),
+};
+
 export const supabase = createClient(url, anonKey, {
   auth: {
-    storage: secureStorage,
+    storage: Platform.OS === 'web' ? webStorage : secureStorage,
     autoRefreshToken: true,
     persistSession: true,
+    // Invitation URLs are parsed explicitly by /accept-invitation on web and native.
     detectSessionInUrl: false,
   },
 });

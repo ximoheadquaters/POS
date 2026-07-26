@@ -7,18 +7,29 @@ loadDotenv({
   quiet: true,
 });
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().positive().default(4000),
-  DATABASE_URL: z.string().min(1),
-  DATABASE_SSL: z.enum(['true', 'false']).default('false'),
-  SUPABASE_URL: z.url(),
-  SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  SUPABASE_STORAGE_BUCKET: z.string().default('product-images'),
-  PLATFORM_OWNER_INVITE_REDIRECT_URL: z.url().optional(),
-  LOG_LEVEL: z.string().default('info'),
-});
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    PORT: z.coerce.number().int().positive().default(4000),
+    DATABASE_URL: z.string().min(1),
+    DATABASE_SSL: z.enum(['true', 'false']).default('false'),
+    SUPABASE_URL: z.url(),
+    SUPABASE_ANON_KEY: z.string().min(1),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+    SUPABASE_STORAGE_BUCKET: z.string().default('product-images'),
+    PLATFORM_OWNER_INVITE_REDIRECT_URL: z.url(),
+    LOG_LEVEL: z.string().default('info'),
+  })
+  .superRefine((environment, context) => {
+    const redirect = new URL(environment.PLATFORM_OWNER_INVITE_REDIRECT_URL);
+    if (environment.NODE_ENV === 'production' && redirect.protocol !== 'https:') {
+      context.addIssue({
+        code: 'custom',
+        path: ['PLATFORM_OWNER_INVITE_REDIRECT_URL'],
+        message: 'Production owner invitations require an HTTPS redirect URL',
+      });
+    }
+  });
 
 export type AppConfig = z.infer<typeof envSchema>;
 

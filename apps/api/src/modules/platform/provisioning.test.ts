@@ -190,6 +190,8 @@ function authFixture(options: { failInvite?: boolean; duplicateAuth?: boolean } 
       }
       return { id: OWNER_ID, email: input.email };
     },
+    resendOwnerInvitation: async () => undefined,
+    getUser: async () => null,
     deleteUser: async (userId) => {
       deletions.push(userId);
     },

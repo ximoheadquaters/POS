@@ -93,18 +93,19 @@ Authorization: Bearer ximo_platform_<secret>
 The website server may include `X-Platform-Actor-Id` and `X-Platform-Actor-Email` so the immutable
 platform audit record identifies which signed-in Super Admin initiated a change.
 
-| Method | Route                                                         | Purpose                                      |
-| ------ | ------------------------------------------------------------- | -------------------------------------------- |
-| GET    | `/platform/plans`                                             | List plans and their included modules        |
-| GET    | `/platform/modules`                                           | List the module catalog                      |
-| GET    | `/platform/organizations`                                     | Search and paginate organizations            |
-| POST   | `/platform/organizations`                                     | Provision an organization and invite owner   |
-| GET    | `/platform/organizations/:organizationId`                     | Organization and subscription details        |
-| GET    | `/platform/organizations/:organizationId/modules`             | Plan, override, and effective module states  |
-| PATCH  | `/platform/organizations/:organizationId/subscription`        | Change the plan and subscription status      |
-| PUT    | `/platform/organizations/:organizationId/modules/:moduleCode` | Set an enabled/disabled module override      |
-| DELETE | `/platform/organizations/:organizationId/modules/:moduleCode` | Remove an override and follow the plan again |
-| GET    | `/platform/audit`                                             | Paginated platform audit history             |
+| Method | Route                                                             | Purpose                                      |
+| ------ | ----------------------------------------------------------------- | -------------------------------------------- |
+| GET    | `/platform/plans`                                                 | List plans and their included modules        |
+| GET    | `/platform/modules`                                               | List the module catalog                      |
+| GET    | `/platform/organizations`                                         | Search and paginate organizations            |
+| POST   | `/platform/organizations`                                         | Provision an organization and invite owner   |
+| GET    | `/platform/organizations/:organizationId`                         | Organization and subscription details        |
+| POST   | `/platform/organizations/:organizationId/owner-invitation/resend` | Resend owner password setup                  |
+| GET    | `/platform/organizations/:organizationId/modules`                 | Plan, override, and effective module states  |
+| PATCH  | `/platform/organizations/:organizationId/subscription`            | Change the plan and subscription status      |
+| PUT    | `/platform/organizations/:organizationId/modules/:moduleCode`     | Set an enabled/disabled module override      |
+| DELETE | `/platform/organizations/:organizationId/modules/:moduleCode`     | Remove an override and follow the plan again |
+| GET    | `/platform/audit`                                                 | Paginated platform audit history             |
 
 ### Organization provisioning
 
@@ -131,9 +132,23 @@ defaults; onboarding does not insert `organization_modules` overrides. Supabase 
 an external operation. If the database transaction fails after invitation, the API compensates by
 deleting the invited Auth user.
 
-The optional server-only `PLATFORM_OWNER_INVITE_REDIRECT_URL` controls where Supabase sends the
-owner after accepting the email invitation. Supabase email delivery must be configured for
-production.
+The server-only `PLATFORM_OWNER_INVITE_REDIRECT_URL` controls where Supabase sends the owner after
+accepting the email invitation. It is required by the API. Production must use the deployed HTTPS
+POS web route ending in `/accept-invitation`; local web development can use
+`http://localhost:8081/accept-invitation`.
+
+`POST /platform/organizations/:organizationId/owner-invitation/resend` requires `platform:write`
+and returns `202` when Supabase accepts the email. Because Supabase cannot invite an existing Auth
+user twice, resends use Supabase's password-recovery email with the same secure password-setup
+route. The existing Auth user and POS profile are never deleted or duplicated. A database-backed
+five-minute per-owner cooldown returns `429 OWNER_INVITATION_RATE_LIMITED` for repeated requests.
+
+Organization details include safe owner metadata: email, display name, invitation status, invited
+or created timestamp, and last sign-in timestamp when Supabase Auth is available. Passwords,
+tokens, service-role credentials, and generated invitation URLs are never returned.
+
+See [Owner invitations](owner-invitations.md) for the complete Supabase dashboard and deployment
+configuration.
 
 Module override body:
 

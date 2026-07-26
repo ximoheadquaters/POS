@@ -3,6 +3,12 @@ export interface VerifiedAuthUser {
   email: string;
 }
 
+export interface AuthUserDetails extends VerifiedAuthUser {
+  createdAt: string;
+  invitedAt: string | null;
+  lastSignInAt: string | null;
+}
+
 export type VerifyToken = (token: string) => Promise<VerifiedAuthUser>;
 
 export interface AuthActions {
@@ -14,5 +20,7 @@ export interface AuthActions {
     displayName: string;
   }): Promise<VerifiedAuthUser>;
   inviteUser(input: { email: string; displayName: string }): Promise<VerifiedAuthUser>;
+  resendOwnerInvitation(email: string): Promise<void>;
+  getUser(userId: string): Promise<AuthUserDetails | null>;
   deleteUser(userId: string): Promise<void>;
 }

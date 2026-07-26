@@ -54,9 +54,7 @@ export function createSupabaseAuth(config: AppConfig): {
       async inviteUser(input) {
         const options = {
           data: { display_name: input.displayName },
-          ...(config.PLATFORM_OWNER_INVITE_REDIRECT_URL
-            ? { redirectTo: config.PLATFORM_OWNER_INVITE_REDIRECT_URL }
-            : {}),
+          redirectTo: config.PLATFORM_OWNER_INVITE_REDIRECT_URL,
         };
         const { data, error } = await adminClient.auth.admin.inviteUserByEmail(
           input.email,
@@ -79,6 +77,37 @@ export function createSupabaseAuth(config: AppConfig): {
           );
         }
         return { id: data.user.id, email: data.user.email };
+      },
+      async resendOwnerInvitation(email) {
+        // Supabase does not re-invite an existing user. A recovery email establishes the
+        // same secure password-setup session without deleting or duplicating the Auth user.
+        const { error } = await publicClient.auth.resetPasswordForEmail(email, {
+          redirectTo: config.PLATFORM_OWNER_INVITE_REDIRECT_URL,
+        });
+        if (error) {
+          throw serviceUnavailable(
+            'OWNER_INVITATION_UNAVAILABLE',
+            'The owner invitation service is temporarily unavailable',
+          );
+        }
+      },
+      async getUser(userId) {
+        const { data, error } = await adminClient.auth.admin.getUserById(userId);
+        if (error) {
+          if (error.status === 404) return null;
+          throw serviceUnavailable(
+            'AUTH_USER_LOOKUP_UNAVAILABLE',
+            'Authentication account details are temporarily unavailable',
+          );
+        }
+        if (!data.user?.email) return null;
+        return {
+          id: data.user.id,
+          email: data.user.email,
+          createdAt: data.user.created_at,
+          invitedAt: data.user.invited_at ?? null,
+          lastSignInAt: data.user.last_sign_in_at ?? null,
+        };
       },
       async deleteUser(userId) {
         const { error } = await adminClient.auth.admin.deleteUser(userId);

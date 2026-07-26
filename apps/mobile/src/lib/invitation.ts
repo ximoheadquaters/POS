@@ -1,0 +1,207 @@
+import type { CurrentUser } from '@ximo/shared';
+
+export const INVALID_INVITATION_MESSAGE =
+  'This invitation link is invalid or has expired. Request a new invitation from your administrator.';
+
+export type InvitationCallback =
+  | { kind: 'pkce'; code: string }
+  | { kind: 'session'; accessToken: string; refreshToken: string }
+  | { kind: 'otp'; tokenHash: string; type: 'invite' | 'recovery' }
+  | { kind: 'invalid'; reason: 'invalid' | 'expired'; message: string };
+
+interface AuthResponse {
+  data: { session: { access_token: string } | null };
+  error: { message: string; status?: number } | null;
+}
+
+export interface InvitationAuthClient {
+  exchangeCodeForSession(code: string): Promise<AuthResponse>;
+  setSession(input: { access_token: string; refresh_token: string }): Promise<AuthResponse>;
+  verifyOtp(input: { token_hash: string; type: 'invite' | 'recovery' }): Promise<AuthResponse>;
+  updateUser(input: { password: string }): Promise<{
+    data: unknown;
+    error: { message: string; status?: number } | null;
+  }>;
+  getSession(): Promise<AuthResponse>;
+  signOut(): Promise<unknown>;
+}
+
+export class InvitationFlowError extends Error {
+  constructor(
+    public readonly kind: 'invalid' | 'expired' | 'network' | 'profile',
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function callbackValues(url: URL): URLSearchParams {
+  const values = new URLSearchParams(url.search);
+  const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+  for (const [key, value] of new URLSearchParams(hash)) {
+    if (!values.has(key)) values.set(key, value);
+  }
+  return values;
+}
+
+function looksExpired(value: string): boolean {
+  return /expired|invalid.*(?:token|link|otp)|otp.*expired|same link twice/i.test(value);
+}
+
+export function parseInvitationCallback(rawUrl: string): InvitationCallback {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return { kind: 'invalid', reason: 'invalid', message: INVALID_INVITATION_MESSAGE };
+  }
+
+  const values = callbackValues(url);
+  const providerError = [
+    values.get('error'),
+    values.get('error_code'),
+    values.get('error_description'),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (providerError) {
+    return {
+      kind: 'invalid',
+      reason: looksExpired(providerError) ? 'expired' : 'invalid',
+      message: INVALID_INVITATION_MESSAGE,
+    };
+  }
+
+  const code = values.get('code')?.trim();
+  if (code) return { kind: 'pkce', code };
+
+  const type = values.get('type');
+  const tokenHash = values.get('token_hash')?.trim();
+  if (tokenHash && (type === 'invite' || type === 'recovery')) {
+    return { kind: 'otp', tokenHash, type };
+  }
+
+  const accessToken = values.get('access_token')?.trim();
+  const refreshToken = values.get('refresh_token')?.trim();
+  if (accessToken && refreshToken && (!type || type === 'invite' || type === 'recovery')) {
+    return { kind: 'session', accessToken, refreshToken };
+  }
+
+  return { kind: 'invalid', reason: 'invalid', message: INVALID_INVITATION_MESSAGE };
+}
+
+function providerFailure(error: { message: string; status?: number } | null): InvitationFlowError {
+  if (error && (looksExpired(error.message) || error.status === 400 || error.status === 401)) {
+    return new InvitationFlowError('expired', INVALID_INVITATION_MESSAGE);
+  }
+  return new InvitationFlowError(
+    'network',
+    'Could not verify the invitation. Check your connection and try opening the link again.',
+  );
+}
+
+export async function establishInvitationSession(
+  auth: InvitationAuthClient,
+  callback: InvitationCallback,
+): Promise<string> {
+  if (callback.kind === 'invalid') {
+    throw new InvitationFlowError(callback.reason, callback.message);
+  }
+
+  const result =
+    callback.kind === 'pkce'
+      ? await auth.exchangeCodeForSession(callback.code)
+      : callback.kind === 'session'
+        ? await auth.setSession({
+            access_token: callback.accessToken,
+            refresh_token: callback.refreshToken,
+          })
+        : await auth.verifyOtp({ token_hash: callback.tokenHash, type: callback.type });
+
+  if (result.error || !result.data.session) throw providerFailure(result.error);
+  return result.data.session.access_token;
+}
+
+export interface PasswordValidation {
+  password?: string;
+  confirmation?: string;
+}
+
+export function validateInvitationPassword(
+  password: string,
+  confirmation: string,
+): PasswordValidation {
+  const issues: PasswordValidation = {};
+  if (
+    password.length < 10 ||
+    !/[a-z]/.test(password) ||
+    !/[A-Z]/.test(password) ||
+    !/[0-9]/.test(password)
+  ) {
+    issues.password =
+      'Use at least 10 characters with an uppercase letter, lowercase letter, and number.';
+  }
+  if (password !== confirmation) issues.confirmation = 'Passwords do not match.';
+  return issues;
+}
+
+export async function completeInvitationPassword(
+  auth: InvitationAuthClient,
+  password: string,
+  refreshUser: (accessToken?: string) => Promise<CurrentUser>,
+): Promise<CurrentUser> {
+  const updated = await auth.updateUser({ password });
+  if (updated.error) throw providerFailure(updated.error);
+
+  const sessionResult = await auth.getSession();
+  const accessToken = sessionResult.data.session?.access_token;
+  if (sessionResult.error || !accessToken) {
+    await auth.signOut();
+    throw new InvitationFlowError(
+      'profile',
+      'Your password was saved, but the POS session could not be verified. Sign in with your new password.',
+    );
+  }
+
+  try {
+    const user = await refreshUser(accessToken);
+    if (user.role !== 'owner') {
+      throw new Error('The invited account is not an organization owner');
+    }
+    return user;
+  } catch {
+    await auth.signOut();
+    throw new InvitationFlowError(
+      'profile',
+      'Your password was saved, but your active POS owner profile could not be loaded. Contact your administrator before signing in.',
+    );
+  }
+}
+
+export async function finishInvitationSetup(
+  auth: InvitationAuthClient,
+  password: string,
+  refreshUser: (accessToken?: string) => Promise<CurrentUser>,
+  onAuthorized: (user: CurrentUser) => void,
+): Promise<CurrentUser> {
+  const user = await completeInvitationPassword(auth, password, refreshUser);
+  onAuthorized(user);
+  return user;
+}
+
+export interface SubmissionGuard {
+  current: boolean;
+}
+
+export async function runInvitationSubmission<T>(
+  guard: SubmissionGuard,
+  work: () => Promise<T>,
+): Promise<{ started: boolean; value?: T }> {
+  if (guard.current) return { started: false };
+  guard.current = true;
+  try {
+    return { started: true, value: await work() };
+  } finally {
+    guard.current = false;
+  }
+}

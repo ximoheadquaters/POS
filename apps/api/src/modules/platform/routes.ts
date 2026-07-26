@@ -15,6 +15,7 @@ import {
   PlatformProvisioningService,
   provisionOrganizationRequestSchema,
 } from '../../platform/provisioning-service.js';
+import { OwnerInvitationService } from '../../platform/owner-invitation-service.js';
 import { badRequest, notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
 
@@ -92,6 +93,7 @@ async function moduleStatus(database: Queryable, organizationId: string, moduleC
 export function platformRouter(database: Database, authActions: AuthActions): Router {
   const router = Router();
   const provisioning = new PlatformProvisioningService(database, authActions);
+  const ownerInvitations = new OwnerInvitationService(database, authActions);
   router.use(
     rateLimit({
       windowMs: 60_000,
@@ -230,7 +232,63 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
         [organizationId],
       );
       if (!result.rows[0]) throw notFound('Organization');
-      sendData(response, result.rows[0]);
+
+      const ownerResult = await database.query<{
+        id: string;
+        email: string;
+        displayName: string;
+        createdAt: string;
+        invitationSentAt: string | null;
+      }>(
+        `select p.id,p.email,p.display_name as "displayName",p.created_at as "createdAt",
+          p.invitation_sent_at as "invitationSentAt"
+         from profiles p
+         join roles r on r.id=p.role_id and r.organization_id=p.organization_id
+         where p.organization_id=$1 and r.code='owner'
+         order by p.created_at limit 1`,
+        [organizationId],
+      );
+      const owner = ownerResult.rows[0];
+      let authOwner:
+        | { createdAt: string; invitedAt: string | null; lastSignInAt: string | null }
+        | null
+        | undefined;
+      if (owner) {
+        try {
+          authOwner = await authActions.getUser(owner.id);
+        } catch {
+          // Organization details remain available if the external Auth provider is unavailable.
+          authOwner = undefined;
+        }
+      }
+      const invitedAt = authOwner?.invitedAt ?? owner?.invitationSentAt ?? null;
+      const lastSignInAt = authOwner?.lastSignInAt ?? null;
+      sendData(response, {
+        ...result.rows[0],
+        owner: owner
+          ? {
+              email: owner.email,
+              displayName: owner.displayName,
+              invitationStatus: lastSignInAt ? 'accepted' : invitedAt ? 'pending' : 'unknown',
+              invitedAt,
+              createdAt: authOwner?.createdAt ?? owner.createdAt,
+              lastSignInAt,
+            }
+          : null,
+      });
+    },
+  );
+
+  router.post(
+    '/organizations/:organizationId/owner-invitation/resend',
+    requirePlatformScope('platform:write'),
+    async (request, response) => {
+      const organizationId = uuidSchema.parse(request.params.organizationId);
+      const result = await ownerInvitations.resend(organizationId, {
+        apiClient: platformClient(response),
+        auditMetadata: auditMetadata(request, response),
+      });
+      sendData(response, result, 202);
     },
   );
 

@@ -62,6 +62,9 @@ Starter, Business, Professional, and Enterprise mappings are in `supabase/seed.s
 
 ## Migration order
 
+Apply `0005_owner_invitations.sql` after `0004_platform_provisioning.sql`; it adds owner invitation
+timestamps and database-backed resend protection.
+
 - `0001_initial_schema.sql` — relational schema, indexes, triggers, RLS, and helper functions
 - `0002_storage_policies.sql` — product-image bucket and read policy
 - `0003_platform_api.sql` — hashed API clients and immutable platform audit history

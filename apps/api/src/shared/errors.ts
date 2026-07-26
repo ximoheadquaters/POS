@@ -21,3 +21,5 @@ export const unprocessable = (code: string, message: string, details?: unknown) 
   new AppError(422, code, message, details);
 export const serviceUnavailable = (code: string, message: string) =>
   new AppError(503, code, message);
+export const tooManyRequests = (code: string, message: string, details?: unknown) =>
+  new AppError(429, code, message, details);
