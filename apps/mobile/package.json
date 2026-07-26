@@ -7,7 +7,7 @@
     "start": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli start",
     "android": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli start --android",
     "build": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli export --platform android --output-dir dist",
-    "build:web": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli export --platform web --output-dir dist-web",
+    "build:web": "pnpm --filter @ximo/shared build && node --env-file-if-exists=../../.env node_modules/expo/bin/cli export --platform web --output-dir dist-web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run && jest --runInBand"
   },
