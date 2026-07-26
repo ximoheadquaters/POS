@@ -1,0 +1,185 @@
+import { describe, expect, it } from 'vitest';
+import type { CheckoutInput } from '@ximo/shared';
+import type { QueryResultRow } from 'pg';
+import type { Database } from '../database/types.js';
+import type { AppError } from '../shared/errors.js';
+import { result } from '../test/fakes.js';
+import { calculateLine, CheckoutService } from './checkout-service.js';
+
+const actor = {
+  userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  organizationId: '11111111-1111-4111-8111-111111111111',
+};
+
+const input: CheckoutInput = {
+  branchId: '22222222-2222-4222-8222-222222222222',
+  registerId: '33333333-3333-4333-8333-333333333333',
+  shiftId: '44444444-4444-4444-8444-444444444444',
+  items: [{ productId: '55555555-5555-4555-8555-555555555555', quantity: 2 }],
+  payments: [{ method: 'cash', amount: '33.60', tendered: '40.00' }],
+};
+
+interface State {
+  inventory: number;
+  sales: Array<Record<string, string>>;
+  payments: number;
+  movements: number;
+  failOnPayment: boolean;
+}
+
+class CheckoutDatabase implements Database {
+  state: State = { inventory: 10, sales: [], payments: 0, movements: 0, failOnPayment: false };
+
+  async query<T extends QueryResultRow>(text: string, values: readonly unknown[] = []) {
+    const sql = text.replace(/\s+/g, ' ').trim();
+    if (sql.startsWith('select id, receipt_number')) {
+      const sale = this.state.sales.find((entry) => entry.idempotencyKey === values[1]);
+      return result(
+        sale
+          ? ([
+              {
+                id: sale.id,
+                receiptNumber: sale.receiptNumber,
+                subtotal: sale.subtotal,
+                discountTotal: '0.00',
+                taxTotal: sale.taxTotal,
+                total: sale.total,
+                changeDue: sale.changeDue,
+                status: 'completed',
+              },
+            ] as unknown as T[])
+          : [],
+      );
+    }
+    if (sql.startsWith('select b.code as branch_code')) {
+      return result([{ branch_code: 'AUTH', allow_negative_inventory: false } as unknown as T]);
+    }
+    if (sql.startsWith('select p.id as product_id')) {
+      return result([
+        {
+          product_id: input.items[0]!.productId,
+          variant_id: null,
+          name: 'Demo Product',
+          sku: 'DEMO-1',
+          unit_price: '15.00',
+          unit_cost: '8.00',
+          tax_rate: '12.00',
+          is_tax_inclusive: false,
+          quantity: this.state.inventory,
+        } as unknown as T,
+      ]);
+    }
+    if (sql.startsWith('select $1 ||')) {
+      return result([{ receipt_number: 'AUTH-20260726-00000001' } as unknown as T]);
+    }
+    if (sql.startsWith('insert into sales')) {
+      const sale = {
+        id: '66666666-6666-4666-8666-666666666666',
+        receiptNumber: String(values[6]),
+        idempotencyKey: String(values[7]),
+        subtotal: String(values[8]),
+        taxTotal: String(values[10]),
+        total: String(values[11]),
+        changeDue: String(values[13]),
+      };
+      this.state.sales.push(sale);
+      return result([{ id: sale.id } as unknown as T]);
+    }
+    if (sql.startsWith('update branch_inventory')) {
+      this.state.inventory -= Number(values[4]);
+      return result([{ quantity: this.state.inventory } as unknown as T]);
+    }
+    if (sql.startsWith('insert into inventory_movements')) {
+      this.state.movements += 1;
+      return result([]);
+    }
+    if (sql.startsWith('insert into payments')) {
+      if (this.state.failOnPayment) throw new Error('simulated database failure');
+      this.state.payments += 1;
+      return result([]);
+    }
+    return result([]);
+  }
+
+  async transaction<T>(work: (transaction: Database) => Promise<T>): Promise<T> {
+    const snapshot = structuredClone(this.state);
+    try {
+      return await work(this);
+    } catch (error) {
+      this.state = snapshot;
+      throw error;
+    }
+  }
+  async close() {}
+}
+
+describe('checkout transaction', () => {
+  it('uses exact integer calculations for tax and totals', () => {
+    expect(calculateLine('0.10', '0.03', 3, '12.00', false)).toEqual({
+      subtotal: 30n,
+      tax: 4n,
+      total: 34n,
+      cost: 9n,
+    });
+  });
+
+  it('creates the sale, payment and inventory ledger atomically', async () => {
+    const database = new CheckoutDatabase();
+    const resultValue = await new CheckoutService(database).complete(
+      actor,
+      input,
+      'checkout-key-0001',
+    );
+    expect(resultValue).toMatchObject({
+      total: '33.60',
+      changeDue: '6.40',
+      replayed: false,
+    });
+    expect(database.state).toMatchObject({ inventory: 8, payments: 1, movements: 1 });
+    expect(database.state.sales).toHaveLength(1);
+  });
+
+  it('rolls back the entire checkout when a database step fails', async () => {
+    const database = new CheckoutDatabase();
+    database.state.failOnPayment = true;
+    await expect(
+      new CheckoutService(database).complete(actor, input, 'checkout-key-0002'),
+    ).rejects.toThrow('simulated database failure');
+    expect(database.state).toMatchObject({ inventory: 10, payments: 0, movements: 0 });
+    expect(database.state.sales).toHaveLength(0);
+  });
+
+  it('replays an idempotent checkout without duplicate records', async () => {
+    const database = new CheckoutDatabase();
+    const service = new CheckoutService(database);
+    await service.complete(actor, input, 'checkout-key-0003');
+    const replay = await service.complete(actor, input, 'checkout-key-0003');
+    expect(replay.replayed).toBe(true);
+    expect(database.state.sales).toHaveLength(1);
+    expect(database.state.payments).toBe(1);
+  });
+
+  it('prevents checkout with insufficient inventory', async () => {
+    const database = new CheckoutDatabase();
+    database.state.inventory = 1;
+    await expect(
+      new CheckoutService(database).complete(actor, input, 'checkout-key-0004'),
+    ).rejects.toMatchObject({ code: 'INSUFFICIENT_INVENTORY' } satisfies Partial<AppError>);
+    expect(database.state.sales).toHaveLength(0);
+  });
+
+  it('requires split payments to equal the server-calculated total', async () => {
+    const database = new CheckoutDatabase();
+    const invalid: CheckoutInput = {
+      ...input,
+      payments: [
+        { method: 'cash', amount: '10.00' },
+        { method: 'card', amount: '20.00' },
+      ],
+    };
+    await expect(
+      new CheckoutService(database).complete(actor, invalid, 'checkout-key-0005'),
+    ).rejects.toMatchObject({ code: 'PAYMENT_MISMATCH' } satisfies Partial<AppError>);
+    expect(database.state.sales).toHaveLength(0);
+  });
+});

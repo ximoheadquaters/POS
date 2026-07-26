@@ -1,0 +1,33 @@
+{
+  "name": "ximo-pos",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @ximo/shared && npm run build -w @ximo/api && npm run build -w @ximo/mobile",
+    "dev:api": "npm run dev -w @ximo/api",
+    "dev:mobile": "npm run start -w @ximo/mobile",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck -w @ximo/shared && npm run build -w @ximo/shared && npm run typecheck -w @ximo/api && npm run typecheck -w @ximo/mobile",
+    "test": "npm run build -w @ximo/shared && npm run test -w @ximo/shared && npm run test -w @ximo/api && npm run test -w @ximo/mobile",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "eslint": "9.39.2",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "16.5.0",
+    "prettier": "3.8.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.54.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}
