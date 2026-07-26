@@ -3,9 +3,18 @@ import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
-import { Button, EmptyState, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Field,
+  Header,
+  LoadingState,
+  Screen,
+} from '@/components/ui';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
+import { useSession } from '@/providers/session';
 
 interface Register {
   id: string;
@@ -22,6 +31,7 @@ interface ClosedShift {
 }
 
 export default function RegistersScreen() {
+  const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch)!;
   const shift = useShiftStore((state) => state.activeShift);
   const hydrate = useShiftStore((state) => state.hydrate);
@@ -35,6 +45,24 @@ export default function RegistersScreen() {
     queryKey: ['registers', branch.id],
     queryFn: () => api<Register[]>(`/registers?branchId=${branch.id}`),
   });
+  useEffect(() => {
+    if (!query.data || !currentUser) return;
+    const activeRegister = query.data.find(
+      (register) => register.activeShiftId && register.activeCashierId === currentUser.id,
+    );
+    if (activeRegister?.activeShiftId) {
+      if (shift?.id !== activeRegister.activeShiftId || shift.branchId !== branch.id) {
+        void setActive({
+          id: activeRegister.activeShiftId,
+          registerId: activeRegister.id,
+          registerName: activeRegister.name,
+          branchId: branch.id,
+        });
+      }
+    } else if (shift?.branchId === branch.id) {
+      void clear();
+    }
+  }, [branch.id, clear, currentUser, query.data, setActive, shift]);
   const open = useMutation({
     mutationFn: (register: Register) =>
       api<{ id: string }>('/registers/shifts/open', {

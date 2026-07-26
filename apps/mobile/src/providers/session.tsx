@@ -9,7 +9,7 @@ interface SessionContextValue {
   session: Session | null;
   currentUser: CurrentUser | null;
   loading: boolean;
-  refreshUser(): Promise<void>;
+  refreshUser(accessToken?: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -20,8 +20,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function refreshUser() {
-    const user = await api<CurrentUser>('/auth/current');
+  async function refreshUser(accessToken?: string) {
+    const user = await api<CurrentUser>('/auth/current', { accessToken });
     setCurrentUser(user);
   }
 

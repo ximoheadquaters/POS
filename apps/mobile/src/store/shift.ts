@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 
-interface ActiveShift {
+export interface ActiveShift {
   id: string;
   registerId: string;
   registerName: string;

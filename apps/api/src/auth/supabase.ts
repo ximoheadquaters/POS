@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { AppConfig } from '../config.js';
-import { unauthorized } from '../shared/errors.js';
+import { conflict, unauthorized } from '../shared/errors.js';
 import type { AuthActions, VerifyToken } from './types.js';
 
 export function createSupabaseAuth(config: AppConfig): {
@@ -8,6 +8,9 @@ export function createSupabaseAuth(config: AppConfig): {
   actions: AuthActions;
 } {
   const publicClient = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const adminClient = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
@@ -31,6 +34,25 @@ export function createSupabaseAuth(config: AppConfig): {
       },
       async resetPassword(email) {
         const { error } = await publicClient.auth.resetPasswordForEmail(email);
+        if (error) throw new Error(error.message);
+      },
+      async createUser(input) {
+        const { data, error } = await adminClient.auth.admin.createUser({
+          email: input.email,
+          password: input.password,
+          email_confirm: true,
+          user_metadata: { display_name: input.displayName },
+        });
+        if (error || !data.user?.email) {
+          throw conflict(
+            'AUTH_USER_CREATE_FAILED',
+            error?.message ?? 'The employee account could not be created',
+          );
+        }
+        return { id: data.user.id, email: data.user.email };
+      },
+      async deleteUser(userId) {
+        const { error } = await adminClient.auth.admin.deleteUser(userId);
         if (error) throw new Error(error.message);
       },
     },

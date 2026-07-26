@@ -6,6 +6,11 @@ import { AuthorizationDatabase, testUser } from '../test/fakes.js';
 const authActions = {
   login: async () => ({}),
   resetPassword: async () => undefined,
+  createUser: async (input: { email: string }) => ({
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    email: input.email,
+  }),
+  deleteUser: async () => undefined,
 };
 
 describe('API authorization boundaries', () => {
@@ -62,5 +67,63 @@ describe('API authorization boundaries', () => {
       .set('authorization', 'Bearer valid-token')
       .expect(403);
     expect(response.body.error.code).toBe('MODULE_DISABLED');
+  });
+
+  it('allows an owner to create a cashier linked to an assigned branch', async () => {
+    const database = new AuthorizationDatabase(
+      testUser({
+        role: 'owner',
+        permissions: ['users:read', 'users:manage'],
+      }),
+    );
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+    const response = await request(app)
+      .post('/api/v1/users')
+      .set('authorization', 'Bearer valid-token')
+      .send({
+        displayName: 'New Cashier',
+        email: 'new.cashier@example.com',
+        temporaryPassword: 'temporary-1234',
+        role: 'cashier',
+        branchIds: [database.user.branches[0]!.id],
+      })
+      .expect(201);
+    expect(response.body.data).toMatchObject({
+      displayName: 'New Cashier',
+      email: 'new.cashier@example.com',
+      role: 'cashier',
+      isActive: true,
+    });
+    expect(response.body.data.branches).toHaveLength(1);
+  });
+
+  it('prevents a manager from creating another manager', async () => {
+    const database = new AuthorizationDatabase(
+      testUser({
+        role: 'manager',
+        permissions: ['users:read', 'users:manage'],
+      }),
+    );
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+    const response = await request(app)
+      .post('/api/v1/users')
+      .set('authorization', 'Bearer valid-token')
+      .send({
+        displayName: 'Unauthorized Manager',
+        email: 'manager.two@example.com',
+        temporaryPassword: 'temporary-1234',
+        role: 'manager',
+        branchIds: [database.user.branches[0]!.id],
+      })
+      .expect(403);
+    expect(response.body.error.code).toBe('ROLE_MANAGEMENT_DENIED');
   });
 });

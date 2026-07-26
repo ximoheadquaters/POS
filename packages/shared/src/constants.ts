@@ -7,6 +7,9 @@ export const ROLE_CODES = [
 ] as const;
 export type RoleCode = (typeof ROLE_CODES)[number];
 
+export const EMPLOYEE_ROLE_CODES = ['manager', 'cashier', 'inventory_staff'] as const;
+export type EmployeeRoleCode = (typeof EMPLOYEE_ROLE_CODES)[number];
+
 export const MODULE_CODES = [
   'dashboard',
   'pos',

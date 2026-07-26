@@ -16,16 +16,21 @@ export class ApiError extends Error {
 
 export async function api<T>(
   path: string,
-  init: RequestInit & { idempotencyKey?: string } = {},
+  init: RequestInit & { idempotencyKey?: string; accessToken?: string } = {},
 ): Promise<T> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const headers = new Headers(init.headers);
+  const { idempotencyKey, accessToken, ...requestInit } = init;
+  let token = accessToken;
+  if (!token) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    token = session?.access_token;
+  }
+  const headers = new Headers(requestInit.headers);
   headers.set('content-type', 'application/json');
-  if (session?.access_token) headers.set('authorization', `Bearer ${session.access_token}`);
-  if (init.idempotencyKey) headers.set('idempotency-key', init.idempotencyKey);
-  const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
+  if (token) headers.set('authorization', `Bearer ${token}`);
+  if (idempotencyKey) headers.set('idempotency-key', idempotencyKey);
+  const response = await fetch(`${baseUrl}${path}`, { ...requestInit, headers });
   const body = (await response.json()) as ApiResponse<T>;
   if (!body.success) {
     throw new ApiError(body.error.message, body.error.code, response.status, body.error.details);

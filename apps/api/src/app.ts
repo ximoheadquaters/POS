@@ -75,7 +75,7 @@ export function createApp(dependencies: AppDependencies) {
   );
   protectedApi.use('/organizations', organizationsRouter(dependencies.database));
   protectedApi.use('/branches', branchesRouter(dependencies.database));
-  protectedApi.use('/users', usersRouter(dependencies.database));
+  protectedApi.use('/users', usersRouter(dependencies.database, dependencies.authActions));
   protectedApi.use('/categories', categoriesRouter(dependencies.database));
   protectedApi.use('/products', productsRouter(dependencies.database));
   protectedApi.use('/inventory', inventoryRouter(dependencies.database));

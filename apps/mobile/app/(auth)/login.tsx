@@ -23,13 +23,13 @@ export default function LoginScreen() {
 
   async function submit(input: LoginInput) {
     setServerError('');
-    const { error } = await supabase.auth.signInWithPassword(input);
-    if (error) {
+    const { data, error } = await supabase.auth.signInWithPassword(input);
+    if (error || !data.session) {
       setServerError('Email or password is incorrect.');
       return;
     }
     try {
-      await refreshUser();
+      await refreshUser(data.session.access_token);
       router.replace('/branch-select');
     } catch (error) {
       await supabase.auth.signOut();

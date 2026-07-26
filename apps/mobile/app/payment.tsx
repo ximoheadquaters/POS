@@ -6,6 +6,7 @@ import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { Button, Field, Header, Screen } from '@/components/ui';
+import { useSession } from '@/providers/session';
 import { cartTotal, useCartStore } from '@/store/cart';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
@@ -17,12 +18,22 @@ interface Receipt {
   changeDue: string;
 }
 
+interface RegisterStatus {
+  id: string;
+  name: string;
+  activeShiftId?: string;
+  activeCashierId?: string;
+}
+
 export default function PaymentScreen() {
+  const { currentUser } = useSession();
   const items = useCartStore((state) => state.items);
   const customerId = useCartStore((state) => state.customerId);
   const clear = useCartStore((state) => state.clear);
   const branch = useBranchStore((state) => state.activeBranch);
   const shift = useShiftStore((state) => state.activeShift);
+  const setActiveShift = useShiftStore((state) => state.setActive);
+  const clearShift = useShiftStore((state) => state.clear);
   const [discount, setDiscount] = useState('0.00');
   const [cash, setCash] = useState('');
   const [cashReceived, setCashReceived] = useState('');
@@ -50,7 +61,26 @@ export default function PaymentScreen() {
 
   const checkout = useMutation({
     mutationFn: async () => {
-      if (!branch || !shift) throw new Error('An active branch and shift are required');
+      if (!branch || !currentUser) throw new Error('An active branch and account are required');
+      const registers = await api<RegisterStatus[]>(`/registers?branchId=${branch.id}`);
+      const activeRegister = registers.find(
+        (register) => register.activeShiftId && register.activeCashierId === currentUser.id,
+      );
+      if (!activeRegister?.activeShiftId) {
+        await clearShift();
+        throw new Error(
+          'You do not have an active shift for this branch. Open a register shift and try again.',
+        );
+      }
+      const verifiedShift = {
+        id: activeRegister.activeShiftId,
+        registerId: activeRegister.id,
+        registerName: activeRegister.name,
+        branchId: branch.id,
+      };
+      if (!shift || shift.id !== verifiedShift.id || shift.branchId !== verifiedShift.branchId) {
+        await setActiveShift(verifiedShift);
+      }
       const payments = [
         cash ? { method: 'cash' as const, amount: cash, tendered: cashReceived || cash } : null,
         card ? { method: 'card' as const, amount: card } : null,
@@ -61,8 +91,8 @@ export default function PaymentScreen() {
         idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         body: JSON.stringify({
           branchId: branch.id,
-          registerId: shift.registerId,
-          shiftId: shift.id,
+          registerId: verifiedShift.registerId,
+          shiftId: verifiedShift.id,
           customerId,
           items: items.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
           discount:

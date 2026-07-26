@@ -1,7 +1,7 @@
 import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
-import type { ModuleCode } from '@ximo/shared';
+import type { ModuleCode, Permission } from '@ximo/shared';
 import { Button, Header, Screen } from '@/components/ui';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
@@ -13,6 +13,7 @@ const links: Array<{
   symbol: string;
   href: Href;
   module?: ModuleCode;
+  permission?: Permission;
 }> = [
   {
     title: 'Products',
@@ -54,12 +55,14 @@ const links: Array<{
     subtitle: 'Access and branch assignments',
     symbol: 'U',
     href: '/users',
+    permission: 'users:read',
   },
   {
     title: 'Settings',
     subtitle: 'Business, tax and receipt options',
     symbol: 'S',
     href: '/settings',
+    permission: 'settings:manage',
   },
 ];
 
@@ -69,7 +72,9 @@ export default function MoreScreen() {
   const clearBranch = useBranchStore((state) => state.clear);
   const shift = useShiftStore((state) => state.activeShift);
   const visible = links.filter(
-    (item) => !item.module || currentUser?.modules.includes(item.module),
+    (item) =>
+      (!item.module || currentUser?.modules.includes(item.module)) &&
+      (!item.permission || currentUser?.permissions.includes(item.permission)),
   );
   return (
     <Screen>

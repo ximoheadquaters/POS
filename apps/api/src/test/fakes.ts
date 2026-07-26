@@ -75,6 +75,24 @@ export class AuthorizationDatabase implements Database {
         } as unknown as T,
       ]);
     }
+    if (text.includes('select id,name,code from branches')) {
+      const branchIds = (values?.[1] as string[]) ?? [];
+      return result(
+        this.user.branches
+          .filter((branch) => branchIds.includes(branch.id))
+          .map((branch) => ({ ...branch }) as unknown as T),
+      );
+    }
+    if (text.includes('insert into profiles')) {
+      return result([
+        {
+          id: values?.[0],
+          displayName: values?.[2],
+          email: values?.[3],
+          isActive: true,
+        } as unknown as T,
+      ]);
+    }
     if (text === 'select 1') return result([{ '?column?': 1 } as unknown as T]);
     return result([]);
   }

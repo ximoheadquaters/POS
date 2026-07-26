@@ -1,12 +1,25 @@
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { api } from '@/lib/api';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
+import { useShiftStore } from '@/store/shift';
 import { EmptyState, Header, Screen } from '@/components/ui';
+
+interface RegisterStatus {
+  id: string;
+  name: string;
+  activeShiftId?: string;
+  activeCashierId?: string;
+}
 
 export default function BranchSelectionScreen() {
   const { currentUser, signOut } = useSession();
   const select = useBranchStore((state) => state.select);
+  const setActiveShift = useShiftStore((state) => state.setActive);
+  const clearShift = useShiftStore((state) => state.clear);
+  const [selectingBranchId, setSelectingBranchId] = useState<string | null>(null);
   const branches = currentUser?.branches ?? [];
   return (
     <Screen>
@@ -28,10 +41,45 @@ export default function BranchSelectionScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Work at ${item.name}`}
+            accessibilityState={{ disabled: selectingBranchId !== null }}
+            disabled={selectingBranchId !== null}
             className="min-h-24 flex-row items-center rounded-2xl border border-brand-100 bg-white px-5 active:border-brand-300 active:bg-brand-50"
             onPress={async () => {
-              await select(item);
-              router.replace('/(tabs)');
+              if (!currentUser) return;
+              setSelectingBranchId(item.id);
+              try {
+                if (
+                  currentUser.modules.includes('registers') &&
+                  currentUser.permissions.includes('registers:read')
+                ) {
+                  const registers = await api<RegisterStatus[]>(`/registers?branchId=${item.id}`);
+                  const activeRegister = registers.find(
+                    (register) =>
+                      register.activeShiftId && register.activeCashierId === currentUser.id,
+                  );
+                  if (activeRegister?.activeShiftId) {
+                    await setActiveShift({
+                      id: activeRegister.activeShiftId,
+                      registerId: activeRegister.id,
+                      registerName: activeRegister.name,
+                      branchId: item.id,
+                    });
+                  } else {
+                    await clearShift();
+                  }
+                } else {
+                  await clearShift();
+                }
+                await select(item);
+                router.replace('/(tabs)');
+              } catch (error) {
+                Alert.alert(
+                  'Could not select branch',
+                  error instanceof Error ? error.message : 'Please try again.',
+                );
+              } finally {
+                setSelectingBranchId(null);
+              }
             }}
           >
             <View className="mr-4 h-12 w-12 items-center justify-center rounded-2xl bg-brand-50">

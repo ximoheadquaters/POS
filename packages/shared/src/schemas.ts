@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { MODULE_CODES, PAYMENT_METHODS, PERMISSIONS, ROLE_CODES } from './constants.js';
+import {
+  EMPLOYEE_ROLE_CODES,
+  MODULE_CODES,
+  PAYMENT_METHODS,
+  PERMISSIONS,
+  ROLE_CODES,
+} from './constants.js';
 import { moneyStringSchema } from './money.js';
 
 export const uuidSchema = z.uuid();
@@ -14,6 +20,18 @@ export const paginationSchema = z.object({
 export const loginSchema = z.object({
   email: z.email(),
   password: z.string().min(8).max(200),
+});
+
+export const createEmployeeSchema = z.object({
+  displayName: z.string().trim().min(2).max(120),
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  temporaryPassword: z.string().min(12).max(200),
+  role: z.enum(EMPLOYEE_ROLE_CODES),
+  branchIds: z
+    .array(uuidSchema)
+    .min(1)
+    .max(100)
+    .refine((values) => new Set(values).size === values.length, 'Select each branch only once'),
 });
 
 export const branchSchema = z.object({
@@ -159,6 +177,7 @@ export const permissionSchema = z.enum(PERMISSIONS);
 export const moduleCodeSchema = z.enum(MODULE_CODES);
 
 export type LoginInput = z.infer<typeof loginSchema>;
+export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type BranchInput = z.infer<typeof branchSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type ProductInput = z.infer<typeof productSchema>;
