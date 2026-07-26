@@ -86,11 +86,17 @@ export class ShiftService {
         cash_out: string;
       }>(
         `select rs.id, rs.branch_id, rs.starting_cash::text, rs.cash_sales::text,
-          coalesce(sum(cm.amount) filter (where cm.type = 'cash_in'),0)::text as cash_in,
-          coalesce(sum(cm.amount) filter (where cm.type = 'cash_out'),0)::text as cash_out
-         from register_shifts rs left join cash_movements cm on cm.shift_id = rs.id
+          coalesce((
+            select sum(cm.amount) from cash_movements cm
+            where cm.shift_id = rs.id and cm.type = 'cash_in'
+          ),0)::text as cash_in,
+          coalesce((
+            select sum(cm.amount) from cash_movements cm
+            where cm.shift_id = rs.id and cm.type = 'cash_out'
+          ),0)::text as cash_out
+         from register_shifts rs
          where rs.id = $1 and rs.organization_id = $2 and rs.cashier_id = $3 and rs.status = 'open'
-         group by rs.id for update of rs`,
+         for update of rs`,
         [shiftId, actor.organizationId, actor.userId],
       );
       const shift = result.rows[0];
