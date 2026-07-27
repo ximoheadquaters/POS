@@ -65,14 +65,32 @@ export default function PosScreen() {
     if (!scannerEnabled || !barcode || scanPending) return;
     setScanPending(true);
     try {
-      const matches = await api<CartProduct[]>(
-        `/products?page=1&pageSize=2&search=${encodeURIComponent(barcode)}`,
-      );
-      const exact = matches.find(
-        (product) => product.sku === barcode || product.barcodes?.includes(barcode),
+      const exact = await api<CartProduct | null>(
+        `/products/lookup?code=${encodeURIComponent(barcode)}`,
       );
       if (!exact) {
-        Alert.alert('Barcode not found', `No product matches ${barcode}.`);
+        if (currentUser?.permissions.includes('products:manage')) {
+          Alert.alert('New product', `Barcode ${barcode} is not in the catalogue. Add it now?`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Add product',
+              onPress: () =>
+                router.push({
+                  pathname: '/product-form',
+                  params: { barcode, addToCart: '1' },
+                }),
+            },
+          ]);
+        } else {
+          Alert.alert(
+            'Product not found',
+            'Ask an owner or manager to add this barcode before selling it.',
+          );
+        }
+        return;
+      }
+      if (exact.status === 'inactive') {
+        Alert.alert('Product is inactive', 'Ask an owner or manager to reactivate this product.');
         return;
       }
       add(exact);
@@ -116,9 +134,24 @@ export default function PosScreen() {
           blurOnSubmit={false}
         />
         {scannerEnabled ? (
-          <Text className="mt-2 text-xs text-brand-700">
-            Scanner ready · scan a barcode or type it, then press Enter.
-          </Text>
+          <View className="mt-2 flex-row items-center justify-between gap-3">
+            <Text className="flex-1 text-xs text-brand-700">
+              Scanner ready · scan a barcode or type it, then press Enter.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Scan product with camera"
+              onPress={() =>
+                router.push({
+                  pathname: '/product-scan',
+                  params: { addToCart: '1' },
+                })
+              }
+              className="min-h-11 items-center justify-center rounded-xl bg-brand-50 px-3 active:bg-brand-100"
+            >
+              <Text className="text-sm font-bold text-brand-700">Use camera</Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
       {query.isLoading ? (

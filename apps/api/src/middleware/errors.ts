@@ -30,11 +30,21 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
     });
     return;
   }
-  const pgCode = (error as { code?: string }).code;
+  const pgError = error as { code?: string; constraint?: string };
+  const pgCode = pgError.code;
   if (pgCode === '23505') {
+    const duplicate =
+      pgError.constraint === 'product_barcodes_organization_id_barcode_key'
+        ? {
+            code: 'DUPLICATE_BARCODE',
+            message: 'This barcode is already assigned to another product',
+          }
+        : pgError.constraint === 'products_organization_id_sku_key'
+          ? { code: 'DUPLICATE_SKU', message: 'This SKU is already assigned to another product' }
+          : { code: 'CONFLICT', message: 'A record with this value already exists' };
     response.status(409).json({
       success: false,
-      error: { code: 'CONFLICT', message: 'A record with this value already exists', requestId },
+      error: { ...duplicate, requestId },
     });
     return;
   }

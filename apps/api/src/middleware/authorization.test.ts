@@ -1,7 +1,8 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import type { QueryResultRow } from 'pg';
 import { createApp } from '../app.js';
-import { AuthorizationDatabase, testUser } from '../test/fakes.js';
+import { AuthorizationDatabase, result, testUser } from '../test/fakes.js';
 
 const authActions = {
   login: async () => ({}),
@@ -18,6 +19,30 @@ const authActions = {
   getUser: async () => null,
   deleteUser: async () => undefined,
 };
+
+class ProductCreationDatabase extends AuthorizationDatabase {
+  override async query<T extends QueryResultRow>(text: string, values?: readonly unknown[]) {
+    if (text.includes('insert into products')) {
+      this.calls.push(values ? { text, values } : { text });
+      return result([
+        {
+          id: '55555555-5555-4555-8555-555555555555',
+          name: values?.[2],
+          sku: values?.[3],
+          sellingPrice: values?.[6],
+          taxRate: values?.[7],
+          isTaxInclusive: values?.[8],
+          status: values?.[9],
+        } as unknown as T,
+      ]);
+    }
+    if (text.includes('insert into inventory_movements')) {
+      this.calls.push(values ? { text, values } : { text });
+      return result([{ id: '66666666-6666-4666-8666-666666666666' } as unknown as T]);
+    }
+    return super.query<T>(text, values);
+  }
+}
 
 describe('API authorization boundaries', () => {
   it('derives organization scope from the authenticated profile', async () => {
@@ -73,6 +98,52 @@ describe('API authorization boundaries', () => {
       .set('authorization', 'Bearer valid-token')
       .expect(403);
     expect(response.body.error.code).toBe('MODULE_DISABLED');
+  });
+
+  it('creates a scanned product and opening inventory in one transaction', async () => {
+    const database = new ProductCreationDatabase(
+      testUser({
+        role: 'owner',
+        permissions: ['products:read', 'products:manage'],
+        modules: ['products'],
+      }),
+    );
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+    const response = await request(app)
+      .post('/api/v1/products')
+      .set('authorization', 'Bearer valid-token')
+      .send({
+        branchId: database.user.branches[0]!.id,
+        openingQuantity: 12,
+        name: 'Scanned coffee',
+        sku: '4800012345678',
+        barcode: '4800012345678',
+        cost: '5.00',
+        sellingPrice: '7.00',
+        taxRate: '0.00',
+        isTaxInclusive: false,
+        status: 'active',
+      })
+      .expect(201);
+
+    expect(response.body.data).toMatchObject({
+      name: 'Scanned coffee',
+      sku: '4800012345678',
+      barcodes: ['4800012345678'],
+    });
+    expect(database.calls.some((call) => call.text.includes('insert into branch_inventory'))).toBe(
+      true,
+    );
+    expect(
+      database.calls.some(
+        (call) =>
+          call.text.includes('insert into inventory_movements') && call.values?.includes(12),
+      ),
+    ).toBe(true);
   });
 
   it('allows an owner to create a cashier linked to an assigned branch', async () => {

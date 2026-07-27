@@ -38,14 +38,26 @@ export default function ProductsScreen() {
         fallbackHref="/(tabs)/more"
         action={
           currentUser?.permissions.includes('products:manage') ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add product"
-              className="rounded-xl bg-brand-700 px-4 py-3"
-              onPress={() => router.push('/product-form')}
-            >
-              <Text className="font-bold text-white">Add</Text>
-            </Pressable>
+            <View className="flex-row gap-2">
+              {currentUser.modules.includes('barcode_scanner') ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Scan new product"
+                  className="rounded-xl bg-brand-50 px-3 py-3"
+                  onPress={() => router.push('/product-scan')}
+                >
+                  <Text className="font-bold text-brand-700">Scan</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add product manually"
+                className="rounded-xl bg-brand-700 px-3 py-3"
+                onPress={() => router.push('/product-form')}
+              >
+                <Text className="font-bold text-white">Add</Text>
+              </Pressable>
+            </View>
           ) : null
         }
       />

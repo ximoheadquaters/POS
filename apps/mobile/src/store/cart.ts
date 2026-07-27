@@ -9,6 +9,7 @@ export interface CartProduct {
   sellingPrice: string;
   taxRate: string;
   isTaxInclusive: boolean;
+  status?: string;
 }
 
 export interface CartItem {

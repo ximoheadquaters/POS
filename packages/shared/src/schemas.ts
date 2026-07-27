@@ -10,11 +10,19 @@ import { moneyStringSchema } from './money.js';
 
 export const uuidSchema = z.uuid();
 export const dateTimeSchema = z.iso.datetime({ offset: true });
+const optionalBarcodeSchema = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z.string().trim().min(3).max(80).optional(),
+);
 
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(120).optional(),
+});
+
+export const productLookupSchema = z.object({
+  code: z.string().trim().min(3).max(80),
 });
 
 export const loginSchema = z.object({
@@ -57,7 +65,7 @@ export const productSchema = z.object({
   categoryId: uuidSchema.nullable().optional(),
   name: z.string().trim().min(1).max(180),
   sku: z.string().trim().min(1).max(80),
-  barcode: z.string().trim().min(3).max(80).optional(),
+  barcode: optionalBarcodeSchema,
   description: z.string().trim().max(2000).optional(),
   cost: moneyStringSchema,
   sellingPrice: moneyStringSchema,
@@ -70,10 +78,15 @@ export const productSchema = z.object({
   imagePath: z.string().trim().max(500).optional(),
 });
 
+export const createProductSchema = productSchema.extend({
+  branchId: uuidSchema,
+  openingQuantity: z.number().int().min(0).max(1_000_000).default(0),
+});
+
 export const productVariantSchema = z.object({
   name: z.string().trim().min(1).max(120),
   sku: z.string().trim().min(1).max(80),
-  barcode: z.string().trim().min(3).max(80).optional(),
+  barcode: optionalBarcodeSchema,
   cost: moneyStringSchema.optional(),
   sellingPrice: moneyStringSchema.optional(),
   isActive: z.boolean().default(true),
@@ -181,6 +194,7 @@ export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type BranchInput = z.infer<typeof branchSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type ProductInput = z.infer<typeof productSchema>;
+export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductVariantInput = z.infer<typeof productVariantSchema>;
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
 export type OpenShiftInput = z.infer<typeof openShiftSchema>;

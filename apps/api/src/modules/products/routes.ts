@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import {
   categorySchema,
+  createProductSchema,
   paginationSchema,
+  productLookupSchema,
   productSchema,
   productVariantSchema,
   uuidSchema,
 } from '@ximo/shared';
 import type { Database } from '../../database/types.js';
-import { requireModule, requirePermission } from '../../middleware/auth.js';
+import { requireBranchAccess, requireModule, requirePermission } from '../../middleware/auth.js';
 import { validateBody, validateQuery } from '../../middleware/validation.js';
 import { notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
@@ -15,6 +17,34 @@ import { sendData, sendPage } from '../../shared/http.js';
 export function productsRouter(database: Database): Router {
   const router = Router();
   router.use(requireModule('products'));
+  router.get(
+    '/lookup',
+    requirePermission('products:read'),
+    validateQuery(productLookupSchema),
+    async (request, response) => {
+      const { code } = request.query as unknown as { code: string };
+      const result = await database.query(
+        `select p.id,p.name,p.sku,p.selling_price::text as "sellingPrice",
+          p.tax_rate::text as "taxRate",p.is_tax_inclusive as "isTaxInclusive",p.status,
+          coalesce((
+            select jsonb_agg(pb.barcode)
+            from product_barcodes pb
+            where pb.product_id=p.id
+          ),'[]') as barcodes
+         from products p
+         where p.organization_id=$1 and (
+           p.sku=$2 or exists (
+             select 1 from product_barcodes pb
+             where pb.product_id=p.id and pb.organization_id=$1 and pb.barcode=$2
+           )
+         )
+         order by case when p.sku=$2 then 0 else 1 end
+         limit 1`,
+        [request.authUser!.organization.id, code],
+      );
+      sendData(response, result.rows[0] ?? null);
+    },
+  );
   router.get(
     '/',
     requirePermission('products:read'),
@@ -54,17 +84,29 @@ export function productsRouter(database: Database): Router {
   router.post(
     '/',
     requirePermission('products:manage'),
-    validateBody(productSchema),
+    requireBranchAccess('body'),
+    validateBody(createProductSchema),
     async (request, response) => {
       const product = await database.transaction(async (tx) => {
-        const input = request.body;
-        const created = await tx.query<{ id: string }>(
+        const { branchId, openingQuantity, ...input } = request.body;
+        const organizationId = request.authUser!.organization.id;
+        const created = await tx.query<{
+          id: string;
+          name: string;
+          sku: string;
+          sellingPrice: string;
+          taxRate: string;
+          isTaxInclusive: boolean;
+          status: string;
+        }>(
           `insert into products (
             organization_id,category_id,name,sku,description,cost,selling_price,tax_rate,
             is_tax_inclusive,status,image_path
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+           returning id,name,sku,selling_price::text as "sellingPrice",
+             tax_rate::text as "taxRate",is_tax_inclusive as "isTaxInclusive",status`,
           [
-            request.authUser!.organization.id,
+            organizationId,
             input.categoryId ?? null,
             input.name,
             input.sku,
@@ -80,20 +122,52 @@ export function productsRouter(database: Database): Router {
         if (input.barcode) {
           await tx.query(
             `insert into product_barcodes (organization_id,product_id,barcode) values ($1,$2,$3)`,
-            [request.authUser!.organization.id, created.rows[0]!.id, input.barcode],
+            [organizationId, created.rows[0]!.id, input.barcode],
+          );
+        }
+        await tx.query(
+          `insert into branch_inventory (
+            organization_id,branch_id,product_id,variant_id,quantity
+           )
+           select $1,b.id,$2,null,case when b.id=$3 then $4 else 0 end
+           from branches b
+           where b.organization_id=$1 and b.is_active`,
+          [organizationId, created.rows[0]!.id, branchId, openingQuantity],
+        );
+        if (openingQuantity > 0) {
+          const movement = await tx.query<{ id: string }>(
+            `insert into inventory_movements (
+              organization_id,branch_id,product_id,variant_id,movement_type,quantity_delta,
+              quantity_after,reason,reference_type,created_by
+             ) values ($1,$2,$3,null,'adjustment',$4,$4,'Opening stock','product_setup',$5)
+             returning id`,
+            [organizationId, branchId, created.rows[0]!.id, openingQuantity, request.authUser!.id],
+          );
+          await tx.query(
+            `insert into audit_logs (
+              organization_id,branch_id,actor_id,action,entity_type,entity_id,after_data
+             ) values ($1,$2,$3,'inventory.opening_stock','inventory_movement',$4,$5::jsonb)`,
+            [
+              organizationId,
+              branchId,
+              request.authUser!.id,
+              movement.rows[0]!.id,
+              JSON.stringify({
+                productId: created.rows[0]!.id,
+                quantity: openingQuantity,
+              }),
+            ],
           );
         }
         await tx.query(
           `insert into audit_logs (organization_id,actor_id,action,entity_type,entity_id,after_data)
            values ($1,$2,'product.created','product',$3,$4::jsonb)`,
-          [
-            request.authUser!.organization.id,
-            request.authUser!.id,
-            created.rows[0]!.id,
-            JSON.stringify(input),
-          ],
+          [organizationId, request.authUser!.id, created.rows[0]!.id, JSON.stringify(input)],
         );
-        return created.rows[0];
+        return {
+          ...created.rows[0]!,
+          barcodes: input.barcode ? [input.barcode] : [],
+        };
       });
       sendData(response, product, 201);
     },
