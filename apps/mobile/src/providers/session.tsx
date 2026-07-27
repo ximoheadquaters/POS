@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
+import { AppState } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import type { CurrentUser } from '@ximo/shared';
 import { api } from '@/lib/api';
@@ -20,11 +21,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function refreshUser(accessToken?: string) {
+  const refreshUser = useCallback(async (accessToken?: string) => {
     const user = await api<CurrentUser>('/auth/current', { accessToken });
     setCurrentUser(user);
     return user;
-  }
+  }, []);
 
   useEffect(() => {
     void supabase.auth.getSession().then(async ({ data }) => {
@@ -43,7 +44,22 @@ export function SessionProvider({ children }: PropsWithChildren) {
       if (!nextSession) setCurrentUser(null);
     });
     return () => data.subscription.unsubscribe();
-  }, []);
+  }, [refreshUser]);
+
+  useEffect(() => {
+    if (!session) return;
+    const refreshAccess = () => {
+      void refreshUser().catch(() => undefined);
+    };
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshAccess();
+    });
+    const refreshInterval = setInterval(refreshAccess, 60_000);
+    return () => {
+      appStateSubscription.remove();
+      clearInterval(refreshInterval);
+    };
+  }, [refreshUser, session]);
 
   const value = useMemo(
     () => ({
@@ -56,7 +72,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         setCurrentUser(null);
       },
     }),
-    [session, currentUser, loading],
+    [session, currentUser, loading, refreshUser],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

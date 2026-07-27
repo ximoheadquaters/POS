@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
@@ -74,7 +75,8 @@ const links: Array<{
 ];
 
 export default function MoreScreen() {
-  const { currentUser, signOut } = useSession();
+  const { currentUser, refreshUser, signOut } = useSession();
+  const [refreshingAccess, setRefreshingAccess] = useState(false);
   const branch = useBranchStore((state) => state.activeBranch);
   const clearBranch = useBranchStore((state) => state.clear);
   const shift = useShiftStore((state) => state.activeShift);
@@ -118,7 +120,19 @@ export default function MoreScreen() {
           </View>
         }
         ListFooterComponent={
-          <View className="mt-3">
+          <View className="mt-3 gap-3">
+            <Button
+              title={refreshingAccess ? 'Refreshing access…' : 'Refresh modules & access'}
+              variant="secondary"
+              disabled={refreshingAccess}
+              onPress={() => {
+                setRefreshingAccess(true);
+                void refreshUser()
+                  .then(() => Alert.alert('Access refreshed', 'Module changes are now applied.'))
+                  .catch((error) => Alert.alert('Could not refresh access', error.message))
+                  .finally(() => setRefreshingAccess(false));
+              }}
+            />
             <Button
               title="Sign out"
               variant="secondary"

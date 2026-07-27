@@ -31,6 +31,9 @@ export default function TabLayout() {
   const branch = useBranchStore((state) => state.activeBranch);
   if (!session) return <Redirect href="/(auth)/login" />;
   if (!currentUser || !branch) return <Redirect href="/branch-select" />;
+  const dashboardEnabled = currentUser.modules.includes('dashboard');
+  const posEnabled = currentUser.modules.includes('pos');
+  const inventoryEnabled = currentUser.modules.includes('inventory');
   return (
     <Tabs
       screenOptions={{
@@ -52,6 +55,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
+          href: dashboardEnabled ? undefined : null,
           tabBarIcon: (props) => <Icon value={'\u2302'} {...props} />,
         }}
       />
@@ -59,6 +63,7 @@ export default function TabLayout() {
         name="pos"
         options={{
           title: 'POS',
+          href: posEnabled ? undefined : null,
           tabBarIcon: (props) => <Icon value="+" {...props} />,
         }}
       />
@@ -66,6 +71,7 @@ export default function TabLayout() {
         name="sales"
         options={{
           title: 'Sales',
+          href: posEnabled ? undefined : null,
           tabBarIcon: (props) => <Icon value={'\u2630'} {...props} />,
         }}
       />
@@ -73,6 +79,7 @@ export default function TabLayout() {
         name="inventory"
         options={{
           title: 'Stock',
+          href: inventoryEnabled ? undefined : null,
           tabBarIcon: (props) => <Icon value={'\u25A6'} {...props} />,
         }}
       />
