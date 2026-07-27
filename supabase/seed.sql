@@ -7,7 +7,10 @@ insert into public.modules (code, name) values
   ('inventory','Inventory'), ('customers','Customers'), ('returns','Returns'),
   ('registers','Registers'), ('reports','Reports'), ('suppliers','Suppliers'),
   ('purchasing','Purchasing'), ('expenses','Expenses'), ('promotions','Promotions'),
-  ('loyalty','Loyalty'), ('integrations','Integrations')
+  ('loyalty','Loyalty'), ('integrations','Integrations'),
+  ('barcode_scanner','Barcode Scanner'), ('receipt_printer','Receipt Printer'),
+  ('cash_drawer','Cash Drawer'), ('payment_terminal','Payment Terminal'),
+  ('customer_display','Customer Display')
 on conflict (code) do nothing;
 
 insert into public.plans (code, name, price_monthly) values
@@ -17,11 +20,14 @@ on conflict (code) do nothing;
 
 insert into public.plan_modules (plan_id, module_id)
 select p.id, m.id from public.plans p cross join public.modules m
-where
+where m.code not in (
+  'barcode_scanner','receipt_printer','cash_drawer','payment_terminal','customer_display'
+) and (
   (p.code = 'starter' and m.code in ('dashboard','pos','products','inventory','customers','registers'))
   or (p.code = 'business' and m.code in ('dashboard','pos','products','inventory','customers','returns','registers','reports'))
   or (p.code = 'professional' and m.code not in ('integrations'))
   or p.code = 'enterprise'
+)
 on conflict do nothing;
 
 insert into public.permissions (code, description) values

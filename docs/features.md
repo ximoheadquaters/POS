@@ -20,6 +20,10 @@
   stock, branches, and recorded-cost gross profit
 - Seeded plans/modules, organization, two branches, three categories, 20 barcode products, different
   branch inventory, and one register per branch
+- Optional hardware module catalog for barcode scanners, receipt printers, cash drawers, payment
+  terminals, and customer displays; organization overrides and device-driver status are independent
+- Hardware status screen, keyboard-wedge barcode scanning, and guarded adapter hooks for receipt
+  printing, drawer opening, payment terminals, and customer displays
 - Secure idempotent demo Auth provisioning script
 - Automated tests for money exactness, tenant scoping, branch/module denial, checkout creation,
   inventory deduction, rollback, idempotency, stock shortage, split equality, return limits, register
@@ -35,7 +39,8 @@
 - Sales filtering is implemented in the API; the first mobile history view fixes the selected branch
   and can add date/payment controls.
 - Permission/branch update API is functional; the first users screen is read-oriented.
-- Receipt data is reprint-ready; hardware-specific printing is intentionally deferred.
+- Receipt data and print action are driver-ready; the manufacturer-specific printer driver remains
+  dependent on the selected terminal model.
 
 ## Deferred by scope
 
@@ -45,7 +50,7 @@
 - Advanced promotions
 - Full offline synchronization / Expo SQLite
 - Restaurant and pharmacy workflows
-- Hardware-specific printer integration
+- Manufacturer-specific printer, drawer, terminal, scanner, and customer-display drivers
 - Supplier, purchasing, expense, promotion, loyalty, and integration business implementations
 
 The extension approach for these items is documented in `architecture.md`.

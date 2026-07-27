@@ -10,6 +10,15 @@ export type RoleCode = (typeof ROLE_CODES)[number];
 export const EMPLOYEE_ROLE_CODES = ['manager', 'cashier', 'inventory_staff'] as const;
 export type EmployeeRoleCode = (typeof EMPLOYEE_ROLE_CODES)[number];
 
+export const HARDWARE_MODULE_CODES = [
+  'barcode_scanner',
+  'receipt_printer',
+  'cash_drawer',
+  'payment_terminal',
+  'customer_display',
+] as const;
+export type HardwareModuleCode = (typeof HARDWARE_MODULE_CODES)[number];
+
 export const MODULE_CODES = [
   'dashboard',
   'pos',
@@ -25,6 +34,7 @@ export const MODULE_CODES = [
   'promotions',
   'loyalty',
   'integrations',
+  ...HARDWARE_MODULE_CODES,
 ] as const;
 export type ModuleCode = (typeof MODULE_CODES)[number];
 

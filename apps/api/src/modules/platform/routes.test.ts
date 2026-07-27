@@ -82,7 +82,7 @@ class PlatformDatabase implements Database {
     }
     if (text === 'select id from modules where code=$1') {
       return result(
-        values?.[0] === 'inventory'
+        values?.[0] === 'inventory' || values?.[0] === 'receipt_printer'
           ? [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' } as unknown as T]
           : [],
       );
@@ -103,15 +103,17 @@ class PlatformDatabase implements Database {
       return result(removed ? [{ ...removed } as unknown as T] : []);
     }
     if (text.includes('select m.code,m.name,m.description')) {
+      const moduleCode = (values?.[1] as string | undefined) ?? 'inventory';
+      const includedInPlan = moduleCode === 'inventory';
       return result([
         {
-          code: 'inventory',
-          name: 'Inventory',
+          code: moduleCode,
+          name: moduleCode === 'inventory' ? 'Inventory' : 'Receipt Printer',
           description: null,
-          includedInPlan: true,
+          includedInPlan,
           overrideEnabled: this.override?.enabled ?? null,
           overrideReason: this.override?.reason ?? null,
-          effectiveEnabled: this.override?.enabled ?? true,
+          effectiveEnabled: this.override?.enabled ?? includedInPlan,
         } as unknown as T,
       ]);
     }
@@ -246,6 +248,23 @@ describe('Platform API', () => {
     expect(removed.body.data).toMatchObject({
       code: 'inventory',
       overrideEnabled: null,
+      effectiveEnabled: true,
+    });
+  });
+
+  it('enables an optional hardware module that is not included in the plan', async () => {
+    const generated = createPlatformToken();
+    const database = new PlatformDatabase(generated.tokenHash);
+    const response = await request(platformApp(database))
+      .put(`/api/v1/platform/organizations/${ORGANIZATION_ID}/modules/receipt_printer`)
+      .set('authorization', `Bearer ${generated.token}`)
+      .send({ enabled: true, reason: 'Compatible printer installed at the client site' })
+      .expect(200);
+
+    expect(response.body.data).toMatchObject({
+      code: 'receipt_printer',
+      includedInPlan: false,
+      overrideEnabled: true,
       effectiveEnabled: true,
     });
   });

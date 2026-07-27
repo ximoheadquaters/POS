@@ -5,6 +5,7 @@ export interface CartProduct {
   id: string;
   name: string;
   sku: string;
+  barcodes?: string[];
   sellingPrice: string;
   taxRate: string;
   isTaxInclusive: boolean;

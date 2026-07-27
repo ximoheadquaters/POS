@@ -64,6 +64,13 @@ const links: Array<{
     href: '/settings',
     permission: 'settings:manage',
   },
+  {
+    title: 'Hardware devices',
+    subtitle: 'Scanners, printers, drawers and terminals',
+    symbol: 'H',
+    href: '/hardware' as Href,
+    permission: 'settings:manage',
+  },
 ];
 
 export default function MoreScreen() {

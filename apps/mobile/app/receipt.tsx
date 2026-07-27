@@ -1,15 +1,37 @@
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useMutation } from '@tanstack/react-query';
 import { Button, Header, Screen } from '@/components/ui';
 import { formatMoney } from '@/lib/format';
+import { getHardwareDriver, HardwareUnavailableError } from '@/hardware/registry';
+import { useSession } from '@/providers/session';
 
 export default function ReceiptScreen() {
+  const { currentUser } = useSession();
   const params = useLocalSearchParams<{
     id: string;
     number: string;
     total: string;
     change: string;
   }>();
+  const printerEnabled = currentUser?.modules.includes('receipt_printer') ?? false;
+  const print = useMutation({
+    mutationFn: async () => {
+      const printer = getHardwareDriver('receipt_printer');
+      const status = await printer.status();
+      if (status.state !== 'ready') {
+        throw new HardwareUnavailableError('receipt_printer', status.detail);
+      }
+      await printer.print({
+        saleId: params.id,
+        receiptNumber: params.number,
+        total: params.total,
+        changeDue: params.change,
+      });
+    },
+    onSuccess: () => Alert.alert('Receipt printed'),
+    onError: (error) => Alert.alert('Could not print receipt', error.message),
+  });
   return (
     <Screen>
       <Header title="Sale complete" />
@@ -27,6 +49,13 @@ export default function ReceiptScreen() {
             Change: {formatMoney(params.change)}
           </Text>
           <View className="mt-8 gap-3">
+            {printerEnabled ? (
+              <Button
+                title={print.isPending ? 'Printing…' : 'Print receipt'}
+                disabled={print.isPending}
+                onPress={() => print.mutate()}
+              />
+            ) : null}
             <Button
               title="View receipt details"
               variant="secondary"

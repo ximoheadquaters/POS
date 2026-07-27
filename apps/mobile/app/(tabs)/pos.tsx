@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { Button, EmptyState, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import { getHardwareDriver } from '@/hardware/registry';
+import { useSession } from '@/providers/session';
 import { cartTotal, useCartStore, type CartProduct } from '@/store/cart';
 import { useShiftStore } from '@/store/shift';
 
 export default function PosScreen() {
+  const { currentUser } = useSession();
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
+  const [scanPending, setScanPending] = useState(false);
   const items = useCartStore((state) => state.items);
   const add = useCartStore((state) => state.add);
   const activeShift = useShiftStore((state) => state.activeShift);
@@ -37,6 +41,52 @@ export default function PosScreen() {
     () => new Map(items.map((item) => [item.product.id, item.quantity])),
     [items],
   );
+  const scannerEnabled = currentUser?.modules.includes('barcode_scanner') ?? false;
+  const customerDisplayEnabled = currentUser?.modules.includes('customer_display') ?? false;
+
+  useEffect(() => {
+    if (!customerDisplayEnabled || !currentUser) return;
+    const display = getHardwareDriver('customer_display');
+    void display
+      .status()
+      .then((status) => {
+        if (status.state !== 'ready') return;
+        return display.show({
+          itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+          total: cartTotal(items),
+          currency: currentUser.organization.currency,
+        });
+      })
+      .catch(() => undefined);
+  }, [customerDisplayEnabled, currentUser, items]);
+
+  const submitBarcode = async () => {
+    const barcode = search.trim();
+    if (!scannerEnabled || !barcode || scanPending) return;
+    setScanPending(true);
+    try {
+      const matches = await api<CartProduct[]>(
+        `/products?page=1&pageSize=2&search=${encodeURIComponent(barcode)}`,
+      );
+      const exact = matches.find(
+        (product) => product.sku === barcode || product.barcodes?.includes(barcode),
+      );
+      if (!exact) {
+        Alert.alert('Barcode not found', `No product matches ${barcode}.`);
+        return;
+      }
+      add(exact);
+      setSearch('');
+      setDebounced('');
+    } catch (error) {
+      Alert.alert(
+        'Could not scan product',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setScanPending(false);
+    }
+  };
 
   return (
     <Screen>
@@ -61,7 +111,15 @@ export default function PosScreen() {
           className="min-h-12 rounded-xl bg-slate-100 px-4 text-base"
           placeholderTextColor="#81776E"
           selectionColor="#1A593B"
+          returnKeyType={scannerEnabled ? 'done' : 'search'}
+          onSubmitEditing={() => void submitBarcode()}
+          blurOnSubmit={false}
         />
+        {scannerEnabled ? (
+          <Text className="mt-2 text-xs text-brand-700">
+            Scanner ready · scan a barcode or type it, then press Enter.
+          </Text>
+        ) : null}
       </View>
       {query.isLoading ? (
         <LoadingState label="Loading products…" />
@@ -91,9 +149,7 @@ export default function PosScreen() {
                   {formatMoney(item.sellingPrice)}
                 </Text>
                 <Text className="mt-1 text-xs font-bold text-brand-500">
-                  {cartQuantities.get(item.id)
-                    ? `${cartQuantities.get(item.id)} in cart`
-                    : '+ Add'}
+                  {cartQuantities.get(item.id) ? `${cartQuantities.get(item.id)} in cart` : '+ Add'}
                 </Text>
               </View>
             </Pressable>

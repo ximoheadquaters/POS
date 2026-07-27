@@ -159,6 +159,11 @@ Module override body:
 }
 ```
 
+Hardware modules introduced by migration `0006_hardware_modules.sql` are `barcode_scanner`,
+`receipt_printer`, `cash_drawer`, `payment_terminal`, and `customer_display`. They are excluded from
+all plans by default and are enabled per organization with the same module override endpoint. See
+[Optional POS hardware](hardware.md) for the device-driver safety model.
+
 Subscription body:
 
 ```json

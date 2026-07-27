@@ -33,6 +33,7 @@ export default function RootLayout() {
             <Stack.Screen name="accept-invitation" />
             <Stack.Screen name="branch-select" />
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="hardware" />
             <Stack.Screen name="cart" options={{ presentation: 'modal' }} />
             <Stack.Screen name="payment" options={{ presentation: 'modal' }} />
           </Stack>

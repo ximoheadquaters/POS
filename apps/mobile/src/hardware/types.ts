@@ -1,0 +1,68 @@
+import type { HardwareModuleCode } from '@ximo/shared';
+
+export type HardwareConnectionState = 'ready' | 'not_configured' | 'unavailable';
+
+export interface HardwareStatus {
+  code: HardwareModuleCode;
+  state: HardwareConnectionState;
+  driverName: string;
+  detail: string;
+}
+
+export interface BaseHardwareDriver {
+  status(): Promise<Omit<HardwareStatus, 'code'>>;
+  test(): Promise<void>;
+}
+
+export interface BarcodeScannerDriver extends BaseHardwareDriver {
+  mode: 'keyboard' | 'native';
+}
+
+export interface ReceiptPrintJob {
+  saleId: string;
+  receiptNumber: string;
+  total: string;
+  changeDue: string;
+}
+
+export interface ReceiptPrinterDriver extends BaseHardwareDriver {
+  print(job: ReceiptPrintJob): Promise<void>;
+}
+
+export interface CashDrawerDriver extends BaseHardwareDriver {
+  open(): Promise<void>;
+}
+
+export interface PaymentTerminalRequest {
+  amount: string;
+  currency: string;
+  idempotencyKey: string;
+}
+
+export interface PaymentTerminalResult {
+  approved: boolean;
+  reference: string;
+}
+
+export interface PaymentTerminalDriver extends BaseHardwareDriver {
+  charge(request: PaymentTerminalRequest): Promise<PaymentTerminalResult>;
+}
+
+export interface CustomerDisplaySnapshot {
+  itemCount: number;
+  total: string;
+  currency: string;
+}
+
+export interface CustomerDisplayDriver extends BaseHardwareDriver {
+  show(snapshot: CustomerDisplaySnapshot): Promise<void>;
+  clear(): Promise<void>;
+}
+
+export interface HardwareDriverMap {
+  barcode_scanner: BarcodeScannerDriver;
+  receipt_printer: ReceiptPrinterDriver;
+  cash_drawer: CashDrawerDriver;
+  payment_terminal: PaymentTerminalDriver;
+  customer_display: CustomerDisplayDriver;
+}

@@ -6,6 +6,7 @@ import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { Button, Field, Header, Screen } from '@/components/ui';
+import { getHardwareDriver } from '@/hardware/registry';
 import { useSession } from '@/providers/session';
 import { cartTotal, useCartStore } from '@/store/cart';
 import { useBranchStore } from '@/store/branch';
@@ -102,6 +103,21 @@ export default function PaymentScreen() {
       });
     },
     onSuccess(receipt) {
+      if (cash && currentUser?.modules.includes('cash_drawer')) {
+        const drawer = getHardwareDriver('cash_drawer');
+        void drawer
+          .status()
+          .then((status) => {
+            if (status.state !== 'ready') return;
+            return drawer.open();
+          })
+          .catch((error) =>
+            Alert.alert(
+              'Sale completed, but the drawer did not open',
+              error instanceof Error ? error.message : 'Open the drawer manually.',
+            ),
+          );
+      }
       clear();
       router.replace({
         pathname: '/receipt',
