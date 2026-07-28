@@ -7,6 +7,7 @@ import { loginSchema, type LoginInput } from '@ximo/shared';
 import { ApiError } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/providers/session';
+import { BrandLogo } from '@/components/brand';
 import { Button, Field, Screen } from '@/components/ui';
 
 export default function LoginScreen() {
@@ -48,8 +49,8 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View className="mb-5 rounded-3xl bg-brand-700 p-6">
-          <View className="mb-5 h-14 w-14 items-center justify-center rounded-2xl bg-white">
-            <Text className="text-3xl font-black text-brand-700">X</Text>
+          <View className="mb-5">
+            <BrandLogo size={56} />
           </View>
           <Text className="text-4xl font-black text-white">Ximo POS</Text>
           <Text className="mt-2 text-base leading-6 text-brand-100">

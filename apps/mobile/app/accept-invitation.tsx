@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
+import { BrandLogo } from '@/components/brand';
 import { Button, Field, LoadingState, Screen } from '@/components/ui';
 import {
   establishInvitationSession,
@@ -129,8 +130,8 @@ export default function AcceptInvitationScreen() {
         >
           <View className="mx-auto w-full max-w-xl">
             <View className="mb-5 rounded-3xl bg-brand-700 p-6">
-              <View className="mb-5 h-14 w-14 items-center justify-center rounded-2xl bg-white">
-                <Text className="text-3xl font-black text-brand-700">X</Text>
+              <View className="mb-5">
+                <BrandLogo size={56} />
               </View>
               <Text className="text-3xl font-black text-white">Set up your POS access</Text>
               <Text className="mt-2 text-base leading-6 text-brand-100">

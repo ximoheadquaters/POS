@@ -4,6 +4,7 @@
     "slug": "ximo-pos",
     "scheme": "ximopos",
     "version": "0.1.0",
+    "icon": "./assets/icon.png",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -22,11 +23,22 @@
     "android": {
       "package": "com.ximo.pos",
       "adaptiveIcon": {
-        "backgroundColor": "#0f766e"
-      }
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1A593B"
+      },
+      "permissions": ["android.permission.CAMERA"]
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
     },
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1bae0cf7-1a34-422d-b944-96eda8fe7925"
+      }
     }
   }
 }

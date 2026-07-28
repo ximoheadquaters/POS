@@ -1,5 +1,5 @@
-import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
+import { appStorage } from '@/lib/storage';
 
 export interface ActiveShift {
   id: string;
@@ -22,15 +22,15 @@ export const useShiftStore = create<ShiftState>((set) => ({
   activeShift: null,
   hydrated: false,
   async hydrate() {
-    const stored = await SecureStore.getItemAsync(key);
+    const stored = await appStorage.getItem(key);
     set({ activeShift: stored ? (JSON.parse(stored) as ActiveShift) : null, hydrated: true });
   },
   async setActive(shift) {
-    await SecureStore.setItemAsync(key, JSON.stringify(shift));
+    await appStorage.setItem(key, JSON.stringify(shift));
     set({ activeShift: shift });
   },
   async clear() {
-    await SecureStore.deleteItemAsync(key);
+    await appStorage.removeItem(key);
     set({ activeShift: null });
   },
 }));
