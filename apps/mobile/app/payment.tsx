@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { confirmAction } from '@/lib/confirm';
@@ -36,6 +36,7 @@ export default function PaymentScreen() {
   const shift = useShiftStore((state) => state.activeShift);
   const setActiveShift = useShiftStore((state) => state.setActive);
   const clearShift = useShiftStore((state) => state.clear);
+  const queryClient = useQueryClient();
   const [discount, setDiscount] = useState('0.00');
   const [cash, setCash] = useState('');
   const [cashReceived, setCashReceived] = useState('');
@@ -104,6 +105,13 @@ export default function PaymentScreen() {
       });
     },
     onSuccess(receipt) {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sales'] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+        queryClient.invalidateQueries({ queryKey: ['pos-products'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['reports'] }),
+      ]);
       if (cash && currentUser?.modules.includes('cash_drawer')) {
         const drawer = getHardwareDriver('cash_drawer');
         void drawer

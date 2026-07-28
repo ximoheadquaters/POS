@@ -10,6 +10,12 @@ export default function CartScreen() {
   const setQuantity = useCartStore((state) => state.setQuantity);
   const subtotal = cartSubtotal(items);
   const total = cartTotal(items);
+  const hasStockConflict = items.some(
+    (item) =>
+      item.product.availableQuantity !== null &&
+      item.product.availableQuantity !== undefined &&
+      item.quantity > item.product.availableQuantity,
+  );
   return (
     <Screen>
       <Header
@@ -34,6 +40,18 @@ export default function CartScreen() {
                 <Text className="mt-1 text-slate-500">
                   {formatMoney(item.product.sellingPrice)} each
                 </Text>
+                {item.product.availableQuantity !== null &&
+                item.product.availableQuantity !== undefined ? (
+                  <Text
+                    className={`mt-1 text-xs font-bold ${
+                      item.quantity > item.product.availableQuantity
+                        ? 'text-red-700'
+                        : 'text-brand-500'
+                    }`}
+                  >
+                    {item.product.availableQuantity} currently in stock
+                  </Text>
+                ) : null}
               </View>
               <Text className="font-bold text-slate-900">
                 {formatMoney(
@@ -54,7 +72,24 @@ export default function CartScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Increase ${item.product.name} quantity`}
-                className="h-12 w-12 items-center justify-center rounded-xl bg-brand-100"
+                accessibilityState={{
+                  disabled:
+                    item.product.availableQuantity !== null &&
+                    item.product.availableQuantity !== undefined &&
+                    item.quantity >= item.product.availableQuantity,
+                }}
+                disabled={
+                  item.product.availableQuantity !== null &&
+                  item.product.availableQuantity !== undefined &&
+                  item.quantity >= item.product.availableQuantity
+                }
+                className={`h-12 w-12 items-center justify-center rounded-xl bg-brand-100 ${
+                  item.product.availableQuantity !== null &&
+                  item.product.availableQuantity !== undefined &&
+                  item.quantity >= item.product.availableQuantity
+                    ? 'opacity-40'
+                    : ''
+                }`}
                 onPress={() => setQuantity(item.product.id, item.quantity + 1)}
               >
                 <Text className="text-2xl text-brand-900">+</Text>
@@ -64,6 +99,11 @@ export default function CartScreen() {
         )}
       />
       <View className="absolute bottom-0 left-0 right-0 border-t border-brand-100 bg-white p-5">
+        {hasStockConflict ? (
+          <Text className="mb-3 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">
+            Stock changed on another register. Reduce the highlighted quantities before payment.
+          </Text>
+        ) : null}
         <View className="mb-2 flex-row justify-between">
           <Text className="text-slate-500">Subtotal before tax</Text>
           <Text className="font-semibold">{formatMoney(subtotal)}</Text>
@@ -74,7 +114,7 @@ export default function CartScreen() {
         </View>
         <Button
           title="Continue to payment"
-          disabled={!items.length}
+          disabled={!items.length || hasStockConflict}
           onPress={() => router.push('/payment')}
         />
       </View>

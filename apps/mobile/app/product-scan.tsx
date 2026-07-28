@@ -6,6 +6,7 @@ import { Button, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { normalizeBarcode } from '@/lib/product-scan';
 import { useSession } from '@/providers/session';
+import { useBranchStore } from '@/store/branch';
 import { useCartStore, type CartProduct } from '@/store/cart';
 
 const BARCODE_TYPES = [
@@ -25,6 +26,7 @@ export default function ProductScanScreen() {
   const params = useLocalSearchParams<{ addToCart?: string }>();
   const { currentUser } = useSession();
   const addToCart = params.addToCart === '1';
+  const branch = useBranchStore((state) => state.activeBranch);
   const add = useCartStore((state) => state.add);
   const [permission, requestPermission] = useCameraPermissions();
   const [manualBarcode, setManualBarcode] = useState('');
@@ -48,7 +50,9 @@ export default function ProductScanScreen() {
     setChecking(true);
     try {
       const existing = await api<CartProduct | null>(
-        `/products/lookup?code=${encodeURIComponent(barcode)}`,
+        `/products/lookup?code=${encodeURIComponent(barcode)}${
+          addToCart && branch ? `&branchId=${branch.id}` : ''
+        }`,
       );
       if (existing) {
         if (addToCart) {
@@ -58,6 +62,16 @@ export default function ProductScanScreen() {
               'Ask an owner or manager to reactivate this product.',
               [{ text: 'Scan another', onPress: () => setChecking(false) }],
             );
+            return;
+          }
+          if (
+            existing.availableQuantity !== null &&
+            existing.availableQuantity !== undefined &&
+            existing.availableQuantity <= 0
+          ) {
+            Alert.alert('Product is sold out', 'Stock changed on another register.', [
+              { text: 'Scan another', onPress: () => setChecking(false) },
+            ]);
             return;
           }
           add(existing);

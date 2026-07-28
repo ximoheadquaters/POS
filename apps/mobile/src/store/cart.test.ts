@@ -30,4 +30,11 @@ describe('cashier cart behavior', () => {
     useCartStore.getState().add({ ...product, sellingPrice: '0.10' });
     expect(cartTotal(useCartStore.getState().items, '0.01')).toBe('0.10');
   });
+
+  it('synchronizes live product availability into an existing cart', () => {
+    useCartStore.getState().add({ ...product, availableQuantity: 5 });
+    useCartStore.getState().syncProducts([{ ...product, availableQuantity: 2 }]);
+
+    expect(useCartStore.getState().items[0]?.product.availableQuantity).toBe(2);
+  });
 });

@@ -4,10 +4,12 @@ import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { liveDataQueryOptions } from '@/lib/live-data';
 import { Button, EmptyState, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { getHardwareDriver } from '@/hardware/registry';
 import { useSession } from '@/providers/session';
 import { cartTotal, useCartStore, type CartProduct } from '@/store/cart';
+import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
 
 export default function PosScreen() {
@@ -17,6 +19,8 @@ export default function PosScreen() {
   const [scanPending, setScanPending] = useState(false);
   const items = useCartStore((state) => state.items);
   const add = useCartStore((state) => state.add);
+  const syncProducts = useCartStore((state) => state.syncProducts);
+  const branch = useBranchStore((state) => state.activeBranch);
   const activeShift = useShiftStore((state) => state.activeShift);
   const hydrateShift = useShiftStore((state) => state.hydrate);
 
@@ -27,14 +31,16 @@ export default function PosScreen() {
   }, [search]);
 
   const query = useInfiniteQuery({
-    queryKey: ['pos-products', debounced],
+    queryKey: ['pos-products', branch?.id, debounced],
     initialPageParam: 1,
+    enabled: Boolean(branch),
     queryFn: ({ pageParam }) =>
       api<CartProduct[]>(
-        `/products?page=${pageParam}&pageSize=30${debounced ? `&search=${encodeURIComponent(debounced)}` : ''}`,
+        `/products?branchId=${branch!.id}&page=${pageParam}&pageSize=30${debounced ? `&search=${encodeURIComponent(debounced)}` : ''}`,
       ),
     getNextPageParam: (lastPage, allPages) =>
       lastPage.length === 30 ? allPages.length + 1 : undefined,
+    ...liveDataQueryOptions,
   });
   const products = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
   const cartQuantities = useMemo(
@@ -43,6 +49,10 @@ export default function PosScreen() {
   );
   const scannerEnabled = currentUser?.modules.includes('barcode_scanner') ?? false;
   const customerDisplayEnabled = currentUser?.modules.includes('customer_display') ?? false;
+
+  useEffect(() => {
+    syncProducts(products);
+  }, [products, syncProducts]);
 
   useEffect(() => {
     if (!customerDisplayEnabled || !currentUser) return;
@@ -66,7 +76,7 @@ export default function PosScreen() {
     setScanPending(true);
     try {
       const exact = await api<CartProduct | null>(
-        `/products/lookup?code=${encodeURIComponent(barcode)}`,
+        `/products/lookup?code=${encodeURIComponent(barcode)}&branchId=${branch!.id}`,
       );
       if (!exact) {
         if (currentUser?.permissions.includes('products:manage')) {
@@ -91,6 +101,18 @@ export default function PosScreen() {
       }
       if (exact.status === 'inactive') {
         Alert.alert('Product is inactive', 'Ask an owner or manager to reactivate this product.');
+        return;
+      }
+      if (
+        exact.availableQuantity !== null &&
+        exact.availableQuantity !== undefined &&
+        exact.availableQuantity <= 0
+      ) {
+        Alert.alert(
+          'Product is sold out',
+          'Stock changed on another register. Refreshing products.',
+        );
+        await query.refetch();
         return;
       }
       add(exact);
@@ -170,7 +192,27 @@ export default function PosScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Add ${item.name} to cart`}
-              className="min-h-20 flex-row items-center rounded-2xl border border-slate-100 bg-white p-4 active:border-brand-300 active:bg-brand-50"
+              accessibilityState={{
+                disabled:
+                  item.availableQuantity !== null &&
+                  item.availableQuantity !== undefined &&
+                  (item.availableQuantity <= 0 ||
+                    (cartQuantities.get(item.id) ?? 0) >= item.availableQuantity),
+              }}
+              disabled={
+                item.availableQuantity !== null &&
+                item.availableQuantity !== undefined &&
+                (item.availableQuantity <= 0 ||
+                  (cartQuantities.get(item.id) ?? 0) >= item.availableQuantity)
+              }
+              className={`min-h-20 flex-row items-center rounded-2xl border border-slate-100 bg-white p-4 active:border-brand-300 active:bg-brand-50 ${
+                item.availableQuantity !== null &&
+                item.availableQuantity !== undefined &&
+                (item.availableQuantity <= 0 ||
+                  (cartQuantities.get(item.id) ?? 0) >= item.availableQuantity)
+                  ? 'opacity-50'
+                  : ''
+              }`}
               onPress={() => add(item)}
             >
               <View className="flex-1">
@@ -182,7 +224,17 @@ export default function PosScreen() {
                   {formatMoney(item.sellingPrice)}
                 </Text>
                 <Text className="mt-1 text-xs font-bold text-brand-500">
-                  {cartQuantities.get(item.id) ? `${cartQuantities.get(item.id)} in cart` : '+ Add'}
+                  {item.availableQuantity === null || item.availableQuantity === undefined
+                    ? cartQuantities.get(item.id)
+                      ? `${cartQuantities.get(item.id)} in cart`
+                      : '+ Add'
+                    : item.availableQuantity <= 0
+                      ? 'Sold out'
+                      : `${item.availableQuantity} in stock${
+                          cartQuantities.get(item.id)
+                            ? ` · ${cartQuantities.get(item.id)} in cart`
+                            : ''
+                        }`}
                 </Text>
               </View>
             </Pressable>

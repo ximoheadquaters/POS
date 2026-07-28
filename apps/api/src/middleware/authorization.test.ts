@@ -84,6 +84,22 @@ describe('API authorization boundaries', () => {
     expect(response.body.error.code).toBe('BRANCH_ACCESS_DENIED');
   });
 
+  it('rejects inventory availability requests for an unassigned branch', async () => {
+    const database = new AuthorizationDatabase();
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    const response = await request(app)
+      .get('/api/v1/products?branchId=99999999-9999-4999-8999-999999999999')
+      .set('authorization', 'Bearer valid-token')
+      .expect(403);
+
+    expect(response.body.error.code).toBe('BRANCH_ACCESS_DENIED');
+  });
+
   it('rejects routes for disabled modules', async () => {
     const database = new AuthorizationDatabase(
       testUser({ modules: ['pos'], permissions: ['products:read'] }),

@@ -10,6 +10,7 @@ export interface CartProduct {
   taxRate: string;
   isTaxInclusive: boolean;
   status?: string;
+  availableQuantity?: number | null;
 }
 
 export interface CartItem {
@@ -22,6 +23,7 @@ interface CartState {
   customerId: string | null;
   add(product: CartProduct): void;
   setQuantity(productId: string, quantity: number): void;
+  syncProducts(products: CartProduct[]): void;
   remove(productId: string): void;
   setCustomer(customerId: string | null): void;
   clear(): void;
@@ -50,6 +52,15 @@ export const useCartStore = create<CartState>((set) => ({
           : state.items.map((item) =>
               item.product.id === productId ? { ...item, quantity } : item,
             ),
+    }));
+  },
+  syncProducts(products) {
+    const latest = new Map(products.map((product) => [product.id, product]));
+    set((state) => ({
+      items: state.items.map((item) => {
+        const product = latest.get(item.product.id);
+        return product ? { ...item, product: { ...item.product, ...product } } : item;
+      }),
     }));
   },
   remove(productId) {

@@ -11,7 +11,7 @@ import {
 import type { Database } from '../../database/types.js';
 import { requireBranchAccess, requireModule, requirePermission } from '../../middleware/auth.js';
 import { validateBody, validateQuery } from '../../middleware/validation.js';
-import { notFound } from '../../shared/errors.js';
+import { forbidden, notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
 
 export function productsRouter(database: Database): Router {
@@ -20,12 +20,23 @@ export function productsRouter(database: Database): Router {
   router.get(
     '/lookup',
     requirePermission('products:read'),
-    validateQuery(productLookupSchema),
+    validateQuery(productLookupSchema.extend({ branchId: uuidSchema.optional() })),
     async (request, response) => {
-      const { code } = request.query as unknown as { code: string };
+      const { code, branchId } = request.query as unknown as { code: string; branchId?: string };
+      if (
+        branchId &&
+        !request.authUser!.branches.some((assignedBranch) => assignedBranch.id === branchId)
+      ) {
+        throw forbidden('BRANCH_ACCESS_DENIED', 'You do not have access to this branch');
+      }
       const result = await database.query(
         `select p.id,p.name,p.sku,p.selling_price::text as "sellingPrice",
           p.tax_rate::text as "taxRate",p.is_tax_inclusive as "isTaxInclusive",p.status,
+          case when $3::uuid is null then null else coalesce((
+            select bi.quantity from branch_inventory bi
+            where bi.organization_id=p.organization_id and bi.branch_id=$3
+              and bi.product_id=p.id and bi.variant_id is null
+          ),0) end as "availableQuantity",
           coalesce((
             select jsonb_agg(pb.barcode)
             from product_barcodes pb
@@ -40,7 +51,7 @@ export function productsRouter(database: Database): Router {
          )
          order by case when p.sku=$2 then 0 else 1 end
          limit 1`,
-        [request.authUser!.organization.id, code],
+        [request.authUser!.organization.id, code, branchId ?? null],
       );
       sendData(response, result.rows[0] ?? null);
     },
@@ -48,19 +59,31 @@ export function productsRouter(database: Database): Router {
   router.get(
     '/',
     requirePermission('products:read'),
-    validateQuery(paginationSchema),
+    validateQuery(paginationSchema.extend({ branchId: uuidSchema.optional() })),
     async (request, response) => {
-      const { page, pageSize, search } = request.query as unknown as {
+      const { page, pageSize, search, branchId } = request.query as unknown as {
         page: number;
         pageSize: number;
         search?: string;
+        branchId?: string;
       };
+      if (
+        branchId &&
+        !request.authUser!.branches.some((assignedBranch) => assignedBranch.id === branchId)
+      ) {
+        throw forbidden('BRANCH_ACCESS_DENIED', 'You do not have access to this branch');
+      }
       const offset = (page - 1) * pageSize;
       const organizationId = request.authUser!.organization.id;
       const result = await database.query(
         `select p.id,p.name,p.sku,p.cost::text,p.selling_price::text as "sellingPrice",
           p.tax_rate::text as "taxRate",p.is_tax_inclusive as "isTaxInclusive",
           p.status,p.image_path as "imagePath",c.name as "categoryName",
+          case when $5::uuid is null then null else coalesce((
+            select bi.quantity from branch_inventory bi
+            where bi.organization_id=p.organization_id and bi.branch_id=$5
+              and bi.product_id=p.id and bi.variant_id is null
+          ),0) end as "availableQuantity",
           coalesce((select jsonb_agg(pb.barcode) from product_barcodes pb where pb.product_id=p.id),'[]') as barcodes,
           count(*) over()::int as total
          from products p left join categories c on c.id=p.category_id
@@ -69,7 +92,7 @@ export function productsRouter(database: Database): Router {
              select 1 from product_barcodes pb where pb.product_id=p.id and pb.barcode=$2
            ))
          order by p.name limit $3 offset $4`,
-        [organizationId, search ?? null, pageSize, offset],
+        [organizationId, search ?? null, pageSize, offset, branchId ?? null],
       );
       const total = (result.rows[0] as { total?: number } | undefined)?.total ?? 0;
       sendPage(

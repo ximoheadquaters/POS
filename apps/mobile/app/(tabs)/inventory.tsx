@@ -3,6 +3,7 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { liveDataQueryOptions } from '@/lib/live-data';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 import { EmptyState, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
@@ -28,6 +29,7 @@ export default function InventoryScreen() {
     queryFn: ({ pageParam }) =>
       api<Inventory[]>(`/inventory?branchId=${branch!.id}&page=${pageParam}&pageSize=30`),
     getNextPageParam: (lastPage, pages) => (lastPage.length === 30 ? pages.length + 1 : undefined),
+    ...liveDataQueryOptions,
   });
   const items = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
   if (!inventoryEnabled) return <Redirect href="/(tabs)/more" />;

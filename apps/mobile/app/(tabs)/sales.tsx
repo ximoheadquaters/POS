@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { liveDataQueryOptions } from '@/lib/live-data';
 import { useBranchStore } from '@/store/branch';
 import { EmptyState, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 
@@ -26,6 +27,7 @@ export default function SalesHistoryScreen() {
     queryFn: ({ pageParam }) =>
       api<Sale[]>(`/sales?branchId=${branch!.id}&page=${pageParam}&pageSize=30`),
     getNextPageParam: (lastPage, pages) => (lastPage.length === 30 ? pages.length + 1 : undefined),
+    ...liveDataQueryOptions,
   });
   const sales = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
   return (
