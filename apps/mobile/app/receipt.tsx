@@ -1,10 +1,28 @@
-import { Alert, Text, View } from 'react-native';
+import { Alert, Platform, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button, Header, Screen } from '@/components/ui';
+import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { getHardwareDriver, HardwareUnavailableError } from '@/hardware/registry';
 import { useSession } from '@/providers/session';
+
+interface PrintableSale {
+  subtotal: string;
+  discountTotal: string;
+  taxTotal: string;
+  branchName: string;
+  branchAddress?: string | null;
+  cashierName: string;
+  completedAt: string;
+  items: Array<{
+    productName: string;
+    quantity: number;
+    unitPrice: string;
+    lineTotal: string;
+  }>;
+  payments: Array<{ method: string; amount: string }>;
+}
 
 export default function ReceiptScreen() {
   const { currentUser } = useSession();
@@ -15,6 +33,11 @@ export default function ReceiptScreen() {
     change: string;
   }>();
   const printerEnabled = currentUser?.modules.includes('receipt_printer') ?? false;
+  const sale = useQuery({
+    queryKey: ['sale-receipt', params.id],
+    queryFn: () => api<PrintableSale>(`/sales/${params.id}`),
+    enabled: Boolean(params.id),
+  });
   const print = useMutation({
     mutationFn: async () => {
       const printer = getHardwareDriver('receipt_printer');
@@ -25,11 +48,24 @@ export default function ReceiptScreen() {
       await printer.print({
         saleId: params.id,
         receiptNumber: params.number,
+        businessName: currentUser?.organization.name,
+        branchName: sale.data?.branchName,
+        branchAddress: sale.data?.branchAddress,
+        cashierName: sale.data?.cashierName ?? currentUser?.displayName,
+        completedAt: sale.data?.completedAt,
+        currency: currentUser?.organization.currency,
+        subtotal: sale.data?.subtotal,
+        discountTotal: sale.data?.discountTotal,
+        taxTotal: sale.data?.taxTotal,
         total: params.total,
         changeDue: params.change,
+        items: sale.data?.items,
+        payments: sale.data?.payments,
       });
     },
-    onSuccess: () => Alert.alert('Receipt printed'),
+    onSuccess: () => {
+      if (Platform.OS !== 'web') Alert.alert('Receipt printed');
+    },
     onError: (error) => Alert.alert('Could not print receipt', error.message),
   });
   return (

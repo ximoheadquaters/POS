@@ -21,8 +21,27 @@ export interface BarcodeScannerDriver extends BaseHardwareDriver {
 export interface ReceiptPrintJob {
   saleId: string;
   receiptNumber: string;
+  businessName?: string;
+  branchName?: string;
+  branchAddress?: string | null;
+  cashierName?: string;
+  completedAt?: string;
+  currency?: string;
+  subtotal?: string;
+  discountTotal?: string;
+  taxTotal?: string;
   total: string;
   changeDue: string;
+  items?: Array<{
+    productName: string;
+    quantity: number;
+    unitPrice: string;
+    lineTotal: string;
+  }>;
+  payments?: Array<{
+    method: string;
+    amount: string;
+  }>;
 }
 
 export interface ReceiptPrinterDriver extends BaseHardwareDriver {

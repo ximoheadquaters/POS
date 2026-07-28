@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
+import { confirmAction } from '@/lib/confirm';
 import { formatMoney } from '@/lib/format';
 import { Button, Field, Header, Screen } from '@/components/ui';
 import { getHardwareDriver } from '@/hardware/registry';
@@ -134,6 +135,15 @@ export default function PaymentScreen() {
     },
   });
 
+  const completeSale = async () => {
+    const confirmed = await confirmAction(
+      'Complete sale?',
+      'Inventory and register totals will be updated.',
+      'Complete',
+    );
+    if (confirmed) checkout.mutate();
+  };
+
   return (
     <Screen>
       <Header
@@ -214,12 +224,7 @@ export default function PaymentScreen() {
         <Button
           title={checkout.isPending ? 'Completing sale…' : `Complete · ${formatMoney(total)}`}
           disabled={checkout.isPending || !items.length || !paymentMatches}
-          onPress={() =>
-            Alert.alert('Complete sale?', 'Inventory and register totals will be updated.', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Complete', onPress: () => checkout.mutate() },
-            ])
-          }
+          onPress={() => void completeSale()}
         />
       </ScrollView>
     </Screen>

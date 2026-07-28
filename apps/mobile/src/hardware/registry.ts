@@ -6,8 +6,8 @@ import type {
   HardwareDriverMap,
   HardwareStatus,
   PaymentTerminalDriver,
-  ReceiptPrinterDriver,
 } from './types';
+import { browserReceiptPrinter } from './web-receipt-printer';
 
 export class HardwareUnavailableError extends Error {
   constructor(
@@ -43,14 +43,6 @@ const keyboardScanner: BarcodeScannerDriver = {
   },
 };
 
-const unavailableReceiptPrinter: ReceiptPrinterDriver = {
-  status: unavailableStatus('No receipt-printer driver'),
-  test: unavailableTest('receipt_printer'),
-  async print() {
-    throw new HardwareUnavailableError('receipt_printer');
-  },
-};
-
 const unavailableCashDrawer: CashDrawerDriver = {
   status: unavailableStatus('No cash-drawer driver'),
   test: unavailableTest('cash_drawer'),
@@ -80,7 +72,7 @@ const unavailableCustomerDisplay: CustomerDisplayDriver = {
 
 const defaultDrivers: HardwareDriverMap = {
   barcode_scanner: keyboardScanner,
-  receipt_printer: unavailableReceiptPrinter,
+  receipt_printer: browserReceiptPrinter,
   cash_drawer: unavailableCashDrawer,
   payment_terminal: unavailablePaymentTerminal,
   customer_display: unavailableCustomerDisplay,
