@@ -45,8 +45,16 @@ const links: Array<{
     module: 'returns',
   },
   {
+    title: 'Purchasing',
+    subtitle: 'Suppliers, purchase orders and receiving',
+    symbol: 'PO',
+    href: '/purchasing',
+    module: 'purchasing',
+    permission: 'purchasing:read',
+  },
+  {
     title: 'Reports',
-    subtitle: 'Sales and gross profit analytics',
+    subtitle: 'KPIs, sales, inventory, purchasing, profit and cash',
     symbol: 'A',
     href: '/reports',
     module: 'reports',
@@ -72,6 +80,12 @@ const links: Array<{
     href: '/hardware' as Href,
     permission: 'settings:manage',
   },
+  {
+    title: 'Offline synchronization',
+    subtitle: 'Saved data, pending sales and sync errors',
+    symbol: 'O',
+    href: '/offline-sync' as Href,
+  },
 ];
 
 export default function MoreScreen() {
@@ -93,7 +107,7 @@ export default function MoreScreen() {
         keyExtractor={(item) => item.title}
         contentContainerClassName="p-4 gap-3 pb-10"
         ListHeaderComponent={
-          <View className="mb-2 rounded-3xl bg-brand-700 p-5">
+          <View className="mb-2 rounded-2xl bg-brand-700 p-5">
             <Text className="text-xs font-bold uppercase tracking-wider text-brand-100">
               Current branch
             </Text>
@@ -154,7 +168,7 @@ export default function MoreScreen() {
         renderItem={({ item }) => (
           <Pressable
             accessibilityRole="button"
-            className="min-h-20 flex-row items-center rounded-2xl border border-slate-100 bg-white px-4 active:border-brand-300 active:bg-brand-50"
+            className="min-h-16 flex-row items-center rounded-xl px-3 active:bg-brand-50"
             onPress={() => router.push(item.href)}
           >
             <View className="mr-4 h-11 w-11 items-center justify-center rounded-xl bg-brand-50">

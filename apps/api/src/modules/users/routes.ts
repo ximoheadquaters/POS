@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
+  PERMISSIONS,
   createEmployeeSchema,
   roleCodeSchema,
   uuidSchema,
   type EmployeeRoleCode,
+  type Permission,
   type RoleCode,
 } from '@ximo/shared';
 import type { AuthActions } from '../../auth/types.js';
@@ -18,6 +20,13 @@ const updateUserSchema = z.object({
   role: roleCodeSchema.optional(),
   isActive: z.boolean().optional(),
   branchIds: z.array(uuidSchema).optional(),
+});
+
+const updateRolePermissionsSchema = z.object({
+  permissions: z
+    .array(z.enum(PERMISSIONS))
+    .max(PERMISSIONS.length)
+    .refine((values) => new Set(values).size === values.length, 'Select each permission only once'),
 });
 
 function assignableRoles(actorRole: RoleCode): readonly EmployeeRoleCode[] {
@@ -37,19 +46,148 @@ function assertCanManageRole(actorRole: RoleCode, targetRole: RoleCode) {
   }
 }
 
+function assertCanManagePermissions(actorRole: RoleCode) {
+  if (actorRole !== 'owner' && actorRole !== 'administrator') {
+    throw forbidden(
+      'ROLE_PERMISSION_MANAGEMENT_DENIED',
+      'Only owners and administrators can change role permissions',
+    );
+  }
+}
+
+function assertCanAssignBranches(
+  actorRole: RoleCode,
+  actorBranchIds: string[],
+  requestedBranchIds: string[],
+) {
+  if (actorRole === 'owner' || actorRole === 'administrator') return;
+  const allowed = new Set(actorBranchIds);
+  if (requestedBranchIds.some((branchId) => !allowed.has(branchId))) {
+    throw forbidden(
+      'BRANCH_ASSIGNMENT_DENIED',
+      'You can only assign employees to branches you can access',
+    );
+  }
+}
+
+const userSelect = `
+  select p.id,p.display_name as "displayName",p.email,p.is_active as "isActive",r.code as role,
+    coalesce(jsonb_agg(jsonb_build_object('id',b.id,'name',b.name,'code',b.code)
+      order by b.name) filter (where b.id is not null),'[]') as branches
+  from profiles p join roles r on r.id=p.role_id
+  left join user_branches ub on ub.user_id=p.id
+  left join branches b on b.id=ub.branch_id`;
+
 export function usersRouter(database: Database, authActions: AuthActions): Router {
   const router = Router();
   router.get('/', requirePermission('users:read'), async (request, response) => {
     const result = await database.query(
-      `select p.id,p.display_name as "displayName",p.email,p.is_active as "isActive",r.code as role,
-        coalesce(jsonb_agg(jsonb_build_object('id',b.id,'name',b.name,'code',b.code))
-          filter (where b.id is not null),'[]') as branches
-       from profiles p join roles r on r.id=p.role_id
-       left join user_branches ub on ub.user_id=p.id left join branches b on b.id=ub.branch_id
+      `${userSelect}
        where p.organization_id=$1 group by p.id,r.code order by p.display_name`,
       [request.authUser!.organization.id],
     );
     sendData(response, result.rows);
+  });
+  router.get('/roles', requirePermission('users:read'), async (request, response) => {
+    const organizationId = request.authUser!.organization.id;
+    const [roles, permissions] = await Promise.all([
+      database.query<{
+        id: string;
+        code: RoleCode;
+        name: string;
+        isSystem: boolean;
+        userCount: number;
+        permissions: Permission[];
+      }>(
+        `select r.id,r.code,r.name,r.is_system as "isSystem",
+          count(distinct pr.id)::int as "userCount",
+          coalesce(array_agg(distinct pe.code order by pe.code)
+            filter (where pe.code is not null),'{}') as permissions
+         from roles r
+         left join profiles pr on pr.role_id=r.id and pr.organization_id=r.organization_id
+         left join role_permissions rp on rp.role_id=r.id
+         left join permissions pe on pe.id=rp.permission_id
+         where r.organization_id=$1
+         group by r.id
+         order by case r.code
+           when 'owner' then 1 when 'administrator' then 2 when 'manager' then 3
+           when 'cashier' then 4 when 'inventory_staff' then 5 else 6 end,r.name`,
+        [organizationId],
+      ),
+      database.query<{ code: Permission; description: string }>(
+        'select code,description from permissions order by code',
+      ),
+    ]);
+    const canManagePermissions =
+      request.authUser!.role === 'owner' || request.authUser!.role === 'administrator';
+    sendData(response, {
+      roles: roles.rows.map((role) => ({
+        ...role,
+        editable: canManagePermissions && role.code !== 'owner' && role.code !== 'administrator',
+        assignable: assignableRoles(request.authUser!.role).includes(role.code as EmployeeRoleCode),
+      })),
+      permissions: permissions.rows,
+    });
+  });
+  router.patch(
+    '/roles/:id',
+    requirePermission('users:manage'),
+    validateBody(updateRolePermissionsSchema),
+    async (request, response) => {
+      assertCanManagePermissions(request.authUser!.role);
+      const roleId = uuidSchema.parse(request.params.id);
+      const organizationId = request.authUser!.organization.id;
+      const permissions = request.body.permissions as Permission[];
+      const updated = await database.transaction(async (tx) => {
+        const existing = await tx.query<{ code: RoleCode; name: string }>(
+          `select code,name from roles
+           where id=$1 and organization_id=$2 for update`,
+          [roleId, organizationId],
+        );
+        const role = existing.rows[0];
+        if (!role) throw notFound('Role');
+        if (role.code === 'owner' || role.code === 'administrator') {
+          throw forbidden(
+            'SYSTEM_ROLE_LOCKED',
+            'Owner and administrator permissions are locked to full access',
+          );
+        }
+        await tx.query('delete from role_permissions where role_id=$1', [roleId]);
+        if (permissions.length) {
+          const inserted = await tx.query(
+            `insert into role_permissions (role_id,permission_id)
+             select $1,p.id from permissions p where p.code=any($2::text[])`,
+            [roleId, permissions],
+          );
+          if (inserted.rowCount !== permissions.length) {
+            throw badRequest('INVALID_PERMISSION', 'One or more permissions are invalid');
+          }
+        }
+        await tx.query(
+          `insert into audit_logs (
+            organization_id,actor_id,action,entity_type,entity_id,after_data
+           ) values ($1,$2,'role.permissions_updated','role',$3,$4::jsonb)`,
+          [
+            organizationId,
+            request.authUser!.id,
+            roleId,
+            JSON.stringify({ code: role.code, permissions }),
+          ],
+        );
+        return { id: roleId, code: role.code, name: role.name, permissions };
+      });
+      sendData(response, updated);
+    },
+  );
+  router.get('/:id', requirePermission('users:read'), async (request, response) => {
+    const userId = uuidSchema.parse(request.params.id);
+    const result = await database.query(
+      `${userSelect}
+       where p.organization_id=$1 and p.id=$2 group by p.id,r.code`,
+      [request.authUser!.organization.id, userId],
+    );
+    if (!result.rows[0]) throw notFound('User');
+    sendData(response, result.rows[0]);
   });
   router.post(
     '/',
@@ -58,6 +196,11 @@ export function usersRouter(database: Database, authActions: AuthActions): Route
     async (request, response) => {
       assertCanManageRole(request.authUser!.role, request.body.role);
       const organizationId = request.authUser!.organization.id;
+      assertCanAssignBranches(
+        request.authUser!.role,
+        request.authUser!.branches.map((branch) => branch.id),
+        request.body.branchIds,
+      );
       const branches = await database.query<{ id: string; name: string; code: string }>(
         `select id,name,code from branches
          where organization_id=$1 and is_active and id=any($2::uuid[])
@@ -138,14 +281,23 @@ export function usersRouter(database: Database, authActions: AuthActions): Route
         );
       }
       const result = await database.transaction(async (tx) => {
-        const existing = await tx.query<{ role: RoleCode }>(
-          `select r.code as role from profiles p join roles r on r.id=p.role_id
+        const existing = await tx.query<{ role: RoleCode; branchIds: string[] }>(
+          `select r.code as role,
+            coalesce((select array_agg(ub.branch_id) from user_branches ub
+              where ub.user_id=p.id and ub.organization_id=p.organization_id),'{}')
+              as "branchIds"
+           from profiles p join roles r on r.id=p.role_id
            where p.id=$1 and p.organization_id=$2 for update of p`,
           [userId, organizationId],
         );
         const target = existing.rows[0];
         if (!target) throw notFound('User');
         assertCanManageRole(request.authUser!.role, target.role);
+        assertCanAssignBranches(
+          request.authUser!.role,
+          request.authUser!.branches.map((branch) => branch.id),
+          target.branchIds,
+        );
         if (request.body.role) {
           assertCanManageRole(request.authUser!.role, request.body.role);
           await tx.query(
@@ -174,6 +326,11 @@ export function usersRouter(database: Database, authActions: AuthActions): Route
           );
         }
         if (request.body.branchIds) {
+          assertCanAssignBranches(
+            request.authUser!.role,
+            request.authUser!.branches.map((branch) => branch.id),
+            request.body.branchIds,
+          );
           await tx.query('delete from user_branches where user_id=$1 and organization_id=$2', [
             userId,
             organizationId,

@@ -271,6 +271,21 @@ export class PlatformProvisioningService {
            )`,
           [organizationId, input.name],
         );
+        await transaction.query(
+          `insert into product_units (
+            organization_id,code,name,kind,default_step,is_system
+           ) values
+            ($1,'piece','Piece','discrete',1,true),
+            ($1,'serving','Serving','discrete',1,true),
+            ($1,'box','Box','discrete',1,true),
+            ($1,'pack','Pack','discrete',1,true),
+            ($1,'ml','Milliliter','decimal',100,true),
+            ($1,'l','Liter','decimal',0.1,true),
+            ($1,'g','Gram','decimal',100,true),
+            ($1,'kg','Kilogram','decimal',0.1,true)
+           on conflict (organization_id,code) do nothing`,
+          [organizationId],
+        );
 
         const roles = await transaction.query<{ id: string; code: string }>(
           `insert into roles (organization_id,code,name,is_system) values
@@ -293,7 +308,8 @@ export class PlatformProvisioningService {
                'shifts:close','cash:move','sales:create','sales:read_branch','customers:read'
              ))
              or (r.code='inventory_staff' and p.code in (
-               'branches:read','products:read','products:manage','inventory:read','inventory:adjust'
+               'branches:read','products:read','products:manage','inventory:read','inventory:adjust',
+               'suppliers:read','purchasing:read','purchasing:receive','purchasing:return'
              ))
            )`,
           [organizationId],

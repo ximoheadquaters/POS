@@ -116,10 +116,16 @@ export function salesRouter(database: Database): Router {
       if (!result.rows[0]) throw notFound('Sale');
       const [items, payments] = await Promise.all([
         database.query(
-          `select id,product_name as "productName",sku,quantity,unit_price::text as "unitPrice",
-            discount_total::text as "discountTotal",tax_total::text as "taxTotal",
-            line_total::text as "lineTotal",returned_quantity as "returnedQuantity"
-           from sale_items where sale_id=$1 and organization_id=$2 order by created_at`,
+          `select si.id,si.product_name as "productName",si.sku,coalesce(v.unit,p.unit) as unit,
+            si.quantity::float8 as quantity,si.unit_price::text as "unitPrice",
+            si.discount_total::text as "discountTotal",si.tax_total::text as "taxTotal",
+            si.line_total::text as "lineTotal",
+            si.returned_quantity::float8 as "returnedQuantity"
+           from sale_items si join products p
+             on p.id=si.product_id and p.organization_id=si.organization_id
+           left join product_variants v
+             on v.id=si.variant_id and v.organization_id=si.organization_id
+           where si.sale_id=$1 and si.organization_id=$2 order by si.created_at`,
           [id, request.authUser!.organization.id],
         ),
         database.query(

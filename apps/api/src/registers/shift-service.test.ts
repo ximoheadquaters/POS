@@ -7,9 +7,10 @@ describe('register closure arithmetic', () => {
       moneyToMinor('1000.00') +
       moneyToMinor('550.25') +
       moneyToMinor('50.00') -
-      moneyToMinor('25.00');
-    expect(minorToMoney(expected)).toBe('1575.25');
-    expect(minorToMoney(moneyToMinor('1570.00') - expected)).toBe('-5.25');
-    expect(minorToMoney(moneyToMinor('1580.50') - expected)).toBe('5.25');
+      moneyToMinor('25.00') -
+      moneyToMinor('20.00');
+    expect(minorToMoney(expected)).toBe('1555.25');
+    expect(minorToMoney(moneyToMinor('1550.00') - expected)).toBe('-5.25');
+    expect(minorToMoney(moneyToMinor('1560.50') - expected)).toBe('5.25');
   });
 });

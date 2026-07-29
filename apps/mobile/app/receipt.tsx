@@ -31,12 +31,14 @@ export default function ReceiptScreen() {
     number: string;
     total: string;
     change: string;
+    offline?: string;
   }>();
+  const offline = params.offline === '1';
   const printerEnabled = currentUser?.modules.includes('receipt_printer') ?? false;
   const sale = useQuery({
     queryKey: ['sale-receipt', params.id],
     queryFn: () => api<PrintableSale>(`/sales/${params.id}`),
-    enabled: Boolean(params.id),
+    enabled: Boolean(params.id) && !offline,
   });
   const print = useMutation({
     mutationFn: async () => {
@@ -70,7 +72,7 @@ export default function ReceiptScreen() {
   });
   return (
     <Screen>
-      <Header title="Sale complete" />
+      <Header title={offline ? 'Sale saved offline' : 'Sale complete'} />
       <View className="flex-1 items-center justify-center px-6">
         <View className="w-full max-w-lg rounded-3xl bg-white p-7">
           <View className="mx-auto h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
@@ -84,19 +86,27 @@ export default function ReceiptScreen() {
           <Text className="mt-2 text-center text-slate-500">
             Change: {formatMoney(params.change)}
           </Text>
+          {offline ? (
+            <Text className="mt-4 rounded-xl bg-amber-50 p-3 text-center text-sm text-amber-900">
+              This cash sale is stored on this device and will sync automatically when internet
+              access returns.
+            </Text>
+          ) : null}
           <View className="mt-8 gap-3">
-            {printerEnabled ? (
+            {printerEnabled && !offline ? (
               <Button
                 title={print.isPending ? 'Printing…' : 'Print receipt'}
                 disabled={print.isPending}
                 onPress={() => print.mutate()}
               />
             ) : null}
-            <Button
-              title="View receipt details"
-              variant="secondary"
-              onPress={() => router.replace(`/sale/${params.id}`)}
-            />
+            {!offline ? (
+              <Button
+                title="View receipt details"
+                variant="secondary"
+                onPress={() => router.replace(`/sale/${params.id}`)}
+              />
+            ) : null}
             <Button title="New sale" onPress={() => router.replace('/(tabs)/pos')} />
           </View>
         </View>

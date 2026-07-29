@@ -13,6 +13,7 @@ interface Inventory {
   productId: string;
   name: string;
   sku: string;
+  unit: string;
   quantity: number;
   lowStockLevel: number;
   isLowStock: boolean;
@@ -56,7 +57,7 @@ export default function InventoryScreen() {
               onPress={() =>
                 router.push({
                   pathname: '/stock-adjustment',
-                  params: { productId: item.productId, name: item.name },
+                  params: { productId: item.productId, name: item.name, unit: item.unit },
                 })
               }
             >
@@ -70,7 +71,7 @@ export default function InventoryScreen() {
                 <Text
                   className={`text-lg font-black ${item.isLowStock ? 'text-red-700' : 'text-brand-700'}`}
                 >
-                  {item.quantity}
+                  {item.quantity} {item.unit}
                 </Text>
               </View>
             </Pressable>

@@ -1,21 +1,24 @@
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { formatMoney } from '@/lib/format';
 import { Button, EmptyState, Header, Screen } from '@/components/ui';
-import { cartSubtotal, cartTotal, useCartStore } from '@/store/cart';
+import { QuantityInput } from '@/components/quantity-input';
+import {
+  cartLineTotal,
+  cartProductKey,
+  cartSubtotal,
+  cartTotal,
+  hasCartStockConflict,
+  quantityStep,
+  useCartStore,
+} from '@/store/cart';
 
 export default function CartScreen() {
   const items = useCartStore((state) => state.items);
   const setQuantity = useCartStore((state) => state.setQuantity);
   const subtotal = cartSubtotal(items);
   const total = cartTotal(items);
-  const hasStockConflict = items.some(
-    (item) =>
-      item.product.availableQuantity !== null &&
-      item.product.availableQuantity !== undefined &&
-      item.quantity > item.product.availableQuantity,
-  );
+  const hasStockConflict = hasCartStockConflict(items);
   return (
     <Screen>
       <Header
@@ -27,7 +30,7 @@ export default function CartScreen() {
       />
       <FlatList
         data={items}
-        keyExtractor={(item) => item.product.id}
+        keyExtractor={(item) => cartProductKey(item.product)}
         contentContainerClassName="p-4 gap-3 pb-52"
         ListEmptyComponent={
           <EmptyState title="Cart is empty" message="Add products from the POS screen." />
@@ -38,7 +41,7 @@ export default function CartScreen() {
               <View className="flex-1">
                 <Text className="font-bold text-slate-900">{item.product.name}</Text>
                 <Text className="mt-1 text-slate-500">
-                  {formatMoney(item.product.sellingPrice)} each
+                  {formatMoney(item.product.sellingPrice)} per {item.product.unit ?? 'piece'}
                 </Text>
                 {item.product.availableQuantity !== null &&
                 item.product.availableQuantity !== undefined ? (
@@ -53,22 +56,27 @@ export default function CartScreen() {
                   </Text>
                 ) : null}
               </View>
-              <Text className="font-bold text-slate-900">
-                {formatMoney(
-                  minorToMoney(moneyToMinor(item.product.sellingPrice) * BigInt(item.quantity)),
-                )}
-              </Text>
+              <Text className="font-bold text-slate-900">{formatMoney(cartLineTotal(item))}</Text>
             </View>
             <View className="mt-4 flex-row items-center gap-3">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Decrease ${item.product.name} quantity`}
                 className="h-12 w-12 items-center justify-center rounded-xl bg-slate-100"
-                onPress={() => setQuantity(item.product.id, item.quantity - 1)}
+                onPress={() =>
+                  setQuantity(
+                    cartProductKey(item.product),
+                    item.quantity - quantityStep(item.product),
+                  )
+                }
               >
                 <Text className="text-2xl font-bold text-slate-700">-</Text>
               </Pressable>
-              <Text className="min-w-10 text-center text-lg font-bold">{item.quantity}</Text>
+              <QuantityInput
+                product={item.product}
+                quantity={item.quantity}
+                onChange={(quantity) => setQuantity(cartProductKey(item.product), quantity)}
+              />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Increase ${item.product.name} quantity`}
@@ -90,7 +98,12 @@ export default function CartScreen() {
                     ? 'opacity-40'
                     : ''
                 }`}
-                onPress={() => setQuantity(item.product.id, item.quantity + 1)}
+                onPress={() =>
+                  setQuantity(
+                    cartProductKey(item.product),
+                    item.quantity + quantityStep(item.product),
+                  )
+                }
               >
                 <Text className="text-2xl text-brand-900">+</Text>
               </Pressable>

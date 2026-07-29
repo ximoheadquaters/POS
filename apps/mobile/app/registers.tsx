@@ -1,20 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
-import {
-  Button,
-  EmptyState,
-  ErrorState,
-  Field,
-  Header,
-  LoadingState,
-  Screen,
-} from '@/components/ui';
+import { Button, EmptyState, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
 import { useSession } from '@/providers/session';
+import { useConnectivityStore } from '@/store/connectivity';
 
 interface Register {
   id: string;
@@ -30,23 +24,48 @@ interface ClosedShift {
   variance: string;
 }
 
+function validMoney(value: string) {
+  return /^(0|[1-9]\d{0,11})(\.\d{1,2})?$/.test(value.trim());
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
+      {children}
+    </Text>
+  );
+}
+
 export default function RegistersScreen() {
   const { currentUser } = useSession();
-  const branch = useBranchStore((state) => state.activeBranch)!;
+  const branch = useBranchStore((state) => state.activeBranch);
   const shift = useShiftStore((state) => state.activeShift);
   const hydrate = useShiftStore((state) => state.hydrate);
   const setActive = useShiftStore((state) => state.setActive);
   const clear = useShiftStore((state) => state.clear);
+  const pendingOfflineSales = useConnectivityStore((state) => state.pendingSales);
+  const failedOfflineSales = useConnectivityStore((state) => state.failedSales);
   const [startingCash, setStartingCash] = useState('0.00');
   const [actualCash, setActualCash] = useState('');
+  const [movementType, setMovementType] = useState<'cash_in' | 'cash_out'>('cash_in');
+  const [movementAmount, setMovementAmount] = useState('');
+  const [movementReason, setMovementReason] = useState('');
+  const [closeReviewOpen, setCloseReviewOpen] = useState(false);
   const client = useQueryClient();
+
   useEffect(() => void hydrate(), [hydrate]);
+
   const query = useQuery({
-    queryKey: ['registers', branch.id],
-    queryFn: () => api<Register[]>(`/registers?branchId=${branch.id}`),
+    queryKey: ['registers', branch?.id],
+    queryFn: () => {
+      if (!branch) throw new Error('Select a branch before opening registers.');
+      return api<Register[]>(`/registers?branchId=${branch.id}`);
+    },
+    enabled: Boolean(branch),
   });
+
   useEffect(() => {
-    if (!query.data || !currentUser) return;
+    if (!branch || !query.data || !currentUser) return;
     const activeRegister = query.data.find(
       (register) => register.activeShiftId && register.activeCashierId === currentUser.id,
     );
@@ -62,33 +81,55 @@ export default function RegistersScreen() {
     } else if (shift?.branchId === branch.id) {
       void clear();
     }
-  }, [branch.id, clear, currentUser, query.data, setActive, shift]);
+  }, [branch, clear, currentUser, query.data, setActive, shift]);
+
+  const refreshShiftData = async () => {
+    if (!branch) return;
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ['registers', branch.id] }),
+      client.invalidateQueries({ queryKey: ['shift-reports'] }),
+      client.invalidateQueries({ queryKey: ['reports'] }),
+    ]);
+  };
+
   const open = useMutation({
-    mutationFn: (register: Register) =>
-      api<{ id: string }>('/registers/shifts/open', {
+    mutationFn: async (register: Register) => {
+      if (!branch) throw new Error('Select a branch before opening a shift.');
+      const opened = await api<{ id: string }>('/registers/shifts/open', {
         method: 'POST',
-        body: JSON.stringify({ branchId: branch.id, registerId: register.id, startingCash }),
-      }).then(async (opened) => {
-        await setActive({
-          id: opened.id,
-          registerId: register.id,
-          registerName: register.name,
+        body: JSON.stringify({
           branchId: branch.id,
-        });
-      }),
-    onSuccess: () => void client.invalidateQueries({ queryKey: ['registers', branch.id] }),
+          registerId: register.id,
+          startingCash: startingCash.trim(),
+        }),
+      });
+      await setActive({
+        id: opened.id,
+        registerId: register.id,
+        registerName: register.name,
+        branchId: branch.id,
+      });
+    },
+    onSuccess: () => {
+      void refreshShiftData();
+      Alert.alert('Shift opened', 'You can now start accepting sales.');
+    },
     onError: (error) => Alert.alert('Could not open shift', error.message),
   });
+
   const close = useMutation({
-    mutationFn: () =>
-      api<ClosedShift>(`/registers/shifts/${shift!.id}/close`, {
+    mutationFn: () => {
+      if (!shift) throw new Error('No active shift was found.');
+      return api<ClosedShift>(`/registers/shifts/${shift.id}/close`, {
         method: 'POST',
-        body: JSON.stringify({ actualCash }),
-      }),
+        body: JSON.stringify({ actualCash: actualCash.trim() }),
+      });
+    },
     onSuccess: async (closed) => {
+      setCloseReviewOpen(false);
       await clear();
       setActualCash('');
-      await client.invalidateQueries({ queryKey: ['registers', branch.id] });
+      await refreshShiftData();
       Alert.alert(
         'Shift closed',
         `Expected ${formatMoney(closed.expectedCash)}\nCounted ${formatMoney(closed.actualCash)}\nVariance ${formatMoney(closed.variance)}`,
@@ -96,6 +137,61 @@ export default function RegistersScreen() {
     },
     onError: (error) => Alert.alert('Could not close shift', error.message),
   });
+
+  const cashMovement = useMutation({
+    mutationFn: () => {
+      if (!branch) throw new Error('Select a branch before recording cash movement.');
+      if (!shift) throw new Error('No active shift was found.');
+      return api('/registers/cash-movements', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: branch.id,
+          shiftId: shift.id,
+          type: movementType,
+          amount: movementAmount.trim(),
+          reason: movementReason.trim(),
+        }),
+      });
+    },
+    onSuccess: () => {
+      setMovementAmount('');
+      setMovementReason('');
+      void refreshShiftData();
+      Alert.alert(
+        movementType === 'cash_in' ? 'Cash added' : 'Cash removed',
+        'The drawer movement was recorded.',
+      );
+    },
+    onError: (error) => Alert.alert('Could not record cash movement', error.message),
+  });
+
+  const offlineSales = pendingOfflineSales + failedOfflineSales;
+  const countedCashValid = validMoney(actualCash);
+  const startingCashValid = validMoney(startingCash);
+  const movementValid =
+    validMoney(movementAmount) && Number(movementAmount) > 0 && movementReason.trim().length >= 3;
+  const closeDisabled = close.isPending || !countedCashValid || offlineSales > 0;
+
+  if (!branch) {
+    return (
+      <Screen>
+        <Header
+          title="Registers & shifts"
+          subtitle="Branch required"
+          showBack
+          backLabel="More"
+          fallbackHref="/(tabs)/more"
+        />
+        <View className="flex-1 p-4">
+          <EmptyState
+            title="Select a branch first"
+            message="Choose your working branch, then return to Registers & shifts."
+          />
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
       <Header
@@ -105,99 +201,346 @@ export default function RegistersScreen() {
         backLabel="More"
         fallbackHref="/(tabs)/more"
       />
-      {shift ? (
-        <View className="m-4 rounded-3xl border border-brand-100 bg-white p-5">
-          <View className="mb-4 flex-row items-center justify-between">
-            <View className="flex-1">
-              <Text className="text-xs font-bold uppercase tracking-wider text-brand-500">
-                Active shift
-              </Text>
-              <Text className="mt-1 text-xl font-black text-brand-900">{shift.registerName}</Text>
+
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="px-4 py-6 pb-12"
+      >
+        <View className="w-full max-w-3xl self-center">
+          {shift ? (
+            <>
+              <SectionLabel>Active shift</SectionLabel>
+              <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+                <View className="flex-row items-start justify-between p-5">
+                  <View className="mr-4 flex-1 flex-row items-center">
+                    <View className="mr-3 h-11 w-11 items-center justify-center rounded-2xl bg-brand-50">
+                      <Feather name="briefcase" size={20} color="#1A593B" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-lg font-semibold text-slate-950">
+                        {shift.registerName}
+                      </Text>
+                      <Text className="mt-1 text-sm leading-5 text-slate-500">
+                        Count the drawer at the end of your duty. Ximo calculates the expected cash
+                        and any difference.
+                      </Text>
+                    </View>
+                  </View>
+                  <View className="flex-row items-center rounded-full bg-emerald-50 px-3 py-2">
+                    <View className="mr-2 h-2 w-2 rounded-full bg-emerald-600" />
+                    <Text className="text-xs font-medium text-emerald-800">Open</Text>
+                  </View>
+                </View>
+
+                <View className="border-t border-slate-100 p-5">
+                  <View className="mb-3 flex-row items-center">
+                    <Feather name="repeat" size={15} color="#64748B" />
+                    <Text className="ml-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Cash movement
+                    </Text>
+                  </View>
+                  <Text className="mb-4 text-sm leading-5 text-slate-500">
+                    Record money added to or removed from the drawer outside of a sale.
+                  </Text>
+
+                  <View className="mb-5 flex-row rounded-xl bg-slate-100 p-1">
+                    {(['cash_in', 'cash_out'] as const).map((type) => {
+                      const selected = movementType === type;
+                      const cashIn = type === 'cash_in';
+                      return (
+                        <Pressable
+                          key={type}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                          onPress={() => setMovementType(type)}
+                          className={`min-h-11 flex-1 flex-row items-center justify-center rounded-lg ${
+                            selected ? 'bg-brand-700' : ''
+                          }`}
+                        >
+                          <Feather
+                            name={cashIn ? 'arrow-down-left' : 'arrow-up-right'}
+                            size={16}
+                            color={selected ? '#FFFFFF' : '#64748B'}
+                          />
+                          <Text
+                            className={`ml-2 text-sm font-medium ${
+                              selected ? 'text-white' : 'text-slate-600'
+                            }`}
+                          >
+                            {cashIn ? 'Cash in' : 'Cash out'}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  <View className="md:flex-row md:gap-3">
+                    <View className="md:flex-1">
+                      <Field
+                        label="Amount"
+                        value={movementAmount}
+                        onChangeText={setMovementAmount}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        error={
+                          movementAmount && !validMoney(movementAmount)
+                            ? 'Enter an amount with up to two decimal places.'
+                            : undefined
+                        }
+                      />
+                    </View>
+                    <View className="md:flex-[2]">
+                      <Field
+                        label="Reason"
+                        value={movementReason}
+                        onChangeText={setMovementReason}
+                        placeholder={
+                          movementType === 'cash_in'
+                            ? 'Example: Additional change fund'
+                            : 'Example: Paid a delivery'
+                        }
+                      />
+                    </View>
+                  </View>
+                  <Button
+                    title={
+                      cashMovement.isPending
+                        ? 'Recording…'
+                        : `Record ${movementType === 'cash_in' ? 'cash in' : 'cash out'}`
+                    }
+                    variant="secondary"
+                    disabled={cashMovement.isPending || !movementValid}
+                    onPress={() => cashMovement.mutate()}
+                  />
+                </View>
+              </View>
+
+              <SectionLabel>Close shift</SectionLabel>
+              <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
+                <View className="mb-4 flex-row items-start">
+                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+                    <Feather name="archive" size={18} color="#64748B" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-medium text-slate-900">Count the physical drawer</Text>
+                    <Text className="mt-1 text-sm leading-5 text-slate-500">
+                      Enter the cash you can physically count—not the expected amount. Enter 0 if
+                      the drawer is empty.
+                    </Text>
+                  </View>
+                </View>
+                <Field
+                  label="Counted cash in drawer"
+                  value={actualCash}
+                  onChangeText={setActualCash}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  error={
+                    actualCash && !countedCashValid
+                      ? 'Enter a valid amount with up to two decimal places.'
+                      : undefined
+                  }
+                />
+                {offlineSales > 0 ? (
+                  <View className="mb-4 flex-row rounded-xl bg-amber-50 p-3">
+                    <Feather name="alert-triangle" size={17} color="#92400E" />
+                    <Text className="ml-2 flex-1 text-sm leading-5 text-amber-900">
+                      {offlineSales} offline {offlineSales === 1 ? 'sale must' : 'sales must'} sync
+                      or be resolved before this shift can close.
+                    </Text>
+                  </View>
+                ) : null}
+                <Button
+                  title={close.isPending ? 'Closing shift…' : 'Review and close shift'}
+                  variant="danger"
+                  disabled={closeDisabled}
+                  onPress={() => setCloseReviewOpen(true)}
+                />
+                {!actualCash ? (
+                  <Text className="mt-2 text-center text-xs text-slate-500">
+                    Enter the counted cash to enable closing.
+                  </Text>
+                ) : null}
+              </View>
+            </>
+          ) : (
+            <>
+              <SectionLabel>Step 1 · Starting cash</SectionLabel>
+              <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
+                <View className="mb-4 flex-row items-start">
+                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
+                    <Feather name="inbox" size={18} color="#1A593B" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-medium text-slate-900">Count the opening drawer</Text>
+                    <Text className="mt-1 text-sm leading-5 text-slate-500">
+                      Enter the cash already inside before accepting your first sale.
+                    </Text>
+                  </View>
+                </View>
+                <Field
+                  label="Starting cash in drawer"
+                  value={startingCash}
+                  onChangeText={setStartingCash}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  error={
+                    startingCash && !startingCashValid
+                      ? 'Enter a valid amount with up to two decimal places.'
+                      : undefined
+                  }
+                />
+              </View>
+            </>
+          )}
+
+          <SectionLabel>{shift ? 'Registers' : 'Step 2 · Choose a register'}</SectionLabel>
+          {query.isLoading ? (
+            <View className="min-h-40 rounded-3xl border border-slate-200 bg-white">
+              <LoadingState label="Loading registers…" />
             </View>
-            <Text className="rounded-full bg-brand-50 px-3 py-2 text-xs font-bold text-brand-700">
-              Open
-            </Text>
-          </View>
-          <Text className="mb-4 leading-5 text-slate-500">
-            At the end of your duty, count the physical cash in the drawer. Ximo will calculate the
-            expected amount and any difference.
-          </Text>
-          <Field
-            label="Counted cash in drawer"
-            value={actualCash}
-            onChangeText={setActualCash}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-          />
-          <Button
-            title={close.isPending ? 'Closing…' : 'Close shift'}
-            variant="danger"
-            disabled={!actualCash || close.isPending}
-            onPress={() =>
-              Alert.alert(
-                'Close shift?',
-                'Expected cash and shortage/overage will be calculated.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Close shift', style: 'destructive', onPress: () => close.mutate() },
-                ],
-              )
-            }
-          />
-        </View>
-      ) : (
-        <View className="px-4 pt-4">
-          <View className="mb-4 rounded-2xl bg-brand-50 p-4">
-            <Text className="font-bold text-brand-900">Open a shift before selling</Text>
-            <Text className="mt-1 leading-5 text-slate-600">
-              Enter the cash already in the drawer, then choose an available register below.
-            </Text>
-          </View>
-          <Field
-            label="Starting cash in drawer"
-            value={startingCash}
-            onChangeText={setStartingCash}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-          />
-        </View>
-      )}
-      {query.isLoading ? (
-        <LoadingState />
-      ) : query.isError ? (
-        <ErrorState message={query.error.message} retry={() => void query.refetch()} />
-      ) : (
-        <FlatList
-          data={query.data ?? []}
-          keyExtractor={(item) => item.id}
-          contentContainerClassName="p-4 gap-3"
-          ListEmptyComponent={
+          ) : query.isError ? (
+            <View className="min-h-40 rounded-3xl border border-slate-200 bg-white">
+              <ErrorState message={query.error.message} retry={() => void query.refetch()} />
+            </View>
+          ) : query.data?.length ? (
+            <View className="gap-3">
+              {query.data.map((register) => {
+                const current = register.id === shift?.registerId;
+                const occupied = Boolean(register.activeShiftId);
+                const disabled =
+                  Boolean(shift) || occupied || open.isPending || !startingCashValid;
+                const status = current
+                  ? 'Your active shift'
+                  : occupied
+                    ? 'In use by another cashier'
+                    : shift
+                      ? 'Available after you close your shift'
+                      : 'Available · Tap to open';
+                return (
+                  <Pressable
+                    key={register.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled, selected: current }}
+                    disabled={disabled}
+                    onPress={() => open.mutate(register)}
+                    className={`min-h-20 flex-row items-center rounded-2xl border bg-white p-4 ${
+                      current
+                        ? 'border-brand-200'
+                        : disabled
+                          ? 'border-slate-100 opacity-60'
+                          : 'border-slate-200 active:border-brand-300 active:bg-brand-50'
+                    }`}
+                  >
+                    <View
+                      className={`mr-3 h-11 w-11 items-center justify-center rounded-xl ${
+                        current ? 'bg-brand-50' : 'bg-slate-100'
+                      }`}
+                    >
+                      <Feather
+                        name="credit-card"
+                        size={19}
+                        color={current ? '#1A593B' : '#64748B'}
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <View className="flex-row items-center">
+                        <Text className="font-medium text-slate-950">{register.name}</Text>
+                        {current ? (
+                          <View className="ml-2 rounded-full bg-brand-50 px-2 py-1">
+                            <Text className="text-[10px] font-medium uppercase text-brand-700">
+                              Open
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text className="mt-1 text-sm text-slate-500">
+                        {register.code} · {status}
+                      </Text>
+                    </View>
+                    {!disabled ? <Feather name="chevron-right" size={20} color="#1A593B" /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
             <EmptyState
               title="No registers"
               message="Ask an administrator to create a register for this branch."
             />
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{
-                disabled: Boolean(shift || item.activeShiftId || open.isPending),
-              }}
-              disabled={Boolean(shift || item.activeShiftId || open.isPending)}
-              className={`min-h-20 flex-row items-center rounded-2xl border border-slate-100 bg-white p-5 ${shift || item.activeShiftId || open.isPending ? 'opacity-50' : 'active:border-brand-300 active:bg-brand-50'}`}
-              onPress={() => open.mutate(item)}
-            >
-              <View className="flex-1">
-                <Text className="font-bold text-slate-900">{item.name}</Text>
-                <Text className="mt-1 text-sm text-slate-500">
-                  {item.activeShiftId ? 'Currently in use' : `${item.code} · Tap to open`}
+          )}
+          {!shift && !startingCashValid ? (
+            <Text className="mt-3 text-center text-xs text-slate-500">
+              Enter a valid starting cash amount before choosing a register.
+            </Text>
+          ) : null}
+        </View>
+      </ScrollView>
+
+      <Modal
+        visible={closeReviewOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!close.isPending) setCloseReviewOpen(false);
+        }}
+      >
+        <View className="flex-1 items-center justify-center bg-black/40 p-5">
+          <View className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
+            <View className="mb-4 flex-row items-start justify-between">
+              <View className="mr-4 flex-1">
+                <Text className="text-lg font-semibold text-slate-950">Close this shift?</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                  Ximo will calculate the expected cash and show any shortage or overage after
+                  closing.
                 </Text>
               </View>
-              <Text className="text-2xl font-bold text-brand-700">{'\u203A'}</Text>
-            </Pressable>
-          )}
-        />
-      )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel closing shift"
+                disabled={close.isPending}
+                onPress={() => setCloseReviewOpen(false)}
+                className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
+              >
+                <Feather name="x" size={20} color="#475569" />
+              </Pressable>
+            </View>
+            <View className="mb-5 rounded-2xl bg-slate-50 p-4">
+              <Text className="text-xs uppercase tracking-wider text-slate-500">Register</Text>
+              <Text className="mt-1 font-medium text-slate-900">
+                {shift?.registerName ?? 'Active register'}
+              </Text>
+              <View className="my-3 h-px bg-slate-200" />
+              <Text className="text-xs uppercase tracking-wider text-slate-500">Counted cash</Text>
+              <Text className="mt-1 text-xl font-semibold text-slate-950">
+                {formatMoney(actualCash || '0')}
+              </Text>
+            </View>
+            <View className="flex-row gap-3">
+              <Pressable
+                accessibilityRole="button"
+                disabled={close.isPending}
+                onPress={() => setCloseReviewOpen(false)}
+                className="min-h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white"
+              >
+                <Text className="font-medium text-slate-700">Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={close.isPending}
+                onPress={() => close.mutate()}
+                className={`min-h-12 flex-[2] items-center justify-center rounded-xl bg-red-700 ${
+                  close.isPending ? 'opacity-50' : 'active:opacity-80'
+                }`}
+              >
+                <Text className="font-medium text-white">
+                  {close.isPending ? 'Closing…' : 'Confirm and close'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }

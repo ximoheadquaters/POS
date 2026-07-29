@@ -13,7 +13,9 @@ export function settingsRouter(database: Database): Router {
         os.tax_rate::text as "taxRate",os.receipt_header as "receiptHeader",
         os.receipt_footer as "receiptFooter",
         os.allow_negative_inventory as "allowNegativeInventory",
-        os.payment_methods::text[] as "paymentMethods"
+        os.payment_methods::text[] as "paymentMethods",
+        os.target_margin_percent::text as "targetMarginPercent",
+        os.low_margin_threshold_percent::text as "lowMarginThresholdPercent"
        from organization_settings os join organizations o on o.id=os.organization_id
        where os.organization_id=$1`,
       [request.authUser!.organization.id],
@@ -36,11 +38,15 @@ export function settingsRouter(database: Database): Router {
         ]);
         const updated = await tx.query(
           `update organization_settings set business_name=$2,tax_rate=$3,receipt_header=$4,
-            receipt_footer=$5,allow_negative_inventory=$6,payment_methods=$7,updated_at=now()
+            receipt_footer=$5,allow_negative_inventory=$6,payment_methods=$7,
+            target_margin_percent=$8,low_margin_threshold_percent=$9,updated_at=now()
            where organization_id=$1
            returning business_name as "businessName",tax_rate::text as "taxRate",
             receipt_header as "receiptHeader",receipt_footer as "receiptFooter",
-            allow_negative_inventory as "allowNegativeInventory",payment_methods::text[] as "paymentMethods"`,
+            allow_negative_inventory as "allowNegativeInventory",
+            payment_methods::text[] as "paymentMethods",
+            target_margin_percent::text as "targetMarginPercent",
+            low_margin_threshold_percent::text as "lowMarginThresholdPercent"`,
           [
             organizationId,
             input.businessName,
@@ -49,6 +55,8 @@ export function settingsRouter(database: Database): Router {
             input.receiptFooter,
             input.allowNegativeInventory,
             input.paymentMethods,
+            input.targetMarginPercent,
+            input.lowMarginThresholdPercent,
           ],
         );
         await tx.query(

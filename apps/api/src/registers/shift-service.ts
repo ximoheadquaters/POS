@@ -82,10 +82,12 @@ export class ShiftService {
         branch_id: string;
         starting_cash: string;
         cash_sales: string;
+        cash_refunds: string;
         cash_in: string;
         cash_out: string;
       }>(
         `select rs.id, rs.branch_id, rs.starting_cash::text, rs.cash_sales::text,
+          rs.cash_refunds::text,
           coalesce((
             select sum(cm.amount) from cash_movements cm
             where cm.shift_id = rs.id and cm.type = 'cash_in'
@@ -105,7 +107,8 @@ export class ShiftService {
         moneyToMinor(shift.starting_cash) +
         moneyToMinor(shift.cash_sales) +
         moneyToMinor(shift.cash_in) -
-        moneyToMinor(shift.cash_out);
+        moneyToMinor(shift.cash_out) -
+        moneyToMinor(shift.cash_refunds);
       const actual = moneyToMinor(input.actualCash);
       const variance = actual - expected;
       const closed = await tx.query(

@@ -7,7 +7,11 @@ import { useBranchStore } from '@/store/branch';
 import { Button, Field, Header, Screen } from '@/components/ui';
 
 export default function StockAdjustmentScreen() {
-  const { productId, name } = useLocalSearchParams<{ productId: string; name: string }>();
+  const { productId, name, unit } = useLocalSearchParams<{
+    productId: string;
+    name: string;
+    unit?: string;
+  }>();
   const branch = useBranchStore((state) => state.activeBranch);
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
@@ -19,7 +23,7 @@ export default function StockAdjustmentScreen() {
         body: JSON.stringify({
           branchId: branch!.id,
           productId,
-          quantityDelta: Number.parseInt(quantity, 10),
+          quantityDelta: Number(quantity.replace(',', '.')),
           reason,
         }),
       }),
@@ -33,7 +37,7 @@ export default function StockAdjustmentScreen() {
     <Screen>
       <Header
         title="Stock adjustment"
-        subtitle={name}
+        subtitle={`${name} · ${unit ?? 'unit'}`}
         showBack
         backLabel="Inventory"
         fallbackHref="/(tabs)/inventory"

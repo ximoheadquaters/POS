@@ -10,6 +10,7 @@ import {
   type TextInputProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppSidebar } from './app-sidebar';
 
 export function Screen({ children }: PropsWithChildren) {
   return <SafeAreaView className="flex-1 bg-slate-50">{children}</SafeAreaView>;
@@ -30,12 +31,24 @@ export function Header({
   backLabel?: string;
   fallbackHref?: Href;
 }) {
+  const sidebar = useAppSidebar();
   const goBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace(fallbackHref);
   };
   return (
     <View className="flex-row items-center border-b border-brand-100 bg-white px-4 py-3">
+      {sidebar?.compact ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open navigation menu"
+          hitSlop={8}
+          onPress={sidebar.openMenu}
+          className="mr-3 h-11 w-11 items-center justify-center rounded-xl bg-brand-50 active:bg-brand-100"
+        >
+          <Text className="text-xl font-black text-brand-700">☰</Text>
+        </Pressable>
+      ) : null}
       {showBack ? (
         <Pressable
           accessibilityRole="button"
@@ -70,11 +83,7 @@ export function Button({
   ...props
 }: PressableProps & { title: string; variant?: 'primary' | 'secondary' | 'danger' }) {
   const color =
-    variant === 'primary'
-      ? 'bg-brand-700'
-      : variant === 'danger'
-        ? 'bg-red-700'
-        : 'bg-brand-500';
+    variant === 'primary' ? 'bg-brand-700' : variant === 'danger' ? 'bg-red-700' : 'bg-brand-500';
   const text = 'text-white';
   return (
     <Pressable

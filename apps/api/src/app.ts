@@ -17,7 +17,13 @@ import { customersRouter } from './modules/customers/routes.js';
 import { inventoryRouter } from './modules/inventory/routes.js';
 import { organizationsRouter } from './modules/organizations/routes.js';
 import { platformRouter } from './modules/platform/routes.js';
-import { categoriesRouter, productsRouter } from './modules/products/routes.js';
+import {
+  brandsRouter,
+  categoriesRouter,
+  productsRouter,
+  productUnitsRouter,
+} from './modules/products/routes.js';
+import { purchasingRouter, suppliersRouter } from './modules/purchasing/routes.js';
 import { registersRouter } from './modules/registers/routes.js';
 import { reportsRouter } from './modules/reports/routes.js';
 import { returnsRouter } from './modules/returns/routes.js';
@@ -93,8 +99,12 @@ export function createApp(dependencies: AppDependencies) {
   protectedApi.use('/branches', branchesRouter(dependencies.database));
   protectedApi.use('/users', usersRouter(dependencies.database, dependencies.authActions));
   protectedApi.use('/categories', categoriesRouter(dependencies.database));
+  protectedApi.use('/brands', brandsRouter(dependencies.database));
+  protectedApi.use('/product-units', productUnitsRouter(dependencies.database));
   protectedApi.use('/products', productsRouter(dependencies.database));
   protectedApi.use('/inventory', inventoryRouter(dependencies.database));
+  protectedApi.use('/suppliers', suppliersRouter(dependencies.database));
+  protectedApi.use('/purchase-orders', purchasingRouter(dependencies.database));
   protectedApi.use('/registers', registersRouter(dependencies.database));
   protectedApi.use('/shifts', registersRouter(dependencies.database));
   protectedApi.use('/sales', salesRouter(dependencies.database));

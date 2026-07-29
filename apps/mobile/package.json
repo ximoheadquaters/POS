@@ -7,14 +7,16 @@
     "start": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli start",
     "android": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli start --android",
     "build": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli export --platform android --output-dir dist",
-    "build:web": "pnpm --filter @ximo/shared build && node --env-file-if-exists=../../.env node_modules/expo/bin/cli export --platform web --output-dir dist-web",
+    "build:web": "pnpm --filter @ximo/shared build && node --env-file-if-exists=../../.env node_modules/expo/bin/cli export --platform web --output-dir dist-web && node scripts/copy-web-public.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run && jest --runInBand"
   },
   "dependencies": {
     "@babel/runtime": "7.29.7",
     "@expo/metro-runtime": "~6.1.2",
+    "@expo/vector-icons": "15.1.1",
     "@hookform/resolvers": "5.5.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "2.110.8",
     "@tanstack/react-query": "5.101.4",
     "@ximo/shared": "0.1.0",

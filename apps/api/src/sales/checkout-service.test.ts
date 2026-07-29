@@ -29,6 +29,8 @@ interface State {
 
 class CheckoutDatabase implements Database {
   state: State = { inventory: 10, sales: [], payments: 0, movements: 0, failOnPayment: false };
+  unitsPerBase = 1;
+  sellingUnit = 'piece';
 
   async query<T extends QueryResultRow>(text: string, values: readonly unknown[] = []) {
     const sql = text.replace(/\s+/g, ' ').trim();
@@ -58,13 +60,16 @@ class CheckoutDatabase implements Database {
       return result([
         {
           product_id: input.items[0]!.productId,
-          variant_id: null,
+          variant_id: (values[3] as string | null) ?? null,
           name: 'Demo Product',
           sku: 'DEMO-1',
           unit_price: '15.00',
           unit_cost: '8.00',
           tax_rate: '12.00',
           is_tax_inclusive: false,
+          track_inventory: true,
+          units_per_base: this.unitsPerBase,
+          selling_unit: this.sellingUnit,
           quantity: this.state.inventory,
         } as unknown as T,
       ]);
@@ -86,7 +91,7 @@ class CheckoutDatabase implements Database {
       return result([{ id: sale.id } as unknown as T]);
     }
     if (sql.startsWith('update branch_inventory')) {
-      this.state.inventory -= Number(values[4]);
+      this.state.inventory -= Number(values[3]);
       return result([{ quantity: this.state.inventory } as unknown as T]);
     }
     if (sql.startsWith('insert into inventory_movements')) {
@@ -123,6 +128,15 @@ describe('checkout transaction', () => {
     });
   });
 
+  it('calculates fractional weight without floating point money drift', () => {
+    expect(calculateLine('320.00', '250.00', 0.25, '0.00', false)).toEqual({
+      subtotal: 8_000n,
+      tax: 0n,
+      total: 8_000n,
+      cost: 6_250n,
+    });
+  });
+
   it('creates the sale, payment and inventory ledger atomically', async () => {
     const database = new CheckoutDatabase();
     const resultValue = await new CheckoutService(database).complete(
@@ -137,6 +151,28 @@ describe('checkout transaction', () => {
     });
     expect(database.state).toMatchObject({ inventory: 8, payments: 1, movements: 1 });
     expect(database.state.sales).toHaveLength(1);
+  });
+
+  it('deducts base pieces when a pack is sold', async () => {
+    const database = new CheckoutDatabase();
+    database.unitsPerBase = 10;
+    database.sellingUnit = 'pack';
+    await new CheckoutService(database).complete(
+      actor,
+      {
+        ...input,
+        items: [
+          {
+            productId: input.items[0]!.productId,
+            variantId: '77777777-7777-4777-8777-777777777777',
+            quantity: 1,
+          },
+        ],
+        payments: [{ method: 'cash', amount: '16.80' }],
+      },
+      'checkout-pack-0001',
+    );
+    expect(database.state.inventory).toBe(0);
   });
 
   it('rolls back the entire checkout when a database step fails', async () => {

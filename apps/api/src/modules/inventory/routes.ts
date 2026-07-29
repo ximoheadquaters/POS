@@ -17,11 +17,14 @@ export function inventoryRouter(database: Database): Router {
     async (request, response) => {
       const { branchId, page, pageSize, search } = request.query as any;
       const result = await database.query(
-        `select bi.id,p.id as "productId",p.name,p.sku,bi.quantity,
-          bi.low_stock_level as "lowStockLevel",(bi.quantity<=bi.low_stock_level) as "isLowStock",
+        `select bi.id,p.id as "productId",p.name,p.sku,p.unit,
+          bi.quantity::float8 as quantity,bi.low_stock_level::float8 as "lowStockLevel",
+          bi.average_cost::text as "averageCost",
+          bi.inventory_value::text as "inventoryValue",
+          (bi.quantity<=bi.low_stock_level) as "isLowStock",
           count(*) over()::int as total
          from branch_inventory bi join products p on p.id=bi.product_id
-         where bi.organization_id=$1 and bi.branch_id=$2
+         where bi.organization_id=$1 and bi.branch_id=$2 and p.track_inventory
            and ($3::text is null or p.name ilike '%'||$3||'%' or p.sku ilike '%'||$3||'%')
          order by p.name limit $4 offset $5`,
         [
@@ -50,9 +53,10 @@ export function inventoryRouter(database: Database): Router {
     async (request, response) => {
       const { branchId, page, pageSize } = request.query as any;
       const result = await database.query(
-        `select im.id,im.movement_type as "type",im.quantity_delta as "quantityDelta",
-          im.quantity_after as "quantityAfter",im.reason,im.created_at as "createdAt",
-          p.name as "productName",p.sku,pr.display_name as "createdBy",count(*) over()::int as total
+        `select im.id,im.movement_type as "type",im.quantity_delta::float8 as "quantityDelta",
+          im.quantity_after::float8 as "quantityAfter",im.reason,im.created_at as "createdAt",
+          p.name as "productName",p.sku,p.unit,pr.display_name as "createdBy",
+          count(*) over()::int as total
          from inventory_movements im join products p on p.id=im.product_id
          join profiles pr on pr.id=im.created_by
          where im.organization_id=$1 and im.branch_id=$2
@@ -83,10 +87,15 @@ export function inventoryRouter(database: Database): Router {
           [organizationId],
         );
         const updated = await tx.query<{ quantity: number }>(
-          `update branch_inventory set quantity=quantity+$5,updated_at=now()
-           where organization_id=$1 and branch_id=$2 and product_id=$3
+          `update branch_inventory bi set
+             quantity=bi.quantity+$5,
+             inventory_value=round(bi.average_cost*(bi.quantity+$5),4),
+             updated_at=now()
+           from products p
+           where bi.organization_id=$1 and bi.branch_id=$2 and bi.product_id=$3
              and variant_id is not distinct from $4
-           returning quantity`,
+             and p.id=bi.product_id and p.organization_id=bi.organization_id and p.track_inventory
+           returning bi.quantity::float8 as quantity`,
           [
             organizationId,
             input.branchId,
@@ -104,7 +113,8 @@ export function inventoryRouter(database: Database): Router {
             organization_id,branch_id,product_id,variant_id,movement_type,quantity_delta,
             quantity_after,reason,reference_type,created_by
            ) values ($1,$2,$3,$4,'adjustment',$5,$6,$7,'manual_adjustment',$8)
-           returning id,quantity_delta as "quantityDelta",quantity_after as "quantityAfter",
+           returning id,quantity_delta::float8 as "quantityDelta",
+             quantity_after::float8 as "quantityAfter",
              reason,created_at as "createdAt"`,
           [
             organizationId,

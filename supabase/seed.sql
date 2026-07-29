@@ -24,7 +24,10 @@ where m.code not in (
   'barcode_scanner','receipt_printer','cash_drawer','payment_terminal','customer_display'
 ) and (
   (p.code = 'starter' and m.code in ('dashboard','pos','products','inventory','customers','registers'))
-  or (p.code = 'business' and m.code in ('dashboard','pos','products','inventory','customers','returns','registers','reports'))
+  or (p.code = 'business' and m.code in (
+    'dashboard','pos','products','inventory','customers','returns','registers','reports',
+    'suppliers','purchasing'
+  ))
   or (p.code = 'professional' and m.code not in ('integrations'))
   or p.code = 'enterprise'
 )
@@ -36,6 +39,9 @@ insert into public.permissions (code, description) values
   ('users:read','View users'), ('users:manage','Manage users'),
   ('products:read','View products'), ('products:manage','Manage products'),
   ('inventory:read','View inventory'), ('inventory:adjust','Adjust inventory'),
+  ('suppliers:read','View suppliers'), ('suppliers:manage','Manage suppliers'),
+  ('purchasing:read','View purchasing'), ('purchasing:manage','Manage purchase orders'),
+  ('purchasing:receive','Receive supplier stock'), ('purchasing:return','Return supplier stock'),
   ('registers:read','View registers'), ('registers:manage','Manage registers'),
   ('shifts:open','Open shifts'), ('shifts:close','Close shifts'), ('cash:move','Record cash movements'),
   ('sales:create','Complete sales'), ('sales:read_branch','View branch sales'), ('sales:read_all','View all sales'),
@@ -86,7 +92,8 @@ and (
     'shifts:close','cash:move','sales:create','sales:read_branch','customers:read'
   ))
   or (r.code = 'inventory_staff' and p.code in (
-    'branches:read','products:read','products:manage','inventory:read','inventory:adjust'
+    'branches:read','products:read','products:manage','inventory:read','inventory:adjust',
+    'suppliers:read','purchasing:read','purchasing:receive','purchasing:return'
   ))
 ) on conflict do nothing;
 

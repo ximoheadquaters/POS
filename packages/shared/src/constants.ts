@@ -49,6 +49,14 @@ export const PERMISSIONS = [
   'products:manage',
   'inventory:read',
   'inventory:adjust',
+  'suppliers:read',
+  'suppliers:manage',
+  'purchasing:read',
+  'purchasing:manage',
+  'purchasing:receive',
+  'purchasing:return',
+  'purchasing:pay',
+  'purchasing:pay',
   'registers:read',
   'registers:manage',
   'shifts:open',
@@ -69,3 +77,7 @@ export type Permission = (typeof PERMISSIONS)[number];
 
 export const PAYMENT_METHODS = ['cash', 'card', 'ewallet'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PRODUCT_UNITS = ['piece', 'serving', 'box', 'pack', 'ml', 'l', 'g', 'kg'] as const;
+export type KnownProductUnit = (typeof PRODUCT_UNITS)[number];
+export type ProductUnit = string;

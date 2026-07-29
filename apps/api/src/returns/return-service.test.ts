@@ -10,7 +10,10 @@ class ReturnDatabase implements Database {
     if (sql.startsWith('select branch_id, status')) {
       return result([{ branch_id: 'branch', status: 'completed' } as unknown as T]);
     }
-    if (sql.startsWith('select id, product_id')) {
+    if (sql.startsWith('select 1 from register_shifts')) {
+      return result([{ '?column?': 1 } as unknown as T]);
+    }
+    if (sql.startsWith('select si.id, si.product_id')) {
       return result([
         {
           id: '77777777-7777-4777-8777-777777777777',
@@ -19,6 +22,8 @@ class ReturnDatabase implements Database {
           quantity: 2,
           returned_quantity: 1,
           line_total: '30.00',
+          track_inventory: true,
+          units_per_base: 1,
         } as unknown as T,
       ]);
     }
@@ -42,6 +47,8 @@ describe('returns', () => {
         '66666666-6666-4666-8666-666666666666',
         {
           branchId: '22222222-2222-4222-8222-222222222222',
+          registerId: '33333333-3333-4333-8333-333333333333',
+          shiftId: '44444444-4444-4444-8444-444444444444',
           reason: 'Damaged item',
           refundMethod: 'cash',
           items: [{ saleItemId: '77777777-7777-4777-8777-777777777777', quantity: 2 }],

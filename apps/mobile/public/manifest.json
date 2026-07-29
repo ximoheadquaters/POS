@@ -1,0 +1,17 @@
+{
+  "name": "Ximo POS",
+  "short_name": "Ximo POS",
+  "description": "Cross-platform point of sale with offline support.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F7F5",
+  "theme_color": "#1A593B",
+  "icons": [
+    {
+      "src": "/ximo-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

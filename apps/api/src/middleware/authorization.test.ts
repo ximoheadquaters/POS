@@ -22,23 +22,73 @@ const authActions = {
 
 class ProductCreationDatabase extends AuthorizationDatabase {
   override async query<T extends QueryResultRow>(text: string, values?: readonly unknown[]) {
+    if (text.includes('exists(select 1 from product_units')) {
+      return result([{ unitValid: true, categoryValid: true, brandValid: true } as unknown as T]);
+    }
     if (text.includes('insert into products')) {
       this.calls.push(values ? { text, values } : { text });
       return result([
         {
           id: '55555555-5555-4555-8555-555555555555',
-          name: values?.[2],
-          sku: values?.[3],
-          sellingPrice: values?.[6],
-          taxRate: values?.[7],
-          isTaxInclusive: values?.[8],
-          status: values?.[9],
+          name: values?.[3],
+          sku: values?.[4],
+          sellingPrice: values?.[9],
+          taxRate: values?.[10],
+          isTaxInclusive: values?.[11],
+          status: values?.[12],
         } as unknown as T,
       ]);
     }
     if (text.includes('insert into inventory_movements')) {
       this.calls.push(values ? { text, values } : { text });
       return result([{ id: '66666666-6666-4666-8666-666666666666' } as unknown as T]);
+    }
+    return super.query<T>(text, values);
+  }
+}
+
+class RoleManagementDatabase extends AuthorizationDatabase {
+  constructor(
+    user = testUser({
+      role: 'owner',
+      permissions: ['users:read', 'users:manage'],
+    }),
+    private readonly managedRole: 'owner' | 'cashier' = 'cashier',
+  ) {
+    super(user);
+  }
+
+  override async query<T extends QueryResultRow>(text: string, values?: readonly unknown[]) {
+    if (text.includes('count(distinct pr.id)::int as "userCount"')) {
+      return result([
+        {
+          id: '77777777-7777-4777-8777-777777777777',
+          code: 'cashier',
+          name: 'Cashier',
+          isSystem: true,
+          userCount: 2,
+          permissions: ['sales:create', 'products:read'],
+        } as unknown as T,
+      ]);
+    }
+    if (text === 'select code,description from permissions order by code') {
+      return result([
+        { code: 'products:read', description: 'View products' } as unknown as T,
+        { code: 'sales:create', description: 'Complete sales' } as unknown as T,
+      ]);
+    }
+    if (text.includes('select code,name from roles')) {
+      return result([
+        {
+          code: this.managedRole,
+          name: this.managedRole === 'owner' ? 'Owner' : 'Cashier',
+        } as unknown as T,
+      ]);
+    }
+    if (text.includes('insert into role_permissions')) {
+      const inserted = result<T>([]);
+      inserted.rowCount = (values?.[1] as string[]).length;
+      return inserted;
     }
     return super.query<T>(text, values);
   }
@@ -218,5 +268,99 @@ describe('API authorization boundaries', () => {
       })
       .expect(403);
     expect(response.body.error.code).toBe('ROLE_MANAGEMENT_DENIED');
+  });
+
+  it('prevents a manager from assigning an employee to an inaccessible branch', async () => {
+    const database = new AuthorizationDatabase(
+      testUser({
+        role: 'manager',
+        permissions: ['users:read', 'users:manage'],
+      }),
+    );
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    const response = await request(app)
+      .post('/api/v1/users')
+      .set('authorization', 'Bearer valid-token')
+      .send({
+        displayName: 'Remote Cashier',
+        email: 'remote.cashier@example.com',
+        temporaryPassword: 'temporary-1234',
+        role: 'cashier',
+        branchIds: ['99999999-9999-4999-8999-999999999999'],
+      })
+      .expect(403);
+
+    expect(response.body.error.code).toBe('BRANCH_ASSIGNMENT_DENIED');
+  });
+
+  it('returns the role and permission access matrix', async () => {
+    const database = new RoleManagementDatabase();
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    const response = await request(app)
+      .get('/api/v1/users/roles')
+      .set('authorization', 'Bearer valid-token')
+      .expect(200);
+
+    expect(response.body.data.roles[0]).toMatchObject({
+      code: 'cashier',
+      editable: true,
+      userCount: 2,
+    });
+    expect(response.body.data.permissions).toHaveLength(2);
+  });
+
+  it('allows an owner to update employee role permissions', async () => {
+    const database = new RoleManagementDatabase();
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    const response = await request(app)
+      .patch('/api/v1/users/roles/77777777-7777-4777-8777-777777777777')
+      .set('authorization', 'Bearer valid-token')
+      .send({ permissions: ['products:read', 'sales:create'] })
+      .expect(200);
+
+    expect(response.body.data).toMatchObject({
+      code: 'cashier',
+      permissions: ['products:read', 'sales:create'],
+    });
+    expect(database.calls.some((call) => call.text.includes('delete from role_permissions'))).toBe(
+      true,
+    );
+  });
+
+  it('prevents managers from changing role permissions', async () => {
+    const database = new RoleManagementDatabase(
+      testUser({
+        role: 'manager',
+        permissions: ['users:read', 'users:manage'],
+      }),
+    );
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    const response = await request(app)
+      .patch('/api/v1/users/roles/77777777-7777-4777-8777-777777777777')
+      .set('authorization', 'Bearer valid-token')
+      .send({ permissions: ['products:read'] })
+      .expect(403);
+
+    expect(response.body.error.code).toBe('ROLE_PERMISSION_MANAGEMENT_DENIED');
   });
 });

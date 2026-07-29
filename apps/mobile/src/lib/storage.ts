@@ -1,19 +1,25 @@
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
-
-interface AsyncStorage {
+interface AppStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem(key: string): Promise<void>;
 }
 
-const nativeStorage: AsyncStorage = {
-  getItem: SecureStore.getItemAsync,
-  setItem: SecureStore.setItemAsync,
-  removeItem: SecureStore.deleteItemAsync,
+const nativeStorage: AppStorage = {
+  async getItem(key) {
+    const { default: storage } = await import('@react-native-async-storage/async-storage');
+    return storage.getItem(key);
+  },
+  async setItem(key, value) {
+    const { default: storage } = await import('@react-native-async-storage/async-storage');
+    await storage.setItem(key, value);
+  },
+  async removeItem(key) {
+    const { default: storage } = await import('@react-native-async-storage/async-storage');
+    await storage.removeItem(key);
+  },
 };
 
-const webStorage: AsyncStorage = {
+const webStorage: AppStorage = {
   async getItem(key) {
     try {
       return globalThis.localStorage?.getItem(key) ?? null;
@@ -29,4 +35,22 @@ const webStorage: AsyncStorage = {
   },
 };
 
-export const appStorage = Platform.OS === 'web' ? webStorage : nativeStorage;
+const memory = new Map<string, string>();
+const testStorage: AppStorage = {
+  async getItem(key) {
+    return memory.get(key) ?? null;
+  },
+  async setItem(key, value) {
+    memory.set(key, value);
+  },
+  async removeItem(key) {
+    memory.delete(key);
+  },
+};
+
+export const appStorage =
+  process.env.NODE_ENV === 'test'
+    ? testStorage
+    : typeof globalThis.localStorage !== 'undefined'
+      ? webStorage
+      : nativeStorage;

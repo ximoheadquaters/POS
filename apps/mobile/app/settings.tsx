@@ -25,6 +25,8 @@ export default function SettingsScreen() {
       receiptFooter: '',
       allowNegativeInventory: false,
       paymentMethods: ['cash', 'card', 'ewallet'],
+      targetMarginPercent: '25.00',
+      lowMarginThresholdPercent: '15.00',
     },
   });
   useEffect(() => {
@@ -66,6 +68,8 @@ export default function SettingsScreen() {
             ['currency', 'Currency'],
             ['timezone', 'Timezone'],
             ['taxRate', 'Default tax rate (%)'],
+            ['targetMarginPercent', 'Target gross margin (%)'],
+            ['lowMarginThresholdPercent', 'Low-margin warning below (%)'],
             ['receiptHeader', 'Receipt header'],
             ['receiptFooter', 'Receipt footer'],
           ] as const

@@ -3,7 +3,7 @@ import type { PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import type { CurrentUser } from '@ximo/shared';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
 interface SessionContextValue {
@@ -33,8 +33,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       if (data.session) {
         try {
           await refreshUser();
-        } catch {
-          await supabase.auth.signOut();
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            await supabase.auth.signOut();
+          }
         }
       }
       setLoading(false);

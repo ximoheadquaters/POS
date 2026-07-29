@@ -30,6 +30,7 @@ export default function ProductScanScreen() {
   const add = useCartStore((state) => state.add);
   const [permission, requestPermission] = useCameraPermissions();
   const [manualBarcode, setManualBarcode] = useState('');
+  const [manualCodeType, setManualCodeType] = useState<'barcode' | 'sku'>('barcode');
   const [checking, setChecking] = useState(false);
   const [focused, setFocused] = useState(false);
 
@@ -40,7 +41,7 @@ export default function ProductScanScreen() {
     }, []),
   );
 
-  const handleBarcode = async (rawValue: string) => {
+  const handleCode = async (rawValue: string, codeType: 'barcode' | 'sku' = 'barcode') => {
     const barcode = normalizeBarcode(rawValue);
     if (checking) return;
     if (barcode.length < 3) {
@@ -100,7 +101,10 @@ export default function ProductScanScreen() {
       }
       router.replace({
         pathname: '/product-form',
-        params: { barcode, addToCart: addToCart ? '1' : '0' },
+        params: {
+          [codeType]: barcode,
+          addToCart: addToCart ? '1' : '0',
+        },
       } as Href);
     } catch (error) {
       Alert.alert(
@@ -112,7 +116,7 @@ export default function ProductScanScreen() {
   };
 
   const handleCameraScan = (result: BarcodeScanningResult) => {
-    void handleBarcode(result.data);
+    void handleCode(result.data, 'barcode');
   };
 
   if (!currentUser?.modules.includes('barcode_scanner')) {
@@ -175,18 +179,39 @@ export default function ProductScanScreen() {
           <View className="rounded-2xl border border-slate-100 bg-white p-4">
             <Text className="font-bold text-slate-900">Scanner or manual entry</Text>
             <Text className="mb-3 mt-1 text-sm leading-5 text-slate-500">
-              A Bluetooth or USB scanner can type into this field and send Enter.
+              Scan a barcode, or choose SKU before typing a product code.
             </Text>
+            <View className="mb-3 flex-row rounded-xl bg-slate-100 p-1">
+              {(['barcode', 'sku'] as const).map((type) => (
+                <Pressable
+                  key={type}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: manualCodeType === type }}
+                  onPress={() => setManualCodeType(type)}
+                  className={`flex-1 items-center rounded-lg py-2 ${
+                    manualCodeType === type ? 'bg-white' : ''
+                  }`}
+                >
+                  <Text
+                    className={`font-bold ${
+                      manualCodeType === type ? 'text-brand-700' : 'text-slate-500'
+                    }`}
+                  >
+                    {type === 'barcode' ? 'Barcode' : 'SKU'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <View className="flex-row gap-2">
               <TextInput
                 value={manualBarcode}
                 onChangeText={setManualBarcode}
-                onSubmitEditing={() => void handleBarcode(manualBarcode)}
+                onSubmitEditing={() => void handleCode(manualBarcode, manualCodeType)}
                 editable={!checking}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="done"
-                placeholder="Scan or enter barcode"
+                placeholder={manualCodeType === 'barcode' ? 'Scan or enter barcode' : 'Enter SKU'}
                 placeholderTextColor="#81776E"
                 selectionColor="#1A593B"
                 className="min-h-14 flex-1 rounded-xl border border-slate-300 px-4 text-base"
@@ -195,7 +220,7 @@ export default function ProductScanScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ disabled: checking || manualBarcode.trim().length < 3 }}
                 disabled={checking || manualBarcode.trim().length < 3}
-                onPress={() => void handleBarcode(manualBarcode)}
+                onPress={() => void handleCode(manualBarcode, manualCodeType)}
                 className={`min-h-14 items-center justify-center rounded-xl bg-brand-700 px-4 ${
                   checking || manualBarcode.trim().length < 3 ? 'opacity-50' : 'active:opacity-80'
                 }`}

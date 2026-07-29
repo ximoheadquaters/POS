@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
+import { enqueueOfflineSale, getOfflineSales } from '@/lib/offline-sales';
 import { confirmAction } from '@/lib/confirm';
 import { formatMoney } from '@/lib/format';
 import { Button, Field, Header, Screen } from '@/components/ui';
@@ -12,12 +13,14 @@ import { useSession } from '@/providers/session';
 import { cartTotal, useCartStore } from '@/store/cart';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
+import { useConnectivityStore } from '@/store/connectivity';
 
 interface Receipt {
   id: string;
   receiptNumber: string;
   total: string;
   changeDue: string;
+  offline?: boolean;
 }
 
 interface RegisterStatus {
@@ -37,6 +40,9 @@ export default function PaymentScreen() {
   const setActiveShift = useShiftStore((state) => state.setActive);
   const clearShift = useShiftStore((state) => state.clear);
   const queryClient = useQueryClient();
+  const isOnline = useConnectivityStore((state) => state.isOnline);
+  const setPendingSales = useConnectivityStore((state) => state.setPendingSales);
+  const setOfflineQueue = useConnectivityStore((state) => state.setOfflineQueue);
   const [discount, setDiscount] = useState('0.00');
   const [cash, setCash] = useState('');
   const [cashReceived, setCashReceived] = useState('');
@@ -65,6 +71,60 @@ export default function PaymentScreen() {
   const checkout = useMutation({
     mutationFn: async () => {
       if (!branch || !currentUser) throw new Error('An active branch and account are required');
+      const payments = [
+        cash ? { method: 'cash' as const, amount: cash, tendered: cashReceived || cash } : null,
+        card ? { method: 'card' as const, amount: card } : null,
+        ewallet ? { method: 'ewallet' as const, amount: ewallet } : null,
+      ].filter(Boolean);
+      const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const checkoutItems = items.map((item) => ({
+        productId: item.product.id,
+        variantId: item.product.variantId ?? null,
+        quantity: item.quantity,
+        unitsPerBase: item.product.unitsPerBase ?? 1,
+      }));
+      const checkoutDiscount =
+        discount && discount !== '0.00' ? { type: 'fixed' as const, value: discount } : undefined;
+
+      if (!isOnline) {
+        if (card || ewallet) {
+          throw new Error(
+            'Card and e-wallet payments require internet access. Use cash or reconnect first.',
+          );
+        }
+        if (!shift || shift.branchId !== branch.id) {
+          throw new Error('An open shift saved on this device is required for offline sales.');
+        }
+        const body = {
+          branchId: branch.id,
+          registerId: shift.registerId,
+          shiftId: shift.id,
+          customerId,
+          items: checkoutItems,
+          discount: checkoutDiscount,
+          payments,
+        };
+        const offlineId = `offline-${idempotencyKey}`;
+        const pending = await enqueueOfflineSale({
+          id: offlineId,
+          idempotencyKey,
+          createdAt: new Date().toISOString(),
+          total,
+          body,
+        });
+        setPendingSales(pending);
+        setOfflineQueue(await getOfflineSales());
+        const tendered = cashReceived || cash || total;
+        const change = moneyToMinor(tendered) - moneyToMinor(total);
+        return {
+          id: offlineId,
+          receiptNumber: `OFFLINE-${Date.now().toString().slice(-6)}`,
+          total,
+          changeDue: minorToMoney(change > 0n ? change : 0n),
+          offline: true,
+        };
+      }
+
       const registers = await api<RegisterStatus[]>(`/registers?branchId=${branch.id}`);
       const activeRegister = registers.find(
         (register) => register.activeShiftId && register.activeCashierId === currentUser.id,
@@ -84,22 +144,16 @@ export default function PaymentScreen() {
       if (!shift || shift.id !== verifiedShift.id || shift.branchId !== verifiedShift.branchId) {
         await setActiveShift(verifiedShift);
       }
-      const payments = [
-        cash ? { method: 'cash' as const, amount: cash, tendered: cashReceived || cash } : null,
-        card ? { method: 'card' as const, amount: card } : null,
-        ewallet ? { method: 'ewallet' as const, amount: ewallet } : null,
-      ].filter(Boolean);
       return api<Receipt>('/sales/checkout', {
         method: 'POST',
-        idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        idempotencyKey,
         body: JSON.stringify({
           branchId: branch.id,
           registerId: verifiedShift.registerId,
           shiftId: verifiedShift.id,
           customerId,
-          items: items.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
-          discount:
-            discount && discount !== '0.00' ? { type: 'fixed', value: discount } : undefined,
+          items: checkoutItems,
+          discount: checkoutDiscount,
           payments,
         }),
       });
@@ -135,6 +189,7 @@ export default function PaymentScreen() {
           number: receipt.receiptNumber,
           total: receipt.total,
           change: receipt.changeDue,
+          offline: receipt.offline ? '1' : '0',
         },
       });
     },

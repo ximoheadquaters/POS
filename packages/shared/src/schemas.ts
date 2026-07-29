@@ -61,11 +61,36 @@ export const categorySchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const brandSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const productUnitCodeSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(1)
+  .max(24)
+  .regex(/^[a-z][a-z0-9_-]*$/);
+
+export const productUnitSchema = z.object({
+  code: productUnitCodeSchema,
+  name: z.string().trim().min(1).max(80),
+  kind: z.enum(['discrete', 'decimal']).default('discrete'),
+  defaultStep: z.number().positive().max(1_000_000).multipleOf(0.001).default(1),
+  isActive: z.boolean().default(true),
+});
+
 export const productSchema = z.object({
   categoryId: uuidSchema.nullable().optional(),
+  brandId: uuidSchema.nullable().optional(),
   name: z.string().trim().min(1).max(180),
   sku: z.string().trim().min(1).max(80),
   barcode: optionalBarcodeSchema,
+  unit: productUnitCodeSchema.default('piece'),
+  trackInventory: z.boolean().default(true),
   description: z.string().trim().max(2000).optional(),
   cost: moneyStringSchema,
   sellingPrice: moneyStringSchema,
@@ -74,19 +99,56 @@ export const productSchema = z.object({
     .regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/)
     .default('0.00'),
   isTaxInclusive: z.boolean().default(false),
-  status: z.enum(['active', 'inactive']).default('active'),
+  status: z.enum(['active', 'inactive', 'pending_receipt']).default('active'),
+  imagePath: z.string().trim().max(500).optional(),
+});
+
+export const updateProductSchema = z.object({
+  categoryId: uuidSchema.nullable().optional(),
+  brandId: uuidSchema.nullable().optional(),
+  name: z.string().trim().min(1).max(180).optional(),
+  sku: z.string().trim().min(1).max(80).optional(),
+  // Null explicitly removes an existing barcode. Undefined leaves it unchanged.
+  barcode: optionalBarcodeSchema.nullable().optional(),
+  unit: productUnitCodeSchema.optional(),
+  trackInventory: z.boolean().optional(),
+  description: z.string().trim().max(2000).optional(),
+  cost: moneyStringSchema.optional(),
+  sellingPrice: moneyStringSchema.optional(),
+  taxRate: z
+    .string()
+    .regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/)
+    .optional(),
+  isTaxInclusive: z.boolean().optional(),
+  status: z.enum(['active', 'inactive', 'pending_receipt']).optional(),
   imagePath: z.string().trim().max(500).optional(),
 });
 
 export const createProductSchema = productSchema.extend({
   branchId: uuidSchema,
-  openingQuantity: z.number().int().min(0).max(1_000_000).default(0),
+  openingQuantity: z.number().min(0).max(1_000_000).multipleOf(0.001).default(0),
+  sellingUnits: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(120),
+        sku: z.string().trim().min(1).max(80),
+        barcode: optionalBarcodeSchema,
+        unit: productUnitCodeSchema,
+        unitsPerBase: z.number().positive().max(1_000_000).multipleOf(0.001),
+        cost: moneyStringSchema.optional(),
+        sellingPrice: moneyStringSchema,
+      }),
+    )
+    .max(20)
+    .default([]),
 });
 
 export const productVariantSchema = z.object({
   name: z.string().trim().min(1).max(120),
   sku: z.string().trim().min(1).max(80),
   barcode: optionalBarcodeSchema,
+  unit: productUnitCodeSchema.default('piece'),
+  unitsPerBase: z.number().positive().max(1_000_000).multipleOf(0.001).default(1),
   cost: moneyStringSchema.optional(),
   sellingPrice: moneyStringSchema.optional(),
   isActive: z.boolean().default(true),
@@ -98,9 +160,127 @@ export const stockAdjustmentSchema = z.object({
   variantId: uuidSchema.nullable().optional(),
   quantityDelta: z
     .number()
-    .int()
+    .min(-1_000_000)
+    .max(1_000_000)
+    .multipleOf(0.001)
     .refine((value) => value !== 0),
   reason: z.string().trim().min(3).max(300),
+});
+
+const purchaseQuantitySchema = z.number().positive().max(1_000_000).multipleOf(0.001);
+
+export const supplierSchema = z.object({
+  name: z.string().trim().min(2).max(180),
+  contactName: z.string().trim().max(120).optional(),
+  email: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.email().optional(),
+  ),
+  phone: z.string().trim().max(40).optional(),
+  address: z.string().trim().max(500).optional(),
+  taxId: z.string().trim().max(80).optional(),
+  notes: z.string().trim().max(1000).optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const purchaseOrderItemSchema = z.object({
+  productId: uuidSchema,
+  variantId: uuidSchema.nullable().optional(),
+  quantity: purchaseQuantitySchema,
+  unitCost: moneyStringSchema,
+});
+
+export const purchaseOrderSchema = z.object({
+  branchId: uuidSchema,
+  supplierId: uuidSchema,
+  expectedAt: z.iso.datetime({ offset: true }).nullable().optional(),
+  supplierReference: z.string().trim().max(120).optional(),
+  notes: z.string().trim().max(1000).optional(),
+  items: z.array(purchaseOrderItemSchema).min(1).max(250),
+});
+
+export const receivePurchaseOrderSchema = z.object({
+  receivedAt: z.iso.datetime({ offset: true }).optional(),
+  supplierInvoiceNumber: z.string().trim().max(120).optional(),
+  notes: z.string().trim().max(1000).optional(),
+  items: z
+    .array(
+      z.object({
+        purchaseOrderItemId: uuidSchema,
+        quantity: purchaseQuantitySchema,
+      }),
+    )
+    .min(1)
+    .max(250),
+});
+
+export const purchaseReturnSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+  resolution: z.enum(['refund', 'replacement', 'supplier_credit']),
+  supplierReference: z.string().trim().max(120).optional(),
+  notes: z.string().trim().max(1000).optional(),
+  items: z
+    .array(
+      z.object({
+        purchaseOrderItemId: uuidSchema,
+        quantity: purchaseQuantitySchema,
+      }),
+    )
+    .min(1)
+    .max(250),
+});
+
+export const supplierInvoiceSchema = z
+  .object({
+    stockReceiptId: uuidSchema.nullable().optional(),
+    invoiceNumber: z.string().trim().min(1).max(120),
+    invoiceDate: z.iso.date(),
+    dueDate: z.iso.date().nullable().optional(),
+    total: moneyStringSchema.refine((value) => Number(value) > 0, 'Invoice total must be positive'),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .refine((input) => !input.dueDate || input.dueDate >= input.invoiceDate, {
+    path: ['dueDate'],
+    message: 'Due date cannot be before the invoice date',
+  });
+
+export const supplierPaymentSourceSchema = z.enum([
+  'cashier_drawer',
+  'owner_cash',
+  'bank_transfer',
+  'ewallet',
+  'cheque',
+]);
+
+export const supplierPaymentSchema = z
+  .object({
+    amount: moneyStringSchema.refine((value) => Number(value) > 0, 'Payment must be positive'),
+    source: supplierPaymentSourceSchema,
+    registerId: uuidSchema.nullable().optional(),
+    shiftId: uuidSchema.nullable().optional(),
+    reference: z.string().trim().max(160).optional(),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .refine(
+    (input) =>
+      input.source !== 'cashier_drawer' || (Boolean(input.registerId) && Boolean(input.shiftId)),
+    {
+      path: ['shiftId'],
+      message: 'An open register shift is required when paying from the cashier drawer',
+    },
+  )
+  .refine((input) => input.source === 'cashier_drawer' || (!input.registerId && !input.shiftId), {
+    path: ['shiftId'],
+    message: 'Register details are only allowed for cashier-drawer payments',
+  });
+
+export const supplierRefundSchema = z.object({
+  supplierPaymentId: uuidSchema,
+  amount: moneyStringSchema.refine((value) => Number(value) > 0, 'Refund must be positive'),
+  registerId: uuidSchema.optional().nullable(),
+  shiftId: uuidSchema.optional().nullable(),
+  reference: z.string().trim().max(120).optional(),
+  notes: z.string().trim().max(1000).optional(),
 });
 
 export const openShiftSchema = z.object({
@@ -123,7 +303,7 @@ export const closeShiftSchema = z.object({
 export const cartItemSchema = z.object({
   productId: uuidSchema,
   variantId: uuidSchema.nullable().optional(),
-  quantity: z.number().int().positive().max(9999),
+  quantity: z.number().positive().max(999_999).multipleOf(0.001),
 });
 
 export const discountSchema = z.discriminatedUnion('type', [
@@ -154,11 +334,13 @@ export const checkoutSchema = z.object({
 
 export const returnSchema = z.object({
   branchId: uuidSchema,
+  registerId: uuidSchema,
+  shiftId: uuidSchema,
   items: z
     .array(
       z.object({
         saleItemId: uuidSchema,
-        quantity: z.number().int().positive(),
+        quantity: z.number().positive().max(999_999).multipleOf(0.001),
       }),
     )
     .min(1),
@@ -174,16 +356,27 @@ export const customerSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 
-export const organizationSettingsSchema = z.object({
-  businessName: z.string().trim().min(2).max(180),
-  currency: z.string().length(3).toUpperCase(),
-  timezone: z.string().min(3).max(80),
-  taxRate: z.string().regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/),
-  receiptHeader: z.string().max(500),
-  receiptFooter: z.string().max(500),
-  allowNegativeInventory: z.boolean(),
-  paymentMethods: z.array(z.enum(PAYMENT_METHODS)).min(1),
-});
+export const organizationSettingsSchema = z
+  .object({
+    businessName: z.string().trim().min(2).max(180),
+    currency: z.string().length(3).toUpperCase(),
+    timezone: z.string().min(3).max(80),
+    taxRate: z.string().regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/),
+    receiptHeader: z.string().max(500),
+    receiptFooter: z.string().max(500),
+    allowNegativeInventory: z.boolean(),
+    paymentMethods: z.array(z.enum(PAYMENT_METHODS)).min(1),
+    targetMarginPercent: z.string().regex(/^(\d{1,2}(\.\d{1,2})?)$/),
+    lowMarginThresholdPercent: z.string().regex(/^(\d{1,2}(\.\d{1,2})?)$/),
+  })
+  .refine(
+    (settings) =>
+      Number(settings.lowMarginThresholdPercent) <= Number(settings.targetMarginPercent),
+    {
+      path: ['lowMarginThresholdPercent'],
+      message: 'Low-margin warning must not exceed the target margin',
+    },
+  );
 
 export const roleCodeSchema = z.enum(ROLE_CODES);
 export const permissionSchema = z.enum(PERMISSIONS);
@@ -193,10 +386,20 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type BranchInput = z.infer<typeof branchSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
+export type BrandInput = z.infer<typeof brandSchema>;
+export type ProductUnitInput = z.infer<typeof productUnitSchema>;
 export type ProductInput = z.infer<typeof productSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductVariantInput = z.infer<typeof productVariantSchema>;
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
+export type SupplierInput = z.infer<typeof supplierSchema>;
+export type PurchaseOrderInput = z.infer<typeof purchaseOrderSchema>;
+export type ReceivePurchaseOrderInput = z.infer<typeof receivePurchaseOrderSchema>;
+export type PurchaseReturnInput = z.infer<typeof purchaseReturnSchema>;
+export type SupplierInvoiceInput = z.infer<typeof supplierInvoiceSchema>;
+export type SupplierPaymentInput = z.infer<typeof supplierPaymentSchema>;
+export type SupplierPaymentSource = z.infer<typeof supplierPaymentSourceSchema>;
+export type SupplierRefundInput = z.infer<typeof supplierRefundSchema>;
 export type OpenShiftInput = z.infer<typeof openShiftSchema>;
 export type CashMovementInput = z.infer<typeof cashMovementSchema>;
 export type CloseShiftInput = z.infer<typeof closeShiftSchema>;
