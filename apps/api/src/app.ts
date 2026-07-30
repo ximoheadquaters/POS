@@ -29,6 +29,7 @@ import { reportsRouter } from './modules/reports/routes.js';
 import { returnsRouter } from './modules/returns/routes.js';
 import { salesRouter } from './modules/sales/routes.js';
 import { settingsRouter } from './modules/settings/routes.js';
+import { stockTransfersRouter } from './modules/stock-transfers/routes.js';
 import { usersRouter } from './modules/users/routes.js';
 import { sendData } from './shared/http.js';
 
@@ -103,6 +104,7 @@ export function createApp(dependencies: AppDependencies) {
   protectedApi.use('/product-units', productUnitsRouter(dependencies.database));
   protectedApi.use('/products', productsRouter(dependencies.database));
   protectedApi.use('/inventory', inventoryRouter(dependencies.database));
+  protectedApi.use('/stock-transfers', stockTransfersRouter(dependencies.database));
   protectedApi.use('/suppliers', suppliersRouter(dependencies.database));
   protectedApi.use('/purchase-orders', purchasingRouter(dependencies.database));
   protectedApi.use('/registers', registersRouter(dependencies.database));

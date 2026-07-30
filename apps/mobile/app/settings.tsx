@@ -8,7 +8,9 @@ import { api } from '@/lib/api';
 import { Button, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { useSession } from '@/providers/session';
 
-export default function SettingsScreen() {
+import { AppSidebarProvider } from '@/components/app-sidebar';
+
+function SettingsContent() {
   const { currentUser } = useSession();
   const query = useQuery({
     queryKey: ['settings'],
@@ -99,5 +101,13 @@ export default function SettingsScreen() {
         ) : null}
       </ScrollView>
     </Screen>
+  );
+}
+
+export default function SettingsScreen() {
+  return (
+    <AppSidebarProvider>
+      <SettingsContent />
+    </AppSidebarProvider>
   );
 }

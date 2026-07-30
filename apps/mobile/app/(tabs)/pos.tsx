@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -17,6 +18,7 @@ import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { liveDataQueryOptions } from '@/lib/live-data';
+import { findExactScannedProduct } from '@/lib/product-scan';
 import { useAppSidebar } from '@/components/app-sidebar';
 import { Button, EmptyState, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { QuantityInput } from '@/components/quantity-input';
@@ -135,6 +137,8 @@ export default function PosScreen() {
   const isTablet = width >= 900;
   const { currentUser } = useSession();
   const sidebar = useAppSidebar();
+  const inputRef = useRef<TextInput>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [category, setCategory] = useState('All');
@@ -150,11 +154,55 @@ export default function PosScreen() {
   const reservedByProduct = useConnectivityStore((state) => state.reservedByProduct);
   const hydrateShift = useShiftStore((state) => state.hydrate);
 
+  const focusInput = () => {
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearch(text);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setDebounced(text.trim());
+    }, 300);
+  };
+
   useEffect(() => void hydrateShift(), [hydrateShift]);
+
+  // Auto-focus search input on mount and cleanup timer on unmount
   useEffect(() => {
-    const timer = setTimeout(() => setDebounced(search.trim()), 300);
-    return () => clearTimeout(timer);
-  }, [search]);
+    focusInput();
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Global key listener for web / desktop hardware barcode scanners
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInputFocused =
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.getAttribute('contenteditable') === 'true');
+
+      if (isInputFocused || unitProduct !== null) return;
+      if (e.ctrlKey || e.altKey || e.metaKey || e.key === 'Tab' || e.key === 'Escape') return;
+
+      inputRef.current?.focus();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [unitProduct]);
 
   const query = useInfiniteQuery({
     queryKey: ['pos-products', branch?.id, debounced],
@@ -240,16 +288,31 @@ export default function PosScreen() {
     }
     add(selectSellingUnit(product, sellingUnit));
     setUnitProduct(null);
+    focusInput();
   };
 
   const submitBarcode = async () => {
     const barcode = search.trim();
     if (!scannerEnabled || !barcode || scanPending) return;
+
+    // Clear pending debounce timer so barcode scanning doesn't trigger product catalog search refetch
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
     setScanPending(true);
     try {
-      const exact = await api<CartProduct | null>(
-        `/products/lookup?code=${encodeURIComponent(barcode)}&branchId=${branch!.id}`,
-      );
+      // Look up in loaded products first (fast local match, zero API calls, zero catalog refetch)
+      const localMatch = findExactScannedProduct(availableProducts, barcode);
+      let exact: CartProduct | null = localMatch ?? null;
+
+      if (!exact) {
+        exact = await api<CartProduct | null>(
+          `/products/lookup?code=${encodeURIComponent(barcode)}&branchId=${branch!.id}`,
+        );
+      }
+
       if (!exact) {
         if (currentUser?.permissions.includes('products:manage')) {
           Alert.alert('New product', `Barcode ${barcode} is not in the catalogue. Add it now?`, [
@@ -294,8 +357,11 @@ export default function PosScreen() {
       if (matchedSellingUnit) addProduct(exact, matchedSellingUnit);
       else if (baseMatches) addProduct({ ...exact, sellingUnits: [] });
       else addProduct(exact);
+
       setSearch('');
-      setDebounced('');
+      if (debounced !== '') {
+        setDebounced('');
+      }
     } catch (error) {
       Alert.alert(
         'Could not scan product',
@@ -303,6 +369,7 @@ export default function PosScreen() {
       );
     } finally {
       setScanPending(false);
+      focusInput();
     }
   };
 
@@ -316,11 +383,15 @@ export default function PosScreen() {
       <Screen>
         <SellingUnitModal
           product={unitProduct}
-          onClose={() => setUnitProduct(null)}
+          onClose={() => {
+            setUnitProduct(null);
+            focusInput();
+          }}
           onSelect={(unit) => {
             if (!unitProduct) return;
             add(selectSellingUnit(unitProduct, unit));
             setUnitProduct(null);
+            focusInput();
           }}
         />
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-2">
@@ -343,8 +414,9 @@ export default function PosScreen() {
           <View className="mx-4 max-w-xl flex-1 flex-row items-center rounded-xl bg-slate-100 px-4">
             <Feather name="search" size={17} color="#81776E" />
             <TextInput
+              ref={inputRef}
               value={search}
-              onChangeText={setSearch}
+              onChangeText={handleSearchChange}
               autoCapitalize="none"
               placeholder="Search name, SKU, or scan barcode"
               placeholderTextColor="#81776E"
@@ -352,6 +424,7 @@ export default function PosScreen() {
               returnKeyType={scannerEnabled ? 'done' : 'search'}
               onSubmitEditing={() => void submitBarcode()}
               blurOnSubmit={false}
+              autoFocus
               className="min-h-11 flex-1 text-sm text-slate-900"
             />
           </View>
@@ -383,7 +456,10 @@ export default function PosScreen() {
                     key={name}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
-                    onPress={() => setCategory(name)}
+                    onPress={() => {
+                      setCategory(name);
+                      focusInput();
+                    }}
                     className={`min-h-9 items-center justify-center rounded-full px-4 ${
                       selected ? 'bg-brand-700' : 'border border-slate-200 bg-white'
                     }`}
@@ -597,7 +673,10 @@ export default function PosScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Clear order"
-                  onPress={clearCart}
+                  onPress={() => {
+                    clearCart();
+                    focusInput();
+                  }}
                   className="mt-2 min-h-10 items-center justify-center"
                 >
                   <View className="flex-row items-center gap-1">
@@ -617,11 +696,15 @@ export default function PosScreen() {
     <Screen>
       <SellingUnitModal
         product={unitProduct}
-        onClose={() => setUnitProduct(null)}
+        onClose={() => {
+          setUnitProduct(null);
+          focusInput();
+        }}
         onSelect={(unit) => {
           if (!unitProduct) return;
           add(selectSellingUnit(unitProduct, unit));
           setUnitProduct(null);
+          focusInput();
         }}
       />
       <Header
@@ -640,8 +723,9 @@ export default function PosScreen() {
           </View>
         ) : null}
         <TextInput
+          ref={inputRef}
           value={search}
-          onChangeText={setSearch}
+          onChangeText={handleSearchChange}
           autoCapitalize="none"
           placeholder="Search name, SKU, or scan barcode"
           className="min-h-12 rounded-xl bg-slate-100 px-4 text-base"
@@ -650,6 +734,7 @@ export default function PosScreen() {
           returnKeyType={scannerEnabled ? 'done' : 'search'}
           onSubmitEditing={() => void submitBarcode()}
           blurOnSubmit={false}
+          autoFocus
         />
         {scannerEnabled ? (
           <View className="mt-2 flex-row items-center justify-between gap-3">

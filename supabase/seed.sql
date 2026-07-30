@@ -6,7 +6,7 @@ insert into public.modules (code, name) values
   ('dashboard','Dashboard'), ('pos','Point of Sale'), ('products','Products'),
   ('inventory','Inventory'), ('customers','Customers'), ('returns','Returns'),
   ('registers','Registers'), ('reports','Reports'), ('suppliers','Suppliers'),
-  ('purchasing','Purchasing'), ('expenses','Expenses'), ('promotions','Promotions'),
+  ('purchasing','Purchasing'), ('stock_transfers','Stock Transfers'), ('expenses','Expenses'), ('promotions','Promotions'),
   ('loyalty','Loyalty'), ('integrations','Integrations'),
   ('barcode_scanner','Barcode Scanner'), ('receipt_printer','Receipt Printer'),
   ('cash_drawer','Cash Drawer'), ('payment_terminal','Payment Terminal'),
@@ -26,7 +26,7 @@ where m.code not in (
   (p.code = 'starter' and m.code in ('dashboard','pos','products','inventory','customers','registers'))
   or (p.code = 'business' and m.code in (
     'dashboard','pos','products','inventory','customers','returns','registers','reports',
-    'suppliers','purchasing'
+    'suppliers','purchasing','stock_transfers'
   ))
   or (p.code = 'professional' and m.code not in ('integrations'))
   or p.code = 'enterprise'

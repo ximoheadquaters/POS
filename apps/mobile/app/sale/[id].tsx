@@ -1,4 +1,4 @@
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, Platform, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -29,7 +29,9 @@ interface SaleDetail {
   payments: Array<{ method: string; kind: string; amount: string }>;
 }
 
-export default function SaleDetailsScreen() {
+import { AppSidebarProvider } from '@/components/app-sidebar';
+
+function SaleDetailsContent() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useSession();
   const query = useQuery({
@@ -102,17 +104,29 @@ export default function SaleDetailsScreen() {
             <Button
               title="Return items"
               variant="danger"
-              onPress={() =>
-                Alert.alert('Start return?', 'The original sale will be preserved.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Continue', onPress: () => router.push(`/return/${sale.id}`) },
-                ])
-              }
+              onPress={() => {
+                if (Platform.OS === 'web' || typeof window !== 'undefined') {
+                  router.push(`/return/${sale.id}`);
+                } else {
+                  Alert.alert('Start return?', 'The original sale will be preserved.', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Continue', onPress: () => router.push(`/return/${sale.id}`) },
+                  ]);
+                }
+              }}
             />
           ) : null}
           <Button title="Back to sales" variant="secondary" onPress={() => router.back()} />
         </View>
       </ScrollView>
     </Screen>
+  );
+}
+
+export default function SaleDetailsScreen() {
+  return (
+    <AppSidebarProvider>
+      <SaleDetailsContent />
+    </AppSidebarProvider>
   );
 }

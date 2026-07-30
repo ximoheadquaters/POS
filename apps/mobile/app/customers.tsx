@@ -11,7 +11,9 @@ interface Customer {
   email?: string;
 }
 
-export default function CustomersScreen() {
+import { AppSidebarProvider } from '@/components/app-sidebar';
+
+function CustomersContent() {
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const client = useQueryClient();
@@ -78,5 +80,13 @@ export default function CustomersScreen() {
         )}
       />
     </Screen>
+  );
+}
+
+export default function CustomersScreen() {
+  return (
+    <AppSidebarProvider>
+      <CustomersContent />
+    </AppSidebarProvider>
   );
 }

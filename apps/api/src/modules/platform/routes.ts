@@ -35,7 +35,7 @@ const updateSubscriptionSchema = z.object({
 
 const moduleOverrideSchema = z.object({
   enabled: z.boolean(),
-  reason: z.string().trim().min(3).max(300),
+  reason: z.string().trim().min(1, 'Reason is required').max(1000),
 });
 
 const auditQuerySchema = paginationSchema.extend({
@@ -81,6 +81,11 @@ async function ensureOrganization(database: Queryable, organizationId: string) {
 }
 
 async function moduleStatus(database: Queryable, organizationId: string, moduleCode?: string) {
+  await database.query(
+    `insert into modules (code, name, description) values
+      ('stock_transfers', 'Stock Transfers', 'Transfer inventory items between multiple branches with dispatch and receiving tracking.')
+     on conflict (code) do update set name=excluded.name, description=excluded.description`,
+  );
   const result = await database.query(
     `${MODULE_STATUS_SQL}
      ${moduleCode ? 'and m.code=$2' : ''}
@@ -124,6 +129,11 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
   });
 
   router.get('/modules', requirePlatformScope('platform:read'), async (_request, response) => {
+    await database.query(
+      `insert into modules (code, name, description) values
+        ('stock_transfers', 'Stock Transfers', 'Transfer inventory items between multiple branches with dispatch and receiving tracking.')
+       on conflict (code) do update set name=excluded.name, description=excluded.description`,
+    );
     const result = await database.query('select code,name,description from modules order by name');
     sendData(response, result.rows);
   });
@@ -366,21 +376,36 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     validateBody(moduleOverrideSchema),
     async (request, response) => {
       const organizationId = uuidSchema.parse(request.params.organizationId);
-      const moduleCode = moduleCodeSchema.parse(request.params.moduleCode);
+      let moduleCode = String(request.params.moduleCode || '').trim();
+      if (moduleCode === 'stock-transfers') moduleCode = 'stock_transfers';
       const input = request.body as z.infer<typeof moduleOverrideSchema>;
       const client = platformClient(response);
       const status = await database.transaction(async (transaction) => {
         await ensureOrganization(transaction, organizationId);
-        const moduleResult = await transaction.query<{ id: string }>(
+        let moduleResult = await transaction.query<{ id: string }>(
           'select id from modules where code=$1',
           [moduleCode],
         );
-        if (!moduleResult.rows[0]) throw notFound('Module');
+        if (!moduleResult.rows[0]) {
+          moduleResult = await transaction.query<{ id: string }>(
+            `insert into modules (code, name, description) values ($1, $2, $3)
+             on conflict (code) do update set name=excluded.name
+             returning id`,
+            [
+              moduleCode,
+              moduleCode === 'stock_transfers'
+                ? 'Stock Transfers'
+                : moduleCode.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+              '',
+            ],
+          );
+        }
 
+        const moduleId = moduleResult.rows[0]!.id;
         const before = await transaction.query(
           `select enabled,reason from organization_modules
            where organization_id=$1 and module_id=$2`,
-          [organizationId, moduleResult.rows[0].id],
+          [organizationId, moduleId],
         );
         const after = {
           moduleCode,
@@ -393,7 +418,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
            ) values ($1,$2,$3,$4,now())
            on conflict (organization_id,module_id) do update set
              enabled=excluded.enabled,reason=excluded.reason,updated_at=now()`,
-          [organizationId, moduleResult.rows[0].id, input.enabled, input.reason],
+          [organizationId, moduleId, input.enabled, input.reason],
         );
         await transaction.query(
           `insert into platform_audit_logs (
@@ -418,7 +443,8 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     requirePlatformScope('platform:write'),
     async (request, response) => {
       const organizationId = uuidSchema.parse(request.params.organizationId);
-      const moduleCode = moduleCodeSchema.parse(request.params.moduleCode);
+      let moduleCode = String(request.params.moduleCode || '').trim();
+      if (moduleCode === 'stock-transfers') moduleCode = 'stock_transfers';
       const client = platformClient(response);
       const status = await database.transaction(async (transaction) => {
         await ensureOrganization(transaction, organizationId);
@@ -444,7 +470,6 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
         }
         return moduleStatus(transaction, organizationId, moduleCode);
       });
-      if (!status) throw notFound('Module');
       sendData(response, status);
     },
   );

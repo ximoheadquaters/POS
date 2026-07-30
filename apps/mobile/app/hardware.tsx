@@ -6,7 +6,9 @@ import { HARDWARE_CAPABILITIES } from '@/hardware/capabilities';
 import { getHardwareDriver, getHardwareStatuses } from '@/hardware/registry';
 import { useSession } from '@/providers/session';
 
-export default function HardwareScreen() {
+import { AppSidebarProvider } from '@/components/app-sidebar';
+
+function HardwareContent() {
   const { currentUser, refreshUser } = useSession();
   const modules = currentUser?.modules ?? [];
   const query = useQuery({
@@ -128,5 +130,13 @@ export default function HardwareScreen() {
         </ScrollView>
       )}
     </Screen>
+  );
+}
+
+export default function HardwareScreen() {
+  return (
+    <AppSidebarProvider>
+      <HardwareContent />
+    </AppSidebarProvider>
   );
 }

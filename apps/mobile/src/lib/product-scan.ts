@@ -9,5 +9,14 @@ export function findExactScannedProduct(
   scannedValue: string,
 ): CartProduct | undefined {
   const barcode = normalizeBarcode(scannedValue);
-  return products.find((product) => product.sku === barcode || product.barcodes?.includes(barcode));
+  if (!barcode) return undefined;
+  return products.find(
+    (product) =>
+      product.sku === barcode ||
+      product.barcodes?.includes(barcode) ||
+      product.sellingUnits?.some(
+        (unit) => unit.sku === barcode || unit.barcodes?.includes(barcode),
+      ),
+  );
 }
+

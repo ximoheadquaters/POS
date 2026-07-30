@@ -382,6 +382,27 @@ export const roleCodeSchema = z.enum(ROLE_CODES);
 export const permissionSchema = z.enum(PERMISSIONS);
 export const moduleCodeSchema = z.enum(MODULE_CODES);
 
+export const createStockTransferSchema = z
+  .object({
+    fromBranchId: uuidSchema,
+    toBranchId: uuidSchema,
+    notes: z.string().trim().max(1000).optional(),
+    items: z
+      .array(
+        z.object({
+          productId: uuidSchema,
+          quantity: z.number().positive('Quantity must be greater than zero'),
+        }),
+      )
+      .min(1, 'At least one item is required'),
+  })
+  .refine((val) => val.fromBranchId !== val.toBranchId, {
+    path: ['toBranchId'],
+    message: 'Destination branch must be different from source branch',
+  });
+
+export type CreateStockTransferInput = z.infer<typeof createStockTransferSchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type BranchInput = z.infer<typeof branchSchema>;

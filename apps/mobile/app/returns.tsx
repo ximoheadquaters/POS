@@ -2,7 +2,9 @@ import { Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Button, Header, Screen } from '@/components/ui';
 
-export default function ReturnsScreen() {
+import { AppSidebarProvider } from '@/components/app-sidebar';
+
+function ReturnsContent() {
   return (
     <Screen>
       <Header
@@ -19,5 +21,13 @@ export default function ReturnsScreen() {
         <Button title="Find a sale" onPress={() => router.push('/(tabs)/sales')} />
       </View>
     </Screen>
+  );
+}
+
+export default function ReturnsScreen() {
+  return (
+    <AppSidebarProvider>
+      <ReturnsContent />
+    </AppSidebarProvider>
   );
 }

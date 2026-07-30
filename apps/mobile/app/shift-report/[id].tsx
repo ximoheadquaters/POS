@@ -1,5 +1,5 @@
-import { ScrollView, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
@@ -30,8 +30,16 @@ interface ShiftDetail {
     type: string;
     amount: string;
     reason: string;
+    invoiceNumber?: string | null;
     createdAt: string;
     createdBy: string;
+  }>;
+  sales?: Array<{
+    id: string;
+    receiptNumber: string;
+    total: string;
+    status: string;
+    completedAt: string;
   }>;
   payments: Array<{ method: string; payments: string; refunds: string }>;
   refunds: Array<{
@@ -107,13 +115,41 @@ function ShiftReportDetailContent() {
                   {formatMoney(movement.amount)}
                 </Text>
               </View>
+              {movement.invoiceNumber ? (
+                <Text className="mt-1 text-xs font-semibold text-brand-700">
+                  Invoice #: {movement.invoiceNumber}
+                </Text>
+              ) : null}
               <Text className="mt-1 text-xs text-slate-500">
-                {movement.reason} · {new Date(movement.createdAt).toLocaleString()}
+                {movement.reason} · {new Date(movement.createdAt).toLocaleString()} · {movement.createdBy}
               </Text>
             </View>
           ))
         ) : (
           <Text className="text-sm text-slate-500">No cash movements</Text>
+        )}
+        <Text className="mb-2 mt-7 font-semibold text-slate-900">Sales invoices in this shift</Text>
+        {shift.sales?.length ? (
+          shift.sales.map((sale) => (
+            <Pressable
+              key={sale.id}
+              onPress={() => router.push(`/sale/${sale.id}`)}
+              className="mb-2 flex-row items-center justify-between rounded-xl bg-white p-4 active:bg-brand-50"
+            >
+              <View>
+                <Text className="font-medium text-slate-900">Invoice / Receipt #{sale.receiptNumber}</Text>
+                <Text className="mt-1 text-xs text-slate-500">
+                  {new Date(sale.completedAt).toLocaleString()} · {sale.status.replace('_', ' ')}
+                </Text>
+              </View>
+              <View className="items-end">
+                <Text className="font-semibold text-brand-700">{formatMoney(sale.total)}</Text>
+                <Text className="mt-0.5 text-[10px] font-bold text-brand-500">View ›</Text>
+              </View>
+            </Pressable>
+          ))
+        ) : (
+          <Text className="text-sm text-slate-500">No sales transactions</Text>
         )}
         <Text className="mb-2 mt-7 font-semibold text-slate-900">Refunds in this shift</Text>
         {shift.refunds.length ? (

@@ -4,7 +4,8 @@ import { appStorage } from './storage';
 import { useConnectivityStore } from '@/store/connectivity';
 import { offlineSnapshotFallback } from './offline-snapshot';
 
-const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:4000/api/v1';
+const baseUrl =
+  process.env.EXPO_PUBLIC_API_URL ?? 'https://ximo-pos-api.onrender.com/api/v1';
 export const API_ORIGIN = baseUrl.replace(/\/api\/v1\/?$/, '');
 
 function cacheKey(path: string): string {

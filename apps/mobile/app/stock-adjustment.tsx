@@ -6,7 +6,9 @@ import { api } from '@/lib/api';
 import { useBranchStore } from '@/store/branch';
 import { Button, Field, Header, Screen } from '@/components/ui';
 
-export default function StockAdjustmentScreen() {
+import { AppSidebarProvider } from '@/components/app-sidebar';
+
+function StockAdjustmentContent() {
   const { productId, name, unit } = useLocalSearchParams<{
     productId: string;
     name: string;
@@ -63,5 +65,13 @@ export default function StockAdjustmentScreen() {
         />
       </View>
     </Screen>
+  );
+}
+
+export default function StockAdjustmentScreen() {
+  return (
+    <AppSidebarProvider>
+      <StockAdjustmentContent />
+    </AppSidebarProvider>
   );
 }

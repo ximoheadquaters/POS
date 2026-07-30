@@ -35,4 +35,35 @@ describe('product barcode scanning', () => {
   it('also accepts an exact SKU from a keyboard scanner', () => {
     expect(findExactScannedProduct(products, 'COF-001')?.id).toBe('one');
   });
+
+  it('matches barcode on selling units', () => {
+    const productsWithUnits = [
+      ...products,
+      {
+        id: 'three',
+        name: 'Juice',
+        sku: 'JUICE-001',
+        sellingPrice: '15.00',
+        taxRate: '0.00',
+        isTaxInclusive: false,
+        sellingUnits: [
+          {
+            variantId: 'v1',
+            name: 'Pack of 6',
+            sku: 'JUICE-PACK',
+            unit: 'piece' as const,
+            unitsPerBase: 6,
+            sellingPrice: '80.00',
+            barcodes: ['4800077777777'],
+          },
+        ],
+      },
+    ];
+    expect(findExactScannedProduct(productsWithUnits, '4800077777777')?.id).toBe('three');
+  });
+
+  it('returns undefined for empty input', () => {
+    expect(findExactScannedProduct(products, '')).toBeUndefined();
+  });
 });
+

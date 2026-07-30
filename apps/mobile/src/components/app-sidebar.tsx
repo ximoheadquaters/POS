@@ -1,12 +1,13 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ComponentProps,
   type PropsWithChildren,
 } from 'react';
-import { Image, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { router, usePathname, type Href } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import type { ModuleCode, Permission } from '@ximo/shared';
@@ -23,114 +24,396 @@ interface SidebarContextValue {
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
-const menuItems: Array<{
+export interface SidebarSubItem {
   title: string;
-  icon: ComponentProps<typeof Feather>['name'];
   href: Href;
+  badge?: string | number;
+  badgeColor?: 'emerald' | 'amber' | 'red' | 'blue' | 'gray';
   module?: ModuleCode;
   permission?: Permission;
-}> = [
+}
+
+export interface SidebarGroup {
+  id: string;
+  title: string;
+  icon: ComponentProps<typeof Feather>['name'];
+  href?: Href;
+  children?: SidebarSubItem[];
+  module?: ModuleCode;
+  permission?: Permission;
+}
+
+export interface SidebarSection {
+  sectionTitle?: string;
+  groups: SidebarGroup[];
+}
+
+const sidebarSections: SidebarSection[] = [
   {
-    title: 'Sales',
-    icon: 'dollar-sign',
-    href: '/(tabs)/sales',
-    module: 'pos',
+    sectionTitle: 'MAIN',
+    groups: [
+      {
+        id: 'pos',
+        title: 'Dashboard & POS',
+        icon: 'grid',
+        href: '/(tabs)/pos',
+        module: 'pos',
+      },
+      {
+        id: 'sales',
+        title: 'Sales & Orders',
+        icon: 'shopping-bag',
+        href: '/(tabs)/sales',
+        module: 'pos',
+      },
+    ],
   },
   {
-    title: 'Inventory',
-    icon: 'box',
-    href: '/(tabs)/inventory',
-    module: 'inventory',
+    sectionTitle: 'CATALOG & INVENTORY',
+    groups: [
+      {
+        id: 'products',
+        title: 'Product',
+        icon: 'box',
+        children: [
+          { title: 'Overview', href: '/products', module: 'products' },
+          { title: 'Categories', href: '/catalogue', module: 'products' },
+          { title: 'Variants & SKUs', href: '/product-variants', module: 'products' },
+          { title: 'Stock Inventory', href: '/(tabs)/inventory', module: 'inventory' },
+          { title: 'Stock Transfers', href: '/stock-transfers', module: 'stock_transfers' },
+          { title: 'Adjustments', href: '/stock-adjustment', module: 'inventory' },
+        ],
+      },
+      {
+        id: 'customers',
+        title: 'Customers',
+        icon: 'user',
+        href: '/customers',
+        module: 'customers',
+      },
+    ],
   },
-  { title: 'Products', icon: 'shopping-bag', href: '/products', module: 'products' },
   {
-    title: 'Customers',
-    icon: 'users',
-    href: '/customers',
-    module: 'customers',
+    sectionTitle: 'OPERATIONS & CASH',
+    groups: [
+      {
+        id: 'purchasing',
+        title: 'Purchasing',
+        icon: 'truck',
+        children: [
+          { title: 'Purchase Orders', href: '/purchasing', module: 'purchasing', permission: 'purchasing:read' },
+        ],
+      },
+      {
+        id: 'registers',
+        title: 'Registers & Shifts',
+        icon: 'credit-card',
+        children: [
+          { title: 'Active Register', href: '/registers', module: 'registers' },
+          { title: 'Shift History', href: '/shift-reports', module: 'registers' },
+        ],
+      },
+    ],
   },
   {
-    title: 'Registers',
-    icon: 'monitor',
-    href: '/registers',
-    module: 'registers',
+    sectionTitle: 'ANALYTICS & SYSTEM',
+    groups: [
+      {
+        id: 'reports',
+        title: 'Income & Reports',
+        icon: 'trending-up',
+        children: [
+          { title: 'Overview', href: '/reports', module: 'reports' },
+        ],
+      },
+      {
+        id: 'settings',
+        title: 'Settings & Admin',
+        icon: 'settings',
+        children: [
+          { title: 'Store Settings', href: '/settings' },
+          { title: 'Staff & Roles', href: '/users', permission: 'users:manage' },
+          { title: 'Hardware Devices', href: '/hardware' },
+          { title: 'Offline Data Sync', href: '/offline-sync' },
+        ],
+      },
+    ],
   },
-  {
-    title: 'Purchasing',
-    icon: 'truck',
-    href: '/purchasing',
-    module: 'purchasing',
-    permission: 'purchasing:read',
-  },
-  { title: 'Reports', icon: 'bar-chart-2', href: '/reports', module: 'reports' },
-  { title: 'More', icon: 'more-horizontal', href: '/(tabs)/more' },
 ];
+
+function isPathActive(pathname: string, href: Href): boolean {
+  const target = String(href).replace('/(tabs)', '');
+  if (target === '/pos' && (pathname === '/pos' || pathname === '/')) return true;
+  if (pathname === target) return true;
+  if (target !== '/pos' && target !== '/more' && target !== '/' && pathname.startsWith(target.replace(/\/$/, ''))) {
+    return true;
+  }
+  return false;
+}
 
 function SidebarMenu({ close }: { close(): void }) {
   const pathname = usePathname();
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
-  const visible = menuItems.filter(
-    (item) =>
-      (!item.module || currentUser?.modules.includes(item.module)) &&
-      (!item.permission || currentUser?.permissions.includes(item.permission)),
-  );
+
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    products: true,
+    registers: true,
+  });
+
+  // Auto-expand groups when active route changes
+  useEffect(() => {
+    for (const section of sidebarSections) {
+      for (const group of section.groups) {
+        if (group.children) {
+          const hasActiveChild = group.children.some((child) => isPathActive(pathname, child.href));
+          if (hasActiveChild) {
+            setExpandedGroups((prev) => ({ ...prev, [group.id]: true }));
+          }
+        }
+      }
+    }
+  }, [pathname]);
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  };
+
+  const filterVisibleChildren = (children?: SidebarSubItem[]) => {
+    if (!children) return [];
+    return children.filter(
+      (item) =>
+        (!item.module || currentUser?.modules.includes(item.module)) &&
+        (!item.permission || currentUser?.permissions.includes(item.permission)),
+    );
+  };
+
+  const filterVisibleGroups = (groups: SidebarGroup[]) => {
+    return groups.filter((group) => {
+      const hasModule = !group.module || currentUser?.modules.includes(group.module);
+      const hasPermission = !group.permission || currentUser?.permissions.includes(group.permission);
+      if (!hasModule || !hasPermission) return false;
+
+      if (group.children) {
+        const visibleSubItems = filterVisibleChildren(group.children);
+        return visibleSubItems.length > 0;
+      }
+      return true;
+    });
+  };
+
+  const getBadgeStyle = (color?: SidebarSubItem['badgeColor']) => {
+    switch (color) {
+      case 'amber':
+        return 'bg-amber-100 text-amber-800';
+      case 'red':
+        return 'bg-red-100 text-red-700';
+      case 'emerald':
+        return 'bg-emerald-100 text-emerald-800';
+      case 'blue':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-slate-200 text-slate-700';
+    }
+  };
 
   return (
-    <View className="h-full w-[72px] items-center border-r border-brand-100 bg-white px-2 pb-4 pt-3">
-      <View className="mb-5 h-10 w-10 overflow-hidden rounded-xl bg-brand-700">
-        <Image
-          source={ximoIcon}
-          resizeMode="cover"
-          className="h-10 w-10"
-          accessibilityLabel="Ximo logo"
-        />
+    <View className="h-full w-64 border-r border-slate-200/80 bg-[#F8F9FA] px-3 pb-4 pt-4 shadow-sm">
+      {/* Brand Header */}
+      <View className="mb-4 flex-row items-center px-2">
+        <View className="mr-3 h-10 w-10 overflow-hidden rounded-xl bg-brand-700 shadow-sm">
+          <Image
+            source={ximoIcon}
+            resizeMode="cover"
+            className="h-10 w-10"
+            accessibilityLabel="Ximo logo"
+          />
+        </View>
+        <View className="flex-1">
+          <Text className="text-base font-black tracking-tight text-slate-900">Ximo POS</Text>
+          <Text numberOfLines={1} className="text-xs font-medium text-slate-500">
+            {branch?.name ?? 'Main Branch'}
+          </Text>
+        </View>
       </View>
-      <View className="w-full gap-1">
-        {visible.map((item) => {
-          const target = String(item.href).replace('/(tabs)', '');
-          const active =
-            pathname === target ||
-            (target !== '/more' && pathname.startsWith(`${target.replace(/\/$/, '')}/`));
-          return (
-            <Pressable
-              key={item.title}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${item.title}`}
-              onPress={() => {
-                close();
-                router.push(item.href);
-              }}
-              className={`min-h-14 items-center justify-center rounded-xl px-1 ${
-                active ? 'bg-brand-50' : 'active:bg-brand-50'
-              }`}
-            >
-              <Feather name={item.icon} size={21} color={active ? '#1A593B' : '#81776E'} />
-              <Text
-                numberOfLines={1}
-                className={`mt-1 text-[9px] font-medium ${
-                  active ? 'text-brand-700' : 'text-slate-500'
-                }`}
-              >
-                {item.title}
-              </Text>
-            </Pressable>
-          );
-        })}
+
+      {/* Navigation Sections & Hierarchy */}
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <View className="pb-6">
+          {sidebarSections.map((section, sectionIdx) => {
+            const visibleGroups = filterVisibleGroups(section.groups);
+            if (visibleGroups.length === 0) return null;
+
+            return (
+              <View key={section.sectionTitle ?? sectionIdx} className="mb-3">
+                {section.sectionTitle ? (
+                  <Text className="mb-1.5 px-3 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">
+                    {section.sectionTitle}
+                  </Text>
+                ) : null}
+
+                <View className="gap-1">
+                  {visibleGroups.map((group) => {
+                    const hasChildren = group.children && group.children.length > 0;
+                    const visibleChildren = filterVisibleChildren(group.children);
+                    const isExpanded = expandedGroups[group.id] ?? false;
+                    const isDirectActive = group.href ? isPathActive(pathname, group.href) : false;
+                    const isAnyChildActive = visibleChildren.some((child) =>
+                      isPathActive(pathname, child.href),
+                    );
+
+                    if (!hasChildren && group.href) {
+                      return (
+                        <Pressable
+                          key={group.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open ${group.title}`}
+                          onPress={() => {
+                            close();
+                            router.push(group.href!);
+                          }}
+                          className={`min-h-11 flex-row items-center rounded-xl px-3 py-2.5 transition-all ${
+                            isDirectActive
+                              ? 'bg-white border border-slate-200/90 shadow-sm'
+                              : 'active:bg-slate-200/60'
+                          }`}
+                        >
+                          <Feather
+                            name={group.icon}
+                            size={19}
+                            color={isDirectActive ? '#1A593B' : '#64748B'}
+                          />
+                          <Text
+                            className={`ml-3 text-sm ${
+                              isDirectActive
+                                ? 'font-bold text-slate-900'
+                                : 'font-semibold text-slate-700'
+                            }`}
+                          >
+                            {group.title}
+                          </Text>
+                        </Pressable>
+                      );
+                    }
+
+                    return (
+                      <View key={group.id} className="mb-0.5">
+                        {/* Group Header Button */}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Toggle ${group.title} group`}
+                          onPress={() => toggleGroup(group.id)}
+                          className={`min-h-11 flex-row items-center justify-between rounded-xl px-3 py-2.5 ${
+                            isAnyChildActive && !isExpanded
+                              ? 'bg-slate-200/40'
+                              : 'active:bg-slate-200/50'
+                          }`}
+                        >
+                          <View className="flex-row items-center">
+                            <Feather
+                              name={group.icon}
+                              size={19}
+                              color={isAnyChildActive ? '#1A593B' : '#64748B'}
+                            />
+                            <Text
+                              className={`ml-3 text-sm ${
+                                isAnyChildActive
+                                  ? 'font-bold text-slate-900'
+                                  : 'font-semibold text-slate-800'
+                              }`}
+                            >
+                              {group.title}
+                            </Text>
+                          </View>
+                          <Feather
+                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={16}
+                            color="#94A3B8"
+                          />
+                        </Pressable>
+
+                        {/* Expanded Hierarchy Sub-Items with Tree Connectors */}
+                        {isExpanded && visibleChildren.length > 0 ? (
+                          <View className="ml-5 mt-1 border-l-2 border-slate-200/80 pl-3.5 gap-1.5 py-1">
+                            {visibleChildren.map((subItem) => {
+                              const active = isPathActive(pathname, subItem.href);
+                              return (
+                                <View key={subItem.title} className="relative flex-row items-center">
+                                  {/* Horizontal Curved Connector Line */}
+                                  <View className="absolute -left-[15px] top-1/2 h-[2px] w-3.5 rounded-full bg-slate-200/90" />
+                                  <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Go to ${subItem.title}`}
+                                    onPress={() => {
+                                      close();
+                                      router.push(subItem.href);
+                                    }}
+                                    className={`min-h-10 flex-1 flex-row items-center justify-between rounded-xl px-3.5 py-2 ${
+                                      active
+                                        ? 'bg-white border border-slate-200/90 shadow-sm'
+                                        : 'active:bg-slate-200/40'
+                                    }`}
+                                  >
+                                    <Text
+                                      className={`text-sm ${
+                                        active
+                                          ? 'font-bold text-slate-950'
+                                          : 'font-medium text-slate-600'
+                                      }`}
+                                    >
+                                      {subItem.title}
+                                    </Text>
+                                    {subItem.badge !== undefined ? (
+                                      <View
+                                        className={`rounded-full px-2 py-0.5 ${getBadgeStyle(
+                                          subItem.badgeColor,
+                                        )}`}
+                                      >
+                                        <Text className="text-xs font-bold">{subItem.badge}</Text>
+                                      </View>
+                                    ) : null}
+                                  </Pressable>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      {/* User & Branch Footer */}
+      <View className="mt-auto border-t border-slate-200/80 pt-3">
+        <View className="flex-row items-center rounded-2xl border border-slate-200/60 bg-white p-3 shadow-sm">
+          <View className="mr-3 h-9 w-9 items-center justify-center rounded-xl bg-brand-700">
+            <Text className="text-xs font-bold text-white">
+              {currentUser?.displayName
+                ?.split(/\s+/)
+                .slice(0, 2)
+                .map((part) => part[0])
+                .join('')
+                .toUpperCase() || 'U'}
+            </Text>
+          </View>
+          <View className="flex-1 pr-1">
+            <Text numberOfLines={1} className="text-sm font-bold text-slate-900">
+              {currentUser?.displayName || 'Cashier'}
+            </Text>
+            <Text numberOfLines={1} className="text-xs font-medium text-slate-500">
+              {branch?.name || 'Main Branch'}
+            </Text>
+          </View>
+        </View>
       </View>
-      <View className="mt-auto h-10 w-10 items-center justify-center rounded-full bg-brand-700">
-        <Text className="text-xs font-semibold text-white">
-          {currentUser?.displayName
-            ?.split(/\s+/)
-            .slice(0, 2)
-            .map((part) => part[0])
-            .join('')
-            .toUpperCase() || 'U'}
-        </Text>
-      </View>
-      <Text numberOfLines={1} className="mt-1 w-full text-center text-[9px] text-slate-500">
-        {branch?.name}
-      </Text>
     </View>
   );
 }
@@ -161,7 +444,7 @@ export function AppSidebarProvider({ children }: PropsWithChildren) {
               accessibilityRole="button"
               accessibilityLabel="Close navigation menu"
               onPress={() => setOpen(false)}
-              className="flex-1 bg-black/30"
+              className="flex-1 bg-black/40"
             />
           </View>
         ) : null}

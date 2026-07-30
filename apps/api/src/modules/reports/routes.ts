@@ -537,8 +537,11 @@ export function reportsRouter(database: Queryable): Router {
     const [movements, payments, sales, refunds] = await Promise.all([
       database.query(
         `select cm.id,cm.type,cm.amount::text,cm.reason,cm.created_at as "createdAt",
-          p.display_name as "createdBy"
-         from cash_movements cm join profiles p on p.id=cm.created_by
+          p.display_name as "createdBy",si.invoice_number as "invoiceNumber"
+         from cash_movements cm
+         join profiles p on p.id=cm.created_by
+         left join supplier_payments sp on sp.id=cm.supplier_payment_id
+         left join supplier_invoices si on si.id=sp.supplier_invoice_id
          where cm.shift_id=$1 and cm.organization_id=$2 order by cm.created_at`,
         [id, organizationId],
       ),

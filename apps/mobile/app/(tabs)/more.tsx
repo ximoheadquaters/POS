@@ -53,6 +53,13 @@ const links: Array<{
     permission: 'purchasing:read',
   },
   {
+    title: 'Stock transfers',
+    subtitle: 'Move inventory items between branches',
+    symbol: 'ST',
+    href: '/stock-transfers' as Href,
+    module: 'stock_transfers',
+  },
+  {
     title: 'Reports',
     subtitle: 'KPIs, sales, inventory, purchasing, profit and cash',
     symbol: 'A',

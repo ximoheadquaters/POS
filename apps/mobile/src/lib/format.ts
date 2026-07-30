@@ -1,7 +1,12 @@
 export function formatMoney(value: string, currency = 'PHP'): string {
-  const [whole, fraction = '00'] = value.split('.');
+  const num = Number(value);
+  if (isNaN(num)) return `${currency === 'PHP' ? '₱' : `${currency} `}0.00`;
+  const isNegative = num < 0;
+  const fixed = Math.abs(num).toFixed(2);
+  const [whole, fraction] = fixed.split('.');
   const grouped = whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${currency === 'PHP' ? '₱' : `${currency} `}${grouped}.${fraction.padEnd(2, '0')}`;
+  const symbol = currency === 'PHP' ? '₱' : `${currency} `;
+  return `${isNegative ? '-' : ''}${symbol}${grouped}.${fraction}`;
 }
 
 export function todayRange(): { from: string; to: string } {

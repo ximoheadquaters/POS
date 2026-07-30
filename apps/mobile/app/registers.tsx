@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { Button, EmptyState, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
@@ -24,6 +25,18 @@ interface ClosedShift {
   variance: string;
 }
 
+interface ActiveShiftDetail {
+  id: string;
+  status: string;
+  openedAt: string;
+  startingCash: string;
+  cashSales: string;
+  cashRefunds: string;
+  cashIn: string;
+  cashOut: string;
+  transactions: number;
+}
+
 function validMoney(value: string) {
   return /^(0|[1-9]\d{0,11})(\.\d{1,2})?$/.test(value.trim());
 }
@@ -36,7 +49,9 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-export default function RegistersScreen() {
+import { AppSidebarProvider } from '@/components/app-sidebar';
+
+function RegistersContent() {
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
   const shift = useShiftStore((state) => state.activeShift);
@@ -64,6 +79,24 @@ export default function RegistersScreen() {
     enabled: Boolean(branch),
   });
 
+  const shiftDetailQuery = useQuery({
+    queryKey: ['shift-report', shift?.id],
+    queryFn: () => api<ActiveShiftDetail>(`/reports/shifts/${shift!.id}`),
+    enabled: Boolean(shift?.id),
+    refetchInterval: 5000,
+  });
+
+  const shiftDetail = shiftDetailQuery.data;
+  const runningExpectedCash = shiftDetail
+    ? minorToMoney(
+        moneyToMinor(shiftDetail.startingCash) +
+          moneyToMinor(shiftDetail.cashSales) +
+          moneyToMinor(shiftDetail.cashIn) -
+          moneyToMinor(shiftDetail.cashOut) -
+          moneyToMinor(shiftDetail.cashRefunds),
+      )
+    : null;
+
   useEffect(() => {
     if (!branch || !query.data || !currentUser) return;
     const activeRegister = query.data.find(
@@ -87,6 +120,7 @@ export default function RegistersScreen() {
     if (!branch) return;
     await Promise.all([
       client.invalidateQueries({ queryKey: ['registers', branch.id] }),
+      client.invalidateQueries({ queryKey: ['shift-report'] }),
       client.invalidateQueries({ queryKey: ['shift-reports'] }),
       client.invalidateQueries({ queryKey: ['reports'] }),
     ]);
@@ -231,6 +265,48 @@ export default function RegistersScreen() {
                     <Text className="text-xs font-medium text-emerald-800">Open</Text>
                   </View>
                 </View>
+
+                {shiftDetail ? (
+                  <View className="border-t border-slate-100 bg-slate-50/80 p-5">
+                    <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Live Drawer Balance
+                    </Text>
+                    <View className="flex-row flex-wrap gap-2">
+                      <View className="w-[48%] rounded-2xl border border-slate-200/60 bg-white p-3">
+                        <Text className="text-xs text-slate-500">Starting cash</Text>
+                        <Text className="mt-1 text-base font-semibold text-slate-900">
+                          {formatMoney(shiftDetail.startingCash)}
+                        </Text>
+                      </View>
+                      <View className="w-[48%] rounded-2xl border border-slate-200/60 bg-white p-3">
+                        <Text className="text-xs text-slate-500">
+                          Cash sales ({shiftDetail.transactions})
+                        </Text>
+                        <Text className="mt-1 text-base font-semibold text-emerald-700">
+                          +{formatMoney(shiftDetail.cashSales)}
+                        </Text>
+                      </View>
+                      <View className="w-[48%] rounded-2xl border border-slate-200/60 bg-white p-3">
+                        <Text className="text-xs text-slate-500">Net cash moved</Text>
+                        <Text className="mt-1 text-base font-semibold text-slate-900">
+                          {formatMoney(
+                            minorToMoney(
+                              moneyToMinor(shiftDetail.cashIn) - moneyToMinor(shiftDetail.cashOut),
+                            ),
+                          )}
+                        </Text>
+                      </View>
+                      <View className="w-[48%] rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                        <Text className="text-xs font-medium text-emerald-800">
+                          Live Expected Cash
+                        </Text>
+                        <Text className="mt-1 text-base font-bold text-emerald-900">
+                          {formatMoney(runningExpectedCash ?? '0')}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
 
                 <View className="border-t border-slate-100 p-5">
                   <View className="mb-3 flex-row items-center">
@@ -542,5 +618,13 @@ export default function RegistersScreen() {
         </View>
       </Modal>
     </Screen>
+  );
+}
+
+export default function RegistersScreen() {
+  return (
+    <AppSidebarProvider>
+      <RegistersContent />
+    </AppSidebarProvider>
   );
 }
