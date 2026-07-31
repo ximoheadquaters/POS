@@ -7,7 +7,7 @@ insert into public.modules (code, name) values
   ('inventory','Inventory'), ('customers','Customers'), ('returns','Returns'),
   ('registers','Registers'), ('reports','Reports'), ('suppliers','Suppliers'),
   ('purchasing','Purchasing'), ('stock_transfers','Stock Transfers'), ('expenses','Expenses'), ('promotions','Promotions'),
-  ('loyalty','Loyalty'), ('integrations','Integrations'),
+  ('loyalty','Loyalty'), ('integrations','Integrations'), ('audit','Audit Logs'),
   ('barcode_scanner','Barcode Scanner'), ('receipt_printer','Receipt Printer'),
   ('cash_drawer','Cash Drawer'), ('payment_terminal','Payment Terminal'),
   ('customer_display','Customer Display')
