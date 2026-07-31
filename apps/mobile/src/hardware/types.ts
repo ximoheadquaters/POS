@@ -21,6 +21,7 @@ export interface BarcodeScannerDriver extends BaseHardwareDriver {
 export interface ReceiptPrintJob {
   saleId: string;
   receiptNumber: string;
+  paperSize?: '58mm' | '80mm';
   businessName?: string;
   branchName?: string;
   branchAddress?: string | null;

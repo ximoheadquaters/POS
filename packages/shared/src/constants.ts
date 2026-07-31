@@ -35,6 +35,7 @@ export const MODULE_CODES = [
   'promotions',
   'loyalty',
   'integrations',
+  'audit',
   ...HARDWARE_MODULE_CODES,
 ] as const;
 export type ModuleCode = (typeof MODULE_CODES)[number];
@@ -60,7 +61,6 @@ export const PERMISSIONS = [
   'purchasing:receive',
   'purchasing:return',
   'purchasing:pay',
-  'purchasing:pay',
   'registers:read',
   'registers:manage',
   'shifts:open',
@@ -70,12 +70,14 @@ export const PERMISSIONS = [
   'sales:read_branch',
   'sales:read_all',
   'returns:create',
+  'returns:manage',
   'customers:read',
   'customers:manage',
+  'promotions:read',
+  'promotions:manage',
   'reports:read',
   'settings:manage',
   'audit:read',
-  'modules:manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

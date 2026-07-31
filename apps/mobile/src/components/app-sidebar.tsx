@@ -105,9 +105,17 @@ const sidebarSections: SidebarSection[] = [
         ],
       },
       {
+        id: 'promotions',
+        title: 'Promotions & Combos',
+        icon: 'tag',
+        href: '/promotions',
+        module: 'promotions',
+      },
+      {
         id: 'registers',
         title: 'Registers & Shifts',
         icon: 'credit-card',
+        module: 'registers',
         children: [
           { title: 'Active Register', href: '/registers', module: 'registers' },
           { title: 'Shift History', href: '/shift-reports', module: 'registers' },
@@ -133,6 +141,7 @@ const sidebarSections: SidebarSection[] = [
         children: [
           { title: 'Store Settings', href: '/settings' },
           { title: 'Staff & Roles', href: '/users', permission: 'users:manage' },
+          { title: 'Audit Logs', href: '/audit', module: 'audit', permission: 'audit:read' },
           { title: 'Hardware Devices', href: '/hardware' },
           { title: 'Offline Data Sync', href: '/offline-sync' },
         ],
@@ -153,8 +162,9 @@ function isPathActive(pathname: string, href: Href): boolean {
 
 function SidebarMenu({ close }: { close(): void }) {
   const pathname = usePathname();
-  const { currentUser } = useSession();
+  const { currentUser, refreshUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     products: true,
@@ -184,18 +194,18 @@ function SidebarMenu({ close }: { close(): void }) {
 
   const filterVisibleChildren = (children?: SidebarSubItem[]) => {
     if (!children) return [];
-    return children.filter(
-      (item) =>
-        (!item.module || currentUser?.modules.includes(item.module)) &&
-        (!item.permission || currentUser?.permissions.includes(item.permission)),
-    );
+    return children.filter((item) => {
+      const hasPermission = !item.permission || currentUser?.permissions.includes(item.permission);
+      const hasModule = !item.module || currentUser?.modules.includes(item.module);
+      return hasPermission && hasModule;
+    });
   };
 
   const filterVisibleGroups = (groups: SidebarGroup[]) => {
     return groups.filter((group) => {
-      const hasModule = !group.module || currentUser?.modules.includes(group.module);
       const hasPermission = !group.permission || currentUser?.permissions.includes(group.permission);
-      if (!hasModule || !hasPermission) return false;
+      const hasModule = !group.module || currentUser?.modules.includes(group.module);
+      if (!hasPermission || !hasModule) return false;
 
       if (group.children) {
         const visibleSubItems = filterVisibleChildren(group.children);
@@ -266,6 +276,8 @@ function SidebarMenu({ close }: { close(): void }) {
                     );
 
                     if (!hasChildren && group.href) {
+                      const isGroupDisabled = Boolean(group.module && !currentUser?.modules.includes(group.module));
+
                       return (
                         <Pressable
                           key={group.id}
@@ -275,26 +287,35 @@ function SidebarMenu({ close }: { close(): void }) {
                             close();
                             router.push(group.href!);
                           }}
-                          className={`min-h-11 flex-row items-center rounded-xl px-3 py-2.5 transition-all ${
+                          className={`min-h-11 flex-row items-center justify-between rounded-xl px-3 py-2.5 transition-all ${
                             isDirectActive
                               ? 'bg-white border border-slate-200/90 shadow-sm'
                               : 'active:bg-slate-200/60'
                           }`}
                         >
-                          <Feather
-                            name={group.icon}
-                            size={19}
-                            color={isDirectActive ? '#1A593B' : '#64748B'}
-                          />
-                          <Text
-                            className={`ml-3 text-sm ${
-                              isDirectActive
-                                ? 'font-bold text-slate-900'
-                                : 'font-semibold text-slate-700'
-                            }`}
-                          >
-                            {group.title}
-                          </Text>
+                          <View className="flex-row items-center flex-1 pr-2">
+                            <Feather
+                              name={group.icon}
+                              size={19}
+                              color={isDirectActive ? '#1A593B' : '#64748B'}
+                            />
+                            <Text
+                              className={`ml-3 text-sm ${
+                                isDirectActive
+                                  ? 'font-bold text-slate-900'
+                                  : 'font-semibold text-slate-700'
+                              }`}
+                            >
+                              {group.title}
+                            </Text>
+                          </View>
+
+                          {isGroupDisabled ? (
+                            <View className="flex-row items-center gap-1 rounded-full bg-amber-100/80 px-2 py-0.5">
+                              <Feather name="lock" size={10} color="#B45309" />
+                              <Text className="text-[10px] font-bold text-amber-800">Pro</Text>
+                            </View>
+                          ) : null}
                         </Pressable>
                       );
                     }
@@ -340,6 +361,8 @@ function SidebarMenu({ close }: { close(): void }) {
                           <View className="ml-5 mt-1 border-l-2 border-slate-200/80 pl-3.5 gap-1.5 py-1">
                             {visibleChildren.map((subItem) => {
                               const active = isPathActive(pathname, subItem.href);
+                              const isSubDisabled = Boolean(subItem.module && !currentUser?.modules.includes(subItem.module));
+
                               return (
                                 <View key={subItem.title} className="relative flex-row items-center">
                                   {/* Horizontal Curved Connector Line */}
@@ -366,7 +389,12 @@ function SidebarMenu({ close }: { close(): void }) {
                                     >
                                       {subItem.title}
                                     </Text>
-                                    {subItem.badge !== undefined ? (
+                                    {isSubDisabled ? (
+                                      <View className="flex-row items-center gap-1 rounded-full bg-amber-100/80 px-2 py-0.5">
+                                        <Feather name="lock" size={10} color="#B45309" />
+                                        <Text className="text-[10px] font-bold text-amber-800">Locked</Text>
+                                      </View>
+                                    ) : subItem.badge !== undefined ? (
                                       <View
                                         className={`rounded-full px-2 py-0.5 ${getBadgeStyle(
                                           subItem.badgeColor,
@@ -393,25 +421,50 @@ function SidebarMenu({ close }: { close(): void }) {
 
       {/* User & Branch Footer */}
       <View className="mt-auto border-t border-slate-200/80 pt-3">
-        <View className="flex-row items-center rounded-2xl border border-slate-200/60 bg-white p-3 shadow-sm">
-          <View className="mr-3 h-9 w-9 items-center justify-center rounded-xl bg-brand-700">
-            <Text className="text-xs font-bold text-white">
-              {currentUser?.displayName
-                ?.split(/\s+/)
-                .slice(0, 2)
-                .map((part) => part[0])
-                .join('')
-                .toUpperCase() || 'U'}
-            </Text>
-          </View>
-          <View className="flex-1 pr-1">
-            <Text numberOfLines={1} className="text-sm font-bold text-slate-900">
-              {currentUser?.displayName || 'Cashier'}
-            </Text>
-            <Text numberOfLines={1} className="text-xs font-medium text-slate-500">
-              {branch?.name || 'Main Branch'}
-            </Text>
-          </View>
+        <View className="flex-row items-center justify-between rounded-2xl border border-slate-200/60 bg-white p-3 shadow-sm">
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              if (currentUser?.id) router.push(`/user/${currentUser.id}`);
+            }}
+            className="flex-1 flex-row items-center pr-2"
+          >
+            <View className="mr-3 h-9 w-9 items-center justify-center rounded-xl bg-brand-700">
+              <Text className="text-xs font-bold text-white">
+                {currentUser?.displayName
+                  ?.split(/\s+/)
+                  .slice(0, 2)
+                  .map((part) => part[0])
+                  .join('')
+                  .toUpperCase() || 'U'}
+              </Text>
+            </View>
+            <View className="flex-1">
+              <Text numberOfLines={1} className="text-sm font-bold text-slate-900">
+                {currentUser?.displayName || 'Cashier'}
+              </Text>
+              <Text numberOfLines={1} className="text-xs font-medium text-slate-500">
+                {branch?.name || 'Main Branch'}
+              </Text>
+            </View>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Refresh modules and permissions"
+            disabled={refreshing}
+            onPress={() => {
+              setRefreshing(true);
+              void refreshUser()
+                .catch(() => undefined)
+                .finally(() => setRefreshing(false));
+            }}
+            className={`h-8 w-8 items-center justify-center rounded-xl bg-slate-100 ${
+              refreshing ? 'opacity-50' : 'active:bg-slate-200'
+            }`}
+          >
+            <Feather name="refresh-cw" size={14} color={refreshing ? '#94A3B8' : '#475569'} />
+          </Pressable>
         </View>
       </View>
     </View>

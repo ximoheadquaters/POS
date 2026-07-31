@@ -1,7 +1,7 @@
 import { buildReceiptHtml } from './web-receipt-printer';
 
 describe('browser receipt formatter', () => {
-  it('renders an 80mm receipt with sale totals and items', () => {
+  it('renders a 58mm receipt by default with sale totals and items', () => {
     const html = buildReceiptHtml({
       saleId: 'sale-1',
       receiptNumber: 'BCD-0001',
@@ -20,11 +20,25 @@ describe('browser receipt formatter', () => {
       payments: [{ method: 'cash', amount: '125.00' }],
     });
 
-    expect(html).toContain('@page { size: 80mm auto;');
+    expect(html).toContain('@page { size: 58mm auto;');
     expect(html).toContain('Ximo Store');
     expect(html).toContain('Rice');
     expect(html).toContain('BCD-0001');
     expect(html).toContain('TOTAL');
+  });
+
+  it('renders an 80mm receipt when paperSize is set to 80mm', () => {
+    const html = buildReceiptHtml({
+      saleId: 'sale-1',
+      receiptNumber: 'BCD-0002',
+      paperSize: '80mm',
+      businessName: 'Ximo Store',
+      currency: 'PHP',
+      total: '100.00',
+      changeDue: '0.00',
+    });
+
+    expect(html).toContain('@page { size: 80mm auto;');
   });
 
   it('escapes receipt data before adding it to printable HTML', () => {

@@ -12,15 +12,16 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { useIosAlert } from '@/providers/ios-alert';
 import { liveDataQueryOptions } from '@/lib/live-data';
 import { findExactScannedProduct } from '@/lib/product-scan';
 import { useAppSidebar } from '@/components/app-sidebar';
-import { Button, EmptyState, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { QuantityInput } from '@/components/quantity-input';
 import { getHardwareDriver } from '@/hardware/registry';
 import { useSession } from '@/providers/session';
@@ -151,8 +152,45 @@ export default function PosScreen() {
   const syncProducts = useCartStore((state) => state.syncProducts);
   const branch = useBranchStore((state) => state.activeBranch);
   const activeShift = useShiftStore((state) => state.activeShift);
-  const reservedByProduct = useConnectivityStore((state) => state.reservedByProduct);
   const hydrateShift = useShiftStore((state) => state.hydrate);
+  const reservedByProduct = useConnectivityStore((state) => state.reservedByProduct);
+  const { showAlert } = useIosAlert();
+  const [holdModalVisible, setHoldModalVisible] = useState(false);
+  const [holdNote, setHoldNote] = useState('');
+
+  const holdMutation = useMutation({
+    mutationFn: () =>
+      api<{ receiptNumber: string }>('/sales/hold', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: branch?.id,
+          shiftId: activeShift?.id,
+          customerId: useCartStore.getState().customerId,
+          note: holdNote.trim() || undefined,
+          items: items.map((item) => ({
+            productId: item.product.id,
+            variantId: item.product.variantId ?? undefined,
+            quantity: item.quantity,
+          })),
+        }),
+      }),
+    onSuccess: (data) => {
+      setHoldModalVisible(false);
+      setHoldNote('');
+      clearCart();
+      showAlert({
+        title: 'Sale Parked',
+        message: `Order parked as ${data.receiptNumber}. You can resume it anytime from Sales & Orders.`,
+        type: 'success',
+      });
+    },
+    onError: (error) =>
+      showAlert({
+        title: 'Could Not Hold Sale',
+        message: error.message,
+        type: 'error',
+      }),
+  });
 
   const focusInput = () => {
     setTimeout(() => {
@@ -670,24 +708,78 @@ export default function PosScreen() {
                 <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
               )}
               {items.length ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Clear order"
-                  onPress={() => {
-                    clearCart();
-                    focusInput();
-                  }}
-                  className="mt-2 min-h-10 items-center justify-center"
-                >
-                  <View className="flex-row items-center gap-1">
-                    <Feather name="trash-2" size={13} color="#DC2626" />
-                    <Text className="text-xs font-medium text-red-600">Clear Order</Text>
-                  </View>
-                </Pressable>
+                <View className="mt-2 gap-2">
+                  <Button
+                    title={holdMutation.isPending ? 'Holding Sale…' : 'Hold Sale (Park Cart)'}
+                    variant="secondary"
+                    disabled={holdMutation.isPending}
+                    onPress={() => setHoldModalVisible(true)}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear order"
+                    onPress={() => {
+                      clearCart();
+                      focusInput();
+                    }}
+                    className="min-h-10 items-center justify-center"
+                  >
+                    <View className="flex-row items-center gap-1">
+                      <Feather name="trash-2" size={13} color="#DC2626" />
+                      <Text className="text-xs font-medium text-red-600">Clear Order</Text>
+                    </View>
+                  </Pressable>
+                </View>
               ) : null}
             </View>
           </View>
         </View>
+
+        <Modal visible={holdModalVisible} transparent animationType="fade">
+          <View className="flex-1 items-center justify-center bg-black/40 p-5">
+            <View className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+              <View className="mb-4 flex-row items-start justify-between">
+                <View className="mr-4 flex-1">
+                  <Text className="text-lg font-bold text-slate-950">Hold Current Sale?</Text>
+                  <Text className="mt-1 text-sm text-slate-500">
+                    Park this order to free up checkout for other customers. You can resume it anytime from Sales & Orders.
+                  </Text>
+                </View>
+                <Pressable onPress={() => setHoldModalVisible(false)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100">
+                  <Feather name="x" size={18} color="#475569" />
+                </Pressable>
+              </View>
+              <View className="mb-5">
+                <Field
+                  label="Optional Customer Tag / Reason"
+                  value={holdNote}
+                  onChangeText={setHoldNote}
+                  placeholder="e.g. Customer stepped out for cash"
+                />
+              </View>
+              <View className="flex-row gap-3">
+                <Pressable
+                  disabled={holdMutation.isPending}
+                  onPress={() => setHoldModalVisible(false)}
+                  className="min-h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white"
+                >
+                  <Text className="font-semibold text-slate-700">Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={holdMutation.isPending}
+                  onPress={() => holdMutation.mutate()}
+                  className={`min-h-12 flex-[2] items-center justify-center rounded-xl bg-amber-600 ${
+                    holdMutation.isPending ? 'opacity-50' : 'active:bg-amber-700'
+                  }`}
+                >
+                  <Text className="font-bold text-white">
+                    {holdMutation.isPending ? 'Holding…' : 'Confirm & Park Cart'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </Screen>
     );
   }

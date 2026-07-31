@@ -34,6 +34,7 @@ export const createEmployeeSchema = z.object({
   displayName: z.string().trim().min(2).max(120),
   email: z.email().transform((value) => value.trim().toLowerCase()),
   temporaryPassword: z.string().min(12).max(200),
+  pin: z.string().trim().min(4).max(8).optional(),
   role: z.enum(EMPLOYEE_ROLE_CODES),
   branchIds: z
     .array(uuidSchema)
@@ -332,15 +333,26 @@ export const checkoutSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
+export const holdSaleSchema = z.object({
+  branchId: uuidSchema,
+  registerId: uuidSchema.nullable().optional(),
+  shiftId: uuidSchema.nullable().optional(),
+  customerId: uuidSchema.nullable().optional(),
+  note: z.string().trim().max(500).optional(),
+  items: z.array(cartItemSchema).min(1).max(250),
+});
+
 export const returnSchema = z.object({
   branchId: uuidSchema,
   registerId: uuidSchema,
   shiftId: uuidSchema,
+  restock: z.boolean().default(true).optional(),
   items: z
     .array(
       z.object({
         saleItemId: uuidSchema,
         quantity: z.number().positive().max(999_999).multipleOf(0.001),
+        restock: z.boolean().optional(),
       }),
     )
     .min(1),
@@ -402,6 +414,39 @@ export const createStockTransferSchema = z
   });
 
 export type CreateStockTransferInput = z.infer<typeof createStockTransferSchema>;
+
+export const promotionTypeSchema = z.enum([
+  'combo_bundle',
+  'buy_x_get_y',
+  'tiered_quantity',
+  'percentage_discount',
+  'fixed_discount',
+]);
+
+export const createPromotionSchema = z.object({
+  name: z.string().trim().min(2).max(180),
+  code: z.string().trim().max(50).optional(),
+  description: z.string().trim().max(1000).optional(),
+  type: promotionTypeSchema,
+  comboPrice: moneyStringSchema.optional(),
+  discountPercentage: z.string().regex(/^(\d{1,2}(\.\d{1,2})?|100(\.0{1,2})?)$/).optional(),
+  discountAmount: moneyStringSchema.optional(),
+  minOrderQuantity: z.number().int().min(1).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  isActive: z.boolean().default(true),
+  items: z
+    .array(
+      z.object({
+        productId: uuidSchema,
+        role: z.enum(['trigger_item', 'discounted_item', 'combo_component']).default('combo_component'),
+        requiredQuantity: z.number().int().min(1).default(1),
+      }),
+    )
+    .optional(),
+});
+
+export type CreatePromotionInput = z.infer<typeof createPromotionSchema>;
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;

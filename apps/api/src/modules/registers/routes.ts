@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { cashMovementSchema, closeShiftSchema, openShiftSchema, uuidSchema } from '@ximo/shared';
 import { z } from 'zod';
 import type { Database } from '../../database/types.js';
-import { requireBranchAccess, requireModule, requirePermission } from '../../middleware/auth.js';
+import { requireBranchAccess, requireAnyModule, requirePermission } from '../../middleware/auth.js';
 import { validateBody } from '../../middleware/validation.js';
 import { sendData } from '../../shared/http.js';
 import { ShiftService } from '../../registers/shift-service.js';
@@ -10,7 +10,7 @@ import { ShiftService } from '../../registers/shift-service.js';
 export function registersRouter(database: Database): Router {
   const router = Router();
   const shifts = new ShiftService(database);
-  router.use(requireModule('registers'));
+  router.use(requireAnyModule('registers', 'pos'));
   router.get(
     '/',
     requirePermission('registers:read'),

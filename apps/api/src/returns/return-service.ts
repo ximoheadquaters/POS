@@ -35,8 +35,16 @@ export class ReturnService {
         [saleId, actor.organizationId, input.branchId],
       );
       if (!sale.rows[0]) throw notFound('Completed sale');
-      const shift = await tx.query(
-        `select 1 from register_shifts
+      const shift = await tx.query<{
+        opening_cash: string;
+        cash_sales: string;
+        cash_refunds: string;
+        cash_in: string;
+        cash_out: string;
+      }>(
+        `select opening_cash::text, cash_sales::text, cash_refunds::text,
+           cash_in::text, cash_out::text
+         from register_shifts
          where id=$1 and register_id=$2 and branch_id=$3 and organization_id=$4
            and cashier_id=$5 and status='open' for update`,
         [input.shiftId, input.registerId, input.branchId, actor.organizationId, actor.userId],
@@ -48,7 +56,12 @@ export class ReturnService {
         );
       }
 
-      const items: Array<{ source: SaleItemRow; quantity: number; refund: bigint }> = [];
+      const items: Array<{
+        source: SaleItemRow;
+        quantity: number;
+        refund: bigint;
+        restock: boolean;
+      }> = [];
       let refundTotal = 0n;
       for (const requested of input.items) {
         const found = await tx.query<SaleItemRow>(
@@ -73,8 +86,26 @@ export class ReturnService {
           (moneyToMinor(source.line_total) * quantityToThousandths(requested.quantity)) /
           quantityToThousandths(source.quantity);
         refundTotal += refund;
-        items.push({ source, quantity: requested.quantity, refund });
+        const restock = requested.restock ?? input.restock ?? true;
+        items.push({ source, quantity: requested.quantity, refund, restock });
       }
+
+      if (input.refundMethod === 'cash') {
+        const s = shift.rows[0]!;
+        const availableCashMinor =
+          moneyToMinor(s.opening_cash) +
+          moneyToMinor(s.cash_sales) +
+          moneyToMinor(s.cash_in) -
+          moneyToMinor(s.cash_out) -
+          moneyToMinor(s.cash_refunds);
+        if (refundTotal > availableCashMinor) {
+          throw badRequest(
+            'INSUFFICIENT_DRAWER_CASH',
+            `Cash drawer balance (${minorToMoney(availableCashMinor)}) is insufficient for cash refund of ${minorToMoney(refundTotal)}`,
+          );
+        }
+      }
+
       const numberResult = await tx.query<{ value: string }>(
         `select 'RET-' || to_char(now() at time zone 'UTC','YYYYMMDD') || '-' ||
          lpad(nextval('return_number_seq')::text, 8, '0') as value`,
@@ -116,39 +147,56 @@ export class ReturnService {
         );
         if (item.source.track_inventory) {
           const inventoryQuantity = item.quantity * item.source.units_per_base;
-          const inventory = await tx.query<{ quantity: number }>(
-            `update branch_inventory set
-               quantity = quantity + $4,
-               inventory_value = round(inventory_value + $5::numeric * $6::numeric, 4),
-               average_cost = round(
-                 (inventory_value + $5::numeric * $6::numeric) / (quantity + $4),
-                 4
-               ),
-               updated_at = now()
-             where organization_id = $1 and branch_id = $2 and product_id = $3
-               and variant_id is null returning quantity::float8 as quantity`,
-            [
-              actor.organizationId,
-              input.branchId,
-              item.source.product_id,
-              inventoryQuantity,
-              item.quantity,
-              item.source.unit_cost,
-            ],
-          );
+          let currentQty = 0;
+
+          if (item.restock) {
+            const inventory = await tx.query<{ quantity: number }>(
+              `update branch_inventory set
+                 quantity = quantity + $4,
+                 inventory_value = round(inventory_value + $5::numeric * $6::numeric, 4),
+                 average_cost = case
+                   when (quantity + $4) > 0
+                   then round((inventory_value + $5::numeric * $6::numeric) / (quantity + $4), 4)
+                   else average_cost
+                 end,
+                 updated_at = now()
+               where organization_id = $1 and branch_id = $2 and product_id = $3
+                 and variant_id is not distinct from $7 returning quantity::float8 as quantity`,
+              [
+                actor.organizationId,
+                input.branchId,
+                item.source.product_id,
+                inventoryQuantity,
+                item.quantity,
+                item.source.unit_cost,
+                item.source.variant_id,
+              ],
+            );
+            currentQty = inventory.rows[0]?.quantity ?? 0;
+          } else {
+            const current = await tx.query<{ quantity: number }>(
+              `select quantity::float8 as quantity from branch_inventory
+               where organization_id = $1 and branch_id = $2 and product_id = $3
+                 and variant_id is not distinct from $4`,
+              [actor.organizationId, input.branchId, item.source.product_id, item.source.variant_id],
+            );
+            currentQty = current.rows[0]?.quantity ?? 0;
+          }
+
           await tx.query(
             `insert into inventory_movements (
               organization_id, branch_id, product_id, variant_id, movement_type,
               quantity_delta, quantity_after, reason, reference_type, reference_id, created_by
-             ) values ($1,$2,$3,$4,'return',$5,$6,$7,'return',$8,$9)`,
+             ) values ($1,$2,$3,$4,$5,$6,$7,$8,'return',$9,$10)`,
             [
               actor.organizationId,
               input.branchId,
               item.source.product_id,
               item.source.variant_id,
-              inventoryQuantity,
-              inventory.rows[0]!.quantity,
-              input.reason,
+              item.restock ? 'return' : 'damaged_return',
+              item.restock ? inventoryQuantity : 0,
+              currentQty,
+              item.restock ? input.reason : `[Damaged Return] ${input.reason}`,
               returnId,
               actor.userId,
             ],

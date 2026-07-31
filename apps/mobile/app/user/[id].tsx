@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { roleLabel, type AccessMatrix } from '@/lib/access-control';
 import { useSession } from '@/providers/session';
+import { useIosAlert } from '@/providers/ios-alert';
 
 interface UserDetail {
   id: string;
@@ -22,6 +23,7 @@ interface UserDetail {
 function UserDetailContent() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useSession();
+  const { showAlert } = useIosAlert();
   const queryClient = useQueryClient();
   const userQuery = useQuery({
     queryKey: ['user', id],
@@ -34,6 +36,7 @@ function UserDetailContent() {
   const [selectedRole, setSelectedRole] = useState<RoleCode>('cashier');
   const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(true);
+  const [pin, setPin] = useState('');
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
@@ -55,6 +58,7 @@ function UserDetailContent() {
     !isSelf &&
     Boolean(targetIsEmployee) &&
     roleOptions.some((role) => role.code === userQuery.data?.role);
+  const canEditPin = isSelf || canManage;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -64,18 +68,29 @@ function UserDetailContent() {
           role: selectedRole,
           isActive,
           branchIds: selectedBranches,
+          ...(pin.trim() ? { pin: pin.trim() } : {}),
         }),
       }),
     onSuccess: async () => {
       setDirty(false);
+      setPin('');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['users'] }),
         queryClient.invalidateQueries({ queryKey: ['user', id] }),
         queryClient.invalidateQueries({ queryKey: ['access-matrix'] }),
       ]);
-      Alert.alert('Employee updated', 'Role, status, and branch access were saved.');
+      showAlert({
+        title: 'Account Updated',
+        message: 'Employee role, security PIN, and branch access were saved successfully.',
+        type: 'success',
+      });
     },
-    onError: (error) => Alert.alert('Could not update employee', error.message),
+    onError: (error) =>
+      showAlert({
+        title: 'Update Failed',
+        message: error.message,
+        type: 'error',
+      }),
   });
 
   const toggleBranch = (branchId: string) => {
@@ -262,6 +277,31 @@ function UserDetailContent() {
           </View>
 
           <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
+            Security PIN (Manager Authorization Override)
+          </Text>
+          <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
+            <Text className="font-semibold text-slate-950">Set or Update Security PIN</Text>
+            <Text className="mt-1 text-xs leading-4 text-slate-500">
+              Enter a 4 to 8 digit Security PIN used by this manager/staff member to authorize refunds and overrides.
+            </Text>
+            <View className="mt-3">
+              <TextInput
+                value={pin}
+                onChangeText={(val) => {
+                  setPin(val);
+                  setDirty(true);
+                }}
+                editable={canEditPin}
+                keyboardType="number-pad"
+                maxLength={8}
+                placeholder="Enter new 4-digit PIN (e.g. 1234)"
+                placeholderTextColor="#94A3B8"
+                className="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-base font-bold tracking-widest text-slate-900"
+              />
+            </View>
+          </View>
+
+          <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
             Account status
           </Text>
           <View className="mb-7 flex-row items-center rounded-3xl border border-slate-200 bg-white p-5">
@@ -298,7 +338,7 @@ function UserDetailContent() {
             />
           </View>
 
-          {canManage ? (
+          {canManage || isSelf ? (
             <View className="rounded-3xl border border-slate-200 bg-white p-4">
               {!selectedBranches.length ? (
                 <Text className="mb-3 text-center text-sm text-red-600">

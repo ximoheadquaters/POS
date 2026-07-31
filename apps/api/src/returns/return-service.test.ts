@@ -10,7 +10,7 @@ class ReturnDatabase implements Database {
     if (sql.startsWith('select branch_id, status')) {
       return result([{ branch_id: 'branch', status: 'completed' } as unknown as T]);
     }
-    if (sql.startsWith('select 1 from register_shifts')) {
+    if (sql.includes('from register_shifts')) {
       return result([{ '?column?': 1 } as unknown as T]);
     }
     if (sql.startsWith('select si.id, si.product_id')) {

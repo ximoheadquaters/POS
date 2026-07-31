@@ -95,8 +95,14 @@ export default function ReceiptScreen() {
           <View className="mt-8 gap-3">
             {printerEnabled && !offline ? (
               <Button
-                title={print.isPending ? 'Printing…' : 'Print receipt'}
-                disabled={print.isPending}
+                title={
+                  print.isPending
+                    ? 'Printing…'
+                    : sale.isLoading
+                      ? 'Loading items…'
+                      : 'Print receipt'
+                }
+                disabled={print.isPending || sale.isLoading}
                 onPress={() => print.mutate()}
               />
             ) : null}

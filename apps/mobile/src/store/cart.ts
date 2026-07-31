@@ -53,6 +53,7 @@ interface CartState {
   syncProducts(products: CartProduct[]): void;
   remove(productId: string): void;
   setCustomer(customerId: string | null): void;
+  replaceCart(items: CartItem[], customerId?: string | null): void;
   clear(): void;
 }
 
@@ -211,6 +212,10 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
   setCustomer(customerId) {
     set({ customerId });
+    void saveCart(get());
+  },
+  replaceCart(items, customerId) {
+    set({ items, customerId: customerId ?? null });
     void saveCart(get());
   },
   clear() {

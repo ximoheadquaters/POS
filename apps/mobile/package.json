@@ -5,6 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli start",
+    "dev": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli start",
     "android": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli start --android",
     "build": "node --env-file-if-exists=../../.env node_modules/expo/bin/cli export --platform android --output-dir dist",
     "build:web": "pnpm --filter @ximo/shared build && node --env-file-if-exists=../../.env node_modules/expo/bin/cli export --platform web --output-dir dist-web && node scripts/copy-web-public.mjs",

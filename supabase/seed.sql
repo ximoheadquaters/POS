@@ -23,7 +23,7 @@ select p.id, m.id from public.plans p cross join public.modules m
 where m.code not in (
   'barcode_scanner','receipt_printer','cash_drawer','payment_terminal','customer_display'
 ) and (
-  (p.code = 'starter' and m.code in ('dashboard','pos','products','inventory','customers','registers'))
+  (p.code = 'starter' and m.code in ('dashboard','pos','products','inventory','customers','returns','registers'))
   or (p.code = 'business' and m.code in (
     'dashboard','pos','products','inventory','customers','returns','registers','reports',
     'suppliers','purchasing','stock_transfers'
@@ -39,15 +39,16 @@ insert into public.permissions (code, description) values
   ('users:read','View users'), ('users:manage','Manage users'),
   ('products:read','View products'), ('products:manage','Manage products'),
   ('inventory:read','View inventory'), ('inventory:adjust','Adjust inventory'),
+  ('transfers:read','View stock transfers'), ('transfers:manage','Manage stock transfers'), ('transfers:receive','Receive stock transfers'),
   ('suppliers:read','View suppliers'), ('suppliers:manage','Manage suppliers'),
   ('purchasing:read','View purchasing'), ('purchasing:manage','Manage purchase orders'),
-  ('purchasing:receive','Receive supplier stock'), ('purchasing:return','Return supplier stock'),
+  ('purchasing:receive','Receive supplier stock'), ('purchasing:return','Return supplier stock'), ('purchasing:pay','Record supplier payments'),
   ('registers:read','View registers'), ('registers:manage','Manage registers'),
   ('shifts:open','Open shifts'), ('shifts:close','Close shifts'), ('cash:move','Record cash movements'),
   ('sales:create','Complete sales'), ('sales:read_branch','View branch sales'), ('sales:read_all','View all sales'),
-  ('returns:create','Create returns'), ('customers:read','View customers'),
-  ('customers:manage','Manage customers'), ('reports:read','View reports'),
-  ('settings:manage','Manage settings'), ('audit:read','View audit log'), ('modules:manage','Manage module overrides')
+  ('returns:create','Create returns'), ('returns:manage','Manage refund approvals'), ('customers:read','View customers'),
+  ('customers:manage','Manage customers'), ('promotions:read','View promotions'), ('promotions:manage','Manage promotions and combos'),
+  ('reports:read','View reports'), ('settings:manage','Manage settings'), ('audit:read','View audit log'), ('modules:manage','Manage module overrides')
 on conflict (code) do nothing;
 
 insert into public.organizations (id, name, slug, currency, timezone)

@@ -4,10 +4,11 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { AppSidebarProvider } from '@/components/app-sidebar';
-import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import { Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useBranchStore } from '@/store/branch';
+import { useSession } from '@/providers/session';
 
 interface ShiftSummary {
   shiftCount: number;
@@ -51,8 +52,30 @@ const periods = [
 ] as const;
 
 function ShiftReportsContent() {
+  const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
   const [period, setPeriod] = useState(2);
+  const isModuleEnabled = currentUser?.modules.includes('registers');
+
+  if (!isModuleEnabled) {
+    return (
+      <Screen>
+        <Header title="Shift History" showBack backLabel="Back" />
+        <View className="flex-1 items-center justify-center p-8">
+          <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 border border-amber-200">
+            <Feather name="lock" size={26} color="#B45309" />
+          </View>
+          <Text className="text-xl font-bold text-slate-900">Module Access Disabled</Text>
+          <Text className="mt-2 max-w-xs text-center text-xs text-slate-500 leading-relaxed">
+            The Registers & Shifts module is disabled for your organization. Contact your administrator or store owner to enable register management.
+          </Text>
+          <View className="mt-6 w-full max-w-xs">
+            <Button title="Return to POS" onPress={() => router.push('/(tabs)/pos')} />
+          </View>
+        </View>
+      </Screen>
+    );
+  }
   const range = useMemo(() => {
     const to = new Date();
     to.setHours(0, 0, 0, 0);

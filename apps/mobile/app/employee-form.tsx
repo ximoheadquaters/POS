@@ -138,6 +138,22 @@ function EmployeeFormContent() {
               />
             )}
           />
+          <Controller
+            control={form.control}
+            name="pin"
+            render={({ field, fieldState }) => (
+              <Field
+                label="Security PIN (for Manager Authorization Overrides)"
+                value={field.value ?? ''}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                keyboardType="number-pad"
+                maxLength={8}
+                placeholder="e.g. 1234 (4 to 8 digits)"
+                error={fieldState.error?.message}
+              />
+            )}
+          />
           <View className="mb-6 rounded-2xl bg-brand-50 p-4">
             <Text className="font-bold text-brand-900">Share the password securely</Text>
             <Text className="mt-1 text-sm leading-5 text-slate-600">

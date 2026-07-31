@@ -19,6 +19,7 @@ import { sendData } from '../../shared/http.js';
 const updateUserSchema = z.object({
   role: roleCodeSchema.optional(),
   isActive: z.boolean().optional(),
+  pin: z.string().trim().min(4).max(8).optional(),
   branchIds: z.array(uuidSchema).optional(),
 });
 
@@ -87,6 +88,15 @@ export function usersRouter(database: Database, authActions: AuthActions): Route
       [request.authUser!.organization.id],
     );
     sendData(response, result.rows);
+  });
+  router.patch('/me/pin', async (request, response) => {
+    const pinSchema = z.object({ pin: z.string().trim().min(4).max(8) });
+    const { pin } = pinSchema.parse(request.body);
+    await database.query(
+      `update profiles set pin=$2, updated_at=now() where id=$1 and organization_id=$3`,
+      [request.authUser!.id, pin, request.authUser!.organization.id],
+    );
+    sendData(response, { message: 'Security PIN updated successfully' });
   });
   router.get('/roles', requirePermission('users:read'), async (request, response) => {
     const organizationId = request.authUser!.organization.id;
@@ -219,16 +229,17 @@ export function usersRouter(database: Database, authActions: AuthActions): Route
       try {
         const employee = await database.transaction(async (tx) => {
           const profile = await tx.query(
-            `insert into profiles (id,organization_id,role_id,display_name,email)
-             select $1,$2,r.id,$3,$4 from roles r
+            `insert into profiles (id,organization_id,role_id,display_name,email,pin)
+             select $1,$2,r.id,$3,$4,$6 from roles r
              where r.organization_id=$2 and r.code=$5
-             returning id,display_name as "displayName",email,is_active as "isActive"`,
+             returning id,display_name as "displayName",email,is_active as "isActive",pin`,
             [
               authUser.id,
               organizationId,
               request.body.displayName,
               authUser.email,
               request.body.role,
+              request.body.pin ?? null,
             ],
           );
           if (!profile.rows[0]) throw notFound('Role');
@@ -275,9 +286,16 @@ export function usersRouter(database: Database, authActions: AuthActions): Route
       const userId = uuidSchema.parse(request.params.id);
       const organizationId = request.authUser!.organization.id;
       if (userId === request.authUser!.id) {
+        if (request.body.pin && !request.body.role && !request.body.branchIds && request.body.isActive === undefined) {
+          await database.query(
+            `update profiles set pin=$2, updated_at=now() where id=$1 and organization_id=$3`,
+            [userId, request.body.pin, organizationId],
+          );
+          return sendData(response, { id: userId, updated: true });
+        }
         throw badRequest(
           'SELF_MANAGEMENT_DENIED',
-          'Use another administrator to modify your account',
+          'Use another administrator to modify your account role or branches',
         );
       }
       const result = await database.transaction(async (tx) => {
@@ -298,6 +316,12 @@ export function usersRouter(database: Database, authActions: AuthActions): Route
           request.authUser!.branches.map((branch) => branch.id),
           target.branchIds,
         );
+        if (request.body.pin) {
+          await tx.query(
+            `update profiles set pin=$3, updated_at=now() where id=$1 and organization_id=$2`,
+            [userId, organizationId, request.body.pin],
+          );
+        }
         if (request.body.role) {
           assertCanManageRole(request.authUser!.role, request.body.role);
           await tx.query(

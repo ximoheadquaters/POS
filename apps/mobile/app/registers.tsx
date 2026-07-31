@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { minorToMoney, moneyToMinor } from '@ximo/shared';
@@ -54,6 +55,9 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 function RegistersContent() {
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
+  const branchHydrated = useBranchStore((state) => state.hydrated);
+  const hydrateBranch = useBranchStore((state) => state.hydrate);
+  const selectBranch = useBranchStore((state) => state.select);
   const shift = useShiftStore((state) => state.activeShift);
   const hydrate = useShiftStore((state) => state.hydrate);
   const setActive = useShiftStore((state) => state.setActive);
@@ -68,7 +72,16 @@ function RegistersContent() {
   const [closeReviewOpen, setCloseReviewOpen] = useState(false);
   const client = useQueryClient();
 
+  useEffect(() => void hydrateBranch(), [hydrateBranch]);
   useEffect(() => void hydrate(), [hydrate]);
+
+  // Auto-select the first branch if none is set
+  useEffect(() => {
+    if (!branchHydrated || branch) return;
+    if (currentUser?.branches && currentUser.branches.length > 0) {
+      void selectBranch(currentUser.branches[0]);
+    }
+  }, [branch, branchHydrated, currentUser, selectBranch]);
 
   const query = useQuery({
     queryKey: ['registers', branch?.id],
@@ -87,6 +100,28 @@ function RegistersContent() {
   });
 
   const shiftDetail = shiftDetailQuery.data;
+  const isModuleEnabled = currentUser?.modules.includes('registers');
+
+  if (!isModuleEnabled) {
+    return (
+      <Screen>
+        <Header title="Registers & Shifts" showBack backLabel="Back" />
+        <View className="flex-1 items-center justify-center p-8">
+          <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 border border-amber-200">
+            <Feather name="lock" size={26} color="#B45309" />
+          </View>
+          <Text className="text-xl font-bold text-slate-900">Module Access Disabled</Text>
+          <Text className="mt-2 max-w-xs text-center text-xs text-slate-500 leading-relaxed">
+            The Registers & Shifts module is disabled for your organization. Contact your administrator or store owner to enable register management.
+          </Text>
+          <View className="mt-6 w-full max-w-xs">
+            <Button title="Return to POS" onPress={() => router.push('/(tabs)/pos')} />
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
   const runningExpectedCash = shiftDetail
     ? minorToMoney(
         moneyToMinor(shiftDetail.startingCash) +
@@ -207,6 +242,21 @@ function RegistersContent() {
   const closeDisabled = close.isPending || !countedCashValid || offlineSales > 0;
 
   if (!branch) {
+    // Still hydrating or auto-selecting — show loading
+    if (!branchHydrated || (currentUser?.branches && currentUser.branches.length > 0)) {
+      return (
+        <Screen>
+          <Header
+            title="Registers & shifts"
+            subtitle="Loading…"
+            showBack
+            backLabel="More"
+            fallbackHref="/(tabs)/more"
+          />
+          <LoadingState label="Setting up your branch…" />
+        </Screen>
+      );
+    }
     return (
       <Screen>
         <Header
@@ -218,8 +268,8 @@ function RegistersContent() {
         />
         <View className="flex-1 p-4">
           <EmptyState
-            title="Select a branch first"
-            message="Choose your working branch, then return to Registers & shifts."
+            title="No branches available"
+            message="Ask an administrator to assign you to a branch."
           />
         </View>
       </Screen>

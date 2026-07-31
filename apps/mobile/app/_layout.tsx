@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { SessionProvider } from '@/providers/session';
 import { OfflineProvider } from '@/providers/offline';
+import { IosAlertProvider } from '@/providers/ios-alert';
 
 export default function RootLayout() {
   const [queryClient] = useState(
@@ -35,23 +36,25 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <OfflineProvider>
-            <StatusBar style="dark" backgroundColor="#FFFFFF" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: '#F8F7F5' },
-                animation: 'slide_from_right',
-              }}
-            >
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="accept-invitation" />
-              <Stack.Screen name="branch-select" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="hardware" />
-              <Stack.Screen name="cart" options={{ presentation: 'modal' }} />
-              <Stack.Screen name="payment" options={{ presentation: 'modal' }} />
-            </Stack>
+            <IosAlertProvider>
+              <StatusBar style="dark" backgroundColor="#FFFFFF" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: '#F8F7F5' },
+                  animation: 'slide_from_right',
+                }}
+              >
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="accept-invitation" />
+                <Stack.Screen name="branch-select" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="hardware" />
+                <Stack.Screen name="cart" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="payment" options={{ presentation: 'modal' }} />
+              </Stack>
+            </IosAlertProvider>
           </OfflineProvider>
         </SessionProvider>
       </QueryClientProvider>

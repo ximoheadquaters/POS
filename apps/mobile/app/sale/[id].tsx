@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Alert, Platform, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -33,7 +34,12 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 
 function SaleDetailsContent() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { currentUser } = useSession();
+  const { currentUser, refreshUser } = useSession();
+
+  useEffect(() => {
+    void refreshUser().catch(() => undefined);
+  }, [refreshUser]);
+
   const query = useQuery({
     queryKey: ['sale', id],
     queryFn: () => api<SaleDetail>(`/sales/${id}`),
@@ -100,6 +106,7 @@ function SaleDetailsContent() {
         </View>
         <View className="mt-6 gap-3">
           {currentUser?.permissions.includes('returns:create') &&
+          currentUser?.modules.includes('returns') &&
           ['completed', 'partially_refunded'].includes(sale.status) ? (
             <Button
               title="Return items"

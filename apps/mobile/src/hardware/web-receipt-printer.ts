@@ -11,18 +11,15 @@ function escapeHtml(value: string | number | null | undefined): string {
 
 function money(value: string | undefined, currency = 'PHP'): string {
   const amount = Number(value ?? '0');
-  try {
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${currency} ${amount.toFixed(2)}`;
-  }
+  const formatted = amount.toFixed(2);
+  const prefix = currency === 'PHP' ? 'PHP ' : `${currency} `;
+  return `${prefix}${formatted}`;
 }
 
 export function buildReceiptHtml(job: ReceiptPrintJob): string {
+  const paperSize = job.paperSize ?? '58mm';
+  const is58mm = paperSize === '58mm';
+
   const itemRows = (job.items ?? [])
     .map(
       (item) => `
@@ -47,25 +44,44 @@ export function buildReceiptHtml(job: ReceiptPrintJob): string {
     ? job.completedAt
     : completedAt.toLocaleString('en-PH');
 
+  const pageCss = is58mm
+    ? `@page { size: 58mm auto; margin: 0; }
+       html { margin: 0; padding: 0; width: 58mm; background: #fff; }
+       body { margin: 0 auto; padding: 2mm 2mm 5mm 2mm; width: 52mm; max-width: 52mm; height: max-content; min-height: fit-content; color: #000; background: #fff; font: 10px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; -webkit-print-color-adjust: exact; }
+       h1 { margin: 0; font-size: 15px; text-align: center; font-weight: 800; }
+       .divider { margin: 5px 0; border-top: 1px dashed #000; }
+       .row { display: flex; justify-content: space-between; gap: 4px; }
+       .item-name { margin-top: 4px; font-weight: 700; font-size: 10px; overflow-wrap: anywhere; }
+       .item-detail { padding-left: 2px; font-size: 9.5px; }
+       .total { margin-top: 4px; font-size: 13px; font-weight: 800; }
+       .footer { margin-top: 8px; text-align: center; font-size: 9.5px; }
+       @media print {
+         html, body { width: 52mm; max-width: 52mm; height: max-content; margin: 0 auto; }
+       }`
+    : `@page { size: 80mm auto; margin: 4mm; }
+       html, body { margin: 0; padding: 0; width: 72mm; color: #000; background: #fff; }
+       body { font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; -webkit-print-color-adjust: exact; height: max-content; }
+       h1 { margin: 0; font-size: 18px; text-align: center; }
+       .divider { margin: 8px 0; border-top: 1px dashed #000; }
+       .row { display: flex; justify-content: space-between; gap: 8px; }
+       .item-name { margin-top: 6px; font-weight: 700; overflow-wrap: anywhere; }
+       .item-detail { padding-left: 6px; }
+       .total { margin-top: 4px; font-size: 15px; font-weight: 800; }
+       .footer { margin-top: 10px; text-align: center; font-size: 9.5px; }
+       @media print {
+         body { width: 72mm; max-width: 72mm; height: max-content; margin: 0 auto; }
+       }`;
+
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <title>Receipt ${escapeHtml(job.receiptNumber)}</title>
     <style>
-      @page { size: 80mm auto; margin: 4mm; }
       * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; width: 72mm; color: #000; background: #fff; }
-      body { font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-      h1 { margin: 0; font-size: 18px; text-align: center; }
       .center { text-align: center; }
       .muted { color: #333; }
-      .divider { margin: 8px 0; border-top: 1px dashed #000; }
-      .row { display: flex; justify-content: space-between; gap: 8px; }
-      .item-name { margin-top: 6px; font-weight: 700; overflow-wrap: anywhere; }
-      .item-detail { padding-left: 6px; }
-      .total { margin-top: 4px; font-size: 15px; font-weight: 800; }
-      .footer { margin-top: 10px; text-align: center; }
+      ${pageCss}
     </style>
   </head>
   <body>
@@ -131,9 +147,16 @@ async function printHtml(html: string): Promise<void> {
         if (!printWindow) throw new Error('The browser could not create a print preview.');
         printWindow.onafterprint = cleanup;
         printWindow.focus();
-        printWindow.print();
+        globalThis.setTimeout(() => {
+          try {
+            printWindow.print();
+            resolve();
+          } catch (err) {
+            cleanup();
+            reject(err);
+          }
+        }, 150);
         globalThis.setTimeout(cleanup, 60_000);
-        resolve();
       } catch (error) {
         cleanup();
         reject(error);

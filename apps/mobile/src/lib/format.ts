@@ -9,6 +9,20 @@ export function formatMoney(value: string, currency = 'PHP'): string {
   return `${isNegative ? '-' : ''}${symbol}${grouped}.${fraction}`;
 }
 
+export function formatDate(isoString: string): string {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return isoString;
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
 export function todayRange(): { from: string; to: string } {
   const now = new Date();
   const from = new Date(now);
