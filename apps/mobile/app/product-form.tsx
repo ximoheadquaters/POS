@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
@@ -178,6 +178,20 @@ function ProductFormContent() {
   const [pricingOffset, setPricingOffset] = useState(0);
   const queryClient = useQueryClient();
 
+  const [recipeEnabled, setRecipeEnabled] = useState(false);
+  const [recipeItems, setRecipeItems] = useState<
+    Array<{
+      ingredientProductId: string;
+      ingredientName: string;
+      quantityRequired: number;
+      unit: string;
+      cost: string;
+    }>
+  >([]);
+  const [recipeSelectedIngredientId, setRecipeSelectedIngredientId] = useState('');
+  const [recipeQtyInput, setRecipeQtyInput] = useState('1');
+  const [recipeUnitInput, setRecipeUnitInput] = useState('piece');
+
   const categories = useQuery({
     queryKey: ['categories'],
     queryFn: () => api<CatalogueItem[]>('/categories'),
@@ -195,6 +209,53 @@ function ProductFormContent() {
     enabled: isEditing,
     queryFn: () => api<ProductDetails>(`/products/${productId}`),
   });
+
+  const allProductsQuery = useQuery({
+    queryKey: ['all-products-for-recipe', branch?.id],
+    queryFn: () =>
+      api<any>(
+        `/products?includeInactive=true&includeIncoming=true&pageSize=200${
+          branch?.id ? `&branchId=${branch.id}` : ''
+        }`,
+      ),
+  });
+
+  const availableIngredients = useMemo(() => {
+    const raw = allProductsQuery.data;
+    const list: Array<{ id: string; name: string; sku: string; cost: string; unit: string; status: string }> =
+      Array.isArray(raw) ? raw : Array.isArray(raw?.items) ? raw.items : [];
+    return list.filter((p) => p.id !== productId);
+  }, [allProductsQuery.data, productId]);
+
+  const existingRecipeQuery = useQuery({
+    queryKey: ['product-recipe', productId],
+    enabled: isEditing,
+    queryFn: () =>
+      api<
+        Array<{
+          ingredientProductId: string;
+          ingredientName: string;
+          quantityRequired: number;
+          unit: string;
+          ingredientCost: string;
+        }>
+      >(`/products/${productId}/recipe`),
+  });
+
+  useEffect(() => {
+    if (existingRecipeQuery.data && existingRecipeQuery.data.length > 0) {
+      setRecipeEnabled(true);
+      setRecipeItems(
+        existingRecipeQuery.data.map((r) => ({
+          ingredientProductId: r.ingredientProductId,
+          ingredientName: r.ingredientName,
+          quantityRequired: r.quantityRequired,
+          unit: r.unit,
+          cost: r.ingredientCost || '0.00',
+        })),
+      );
+    }
+  }, [existingRecipeQuery.data]);
 
   const activeUnits =
     units.data?.filter((unit) => unit.isActive) ??
@@ -335,7 +396,7 @@ function ProductFormContent() {
   };
 
   const mutation = useMutation({
-    mutationFn: (input: ProductInput) => {
+    mutationFn: async (input: ProductInput) => {
       const quantity = Number(openingQuantity);
       if (
         !isEditing &&
@@ -359,37 +420,59 @@ function ProductFormContent() {
       if (!isEditing && alternateEnabled && (!alternateSku.trim() || !alternatePrice.trim())) {
         throw new Error('Enter the alternate unit SKU and selling price');
       }
+      let savedProduct: CartProduct;
       if (isEditing) {
-        return api<CartProduct>(`/products/${productId}`, {
+        savedProduct = await api<CartProduct>(`/products/${productId}`, {
           method: 'PATCH',
           body: JSON.stringify({
             ...input,
             barcode: input.barcode ?? null,
           }),
         });
+      } else {
+        savedProduct = await api<CartProduct>('/products', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...input,
+            status: incoming ? 'pending_receipt' : input.status,
+            trackInventory: incoming ? true : input.trackInventory,
+            branchId: branch.id,
+            openingQuantity: incoming ? 0 : input.trackInventory ? quantity : 0,
+            sellingUnits: alternateEnabled
+              ? [
+                  {
+                    name: `${alternateUnit.toUpperCase()} of ${conversion}`,
+                    sku: alternateSku.trim(),
+                    barcode: alternateBarcode.trim() || undefined,
+                    unit: alternateUnit,
+                    unitsPerBase: conversion,
+                    sellingPrice: alternatePrice,
+                  },
+                ]
+              : [],
+          }),
+        });
       }
-      return api<CartProduct>('/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...input,
-          status: incoming ? 'pending_receipt' : input.status,
-          trackInventory: incoming ? true : input.trackInventory,
-          branchId: branch.id,
-          openingQuantity: incoming ? 0 : input.trackInventory ? quantity : 0,
-          sellingUnits: alternateEnabled
-            ? [
-                {
-                  name: `${alternateUnit.toUpperCase()} of ${conversion}`,
-                  sku: alternateSku.trim(),
-                  barcode: alternateBarcode.trim() || undefined,
-                  unit: alternateUnit,
-                  unitsPerBase: conversion,
-                  sellingPrice: alternatePrice,
-                },
-              ]
-            : [],
-        }),
-      });
+
+      if (recipeEnabled && recipeItems.length > 0) {
+        await api(`/products/${savedProduct.id}/recipe`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            items: recipeItems.map((i) => ({
+              ingredientProductId: i.ingredientProductId,
+              quantityRequired: i.quantityRequired,
+              unit: i.unit,
+            })),
+          }),
+        });
+      } else if (isEditing && !recipeEnabled) {
+        await api(`/products/${savedProduct.id}/recipe`, {
+          method: 'PUT',
+          body: JSON.stringify({ items: [] }),
+        });
+      }
+
+      return savedProduct;
     },
     onSuccess: async (product) => {
       await Promise.all([
@@ -1081,7 +1164,238 @@ function ProductFormContent() {
               ) : null}
             </View>
 
-            <SectionLabel>Other settings</SectionLabel>
+            <SectionLabel>Recipe & Ingredients (BOM)</SectionLabel>
+            <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <View className="min-h-20 flex-row items-center justify-between p-5">
+                <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
+                  <Feather name="coffee" size={17} color="#1A593B" />
+                </View>
+                <View className="flex-1 pr-3">
+                  <Text className="font-medium text-slate-900">
+                    Composite product recipe (BOM)
+                  </Text>
+                  <Text className="mt-1 text-xs leading-4 text-slate-500">
+                    Deduct raw inventory ingredients (e.g. coffee beans, milk, cups) on sale checkout.
+                  </Text>
+                </View>
+                <Switch
+                  value={recipeEnabled}
+                  onValueChange={(val) => {
+                    setRecipeEnabled(val);
+                    if (!val) setRecipeItems([]);
+                  }}
+                  trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
+                  thumbColor={recipeEnabled ? '#1A593B' : '#FFFFFF'}
+                />
+              </View>
+
+              {recipeEnabled ? (
+                <View className="border-t border-slate-100 p-5">
+                  <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    1. Select Raw Ingredient Item
+                  </Text>
+                {availableIngredients.length === 0 ? (
+                  <View className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <Text className="text-xs font-medium text-amber-900">
+                      No other products in inventory yet
+                    </Text>
+                    <Text className="mt-1 text-xs leading-4 text-amber-800">
+                      Create raw inventory items first (e.g., Coffee Beans, Fresh Milk, Cups) in
+                      Products, then you can select and link them here as ingredients.
+                    </Text>
+                  </View>
+                ) : (
+                  <View className="mb-4">
+                    <Text className="mb-2 text-xs font-medium text-slate-600">
+                      Tap a product to add as ingredient:
+                    </Text>
+                    <View className="flex-row flex-wrap gap-2">
+                      {availableIngredients.map((ing: { id: string; name: string; cost: string; unit: string }) => {
+                        const selected = recipeSelectedIngredientId === ing.id;
+                        return (
+                          <Pressable
+                            key={ing.id}
+                            onPress={() => {
+                              setRecipeSelectedIngredientId(ing.id);
+                              setRecipeUnitInput(ing.unit || 'piece');
+                            }}
+                            className={`flex-row items-center rounded-xl border px-3 py-2.5 ${
+                              selected
+                                ? 'border-brand-700 bg-brand-700'
+                                : 'border-slate-200 bg-slate-50 active:bg-slate-100'
+                            }`}
+                          >
+                            <Feather
+                              name={selected ? 'check-circle' : 'box'}
+                              size={14}
+                              color={selected ? '#FFFFFF' : '#64748B'}
+                            />
+                            <Text
+                              className={`ml-2 text-xs font-semibold ${
+                                selected ? 'text-white' : 'text-slate-800'
+                              }`}
+                            >
+                              {ing.name}
+                            </Text>
+                            <Text
+                              className={`ml-1.5 text-[11px] ${
+                                selected ? 'text-brand-100' : 'text-slate-400'
+                              }`}
+                            >
+                              ({formatMoney(ing.cost || '0.00')}/{ing.unit || 'pc'})
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  2. Quantity Used per Serving
+                </Text>
+                <View className="mb-3">
+                  <Text className="mb-1 text-xs font-medium text-slate-700">Select Unit</Text>
+                  <View className="flex-row flex-wrap gap-1.5">
+                    {[
+                      { code: 'piece', label: 'Piece (pc)' },
+                      { code: 'g', label: 'Grams (g)' },
+                      { code: 'kg', label: 'Kg (kg)' },
+                      { code: 'ml', label: 'Milliliters (ml)' },
+                      { code: 'l', label: 'Liters (L)' },
+                      { code: 'serving', label: 'Serving' },
+                      { code: 'pack', label: 'Pack' },
+                      { code: 'box', label: 'Box' },
+                    ].map((u) => {
+                      const selected = recipeUnitInput === u.code;
+                      return (
+                        <Pressable
+                          key={u.code}
+                          onPress={() => setRecipeUnitInput(u.code)}
+                          className={`rounded-lg border px-2.5 py-1.5 ${
+                            selected
+                              ? 'border-brand-700 bg-brand-700'
+                              : 'border-slate-200 bg-white'
+                          }`}
+                        >
+                          <Text
+                            className={`text-xs font-medium ${
+                              selected ? 'text-white' : 'text-slate-700'
+                            }`}
+                          >
+                            {u.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View className="flex-row items-center gap-3">
+                  <View className="flex-1">
+                    <Text className="mb-1 text-xs font-medium text-slate-700">
+                      Qty per Serving
+                    </Text>
+                    <TextInput
+                      value={recipeQtyInput}
+                      onChangeText={setRecipeQtyInput}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g. 0.018"
+                      className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 focus:border-brand-700"
+                    />
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      if (!recipeSelectedIngredientId) return;
+                      const ing = availableIngredients.find(
+                        (p: { id: string; name: string; cost: string; unit: string }) => p.id === recipeSelectedIngredientId,
+                      );
+                      if (!ing) return;
+                      const qty = parseFloat(recipeQtyInput) || 1;
+                      setRecipeItems((prev) => [
+                        ...prev.filter((i) => i.ingredientProductId !== ing.id),
+                        {
+                          ingredientProductId: ing.id,
+                          ingredientName: ing.name,
+                          quantityRequired: qty,
+                          unit: recipeUnitInput || ing.unit || 'piece',
+                          cost: ing.cost || '0.00',
+                        },
+                      ]);
+                      setRecipeSelectedIngredientId('');
+                      setRecipeQtyInput('1');
+                    }}
+                    disabled={!recipeSelectedIngredientId}
+                    className={`mt-5 min-h-11 flex-row items-center justify-center rounded-xl px-5 active:opacity-80 ${
+                      recipeSelectedIngredientId ? 'bg-brand-700' : 'bg-slate-200'
+                    }`}
+                  >
+                    <Feather
+                      name="plus"
+                      size={15}
+                      color={recipeSelectedIngredientId ? '#FFFFFF' : '#94A3B8'}
+                    />
+                    <Text
+                      className={`ml-1 text-xs font-bold ${
+                        recipeSelectedIngredientId ? 'text-white' : 'text-slate-400'
+                      }`}
+                    >
+                      Add Ingredient
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {recipeItems.length > 0 ? (
+                  <View className="mt-4 gap-2">
+                    <Text className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Added Ingredients ({recipeItems.length})
+                    </Text>
+                    {recipeItems.map((item) => (
+                      <View
+                        key={item.ingredientProductId}
+                        className="flex-row items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3"
+                      >
+                        <View className="flex-1 pr-2">
+                          <Text className="text-sm font-semibold text-slate-900">
+                            {item.ingredientName}
+                          </Text>
+                          <Text className="text-xs text-emerald-700">
+                            {item.quantityRequired} {item.unit} per serving (Est.{' '}
+                            {formatMoney((parseFloat(item.cost) * item.quantityRequired).toFixed(2))})
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() =>
+                            setRecipeItems((prev) =>
+                              prev.filter((i) => i.ingredientProductId !== item.ingredientProductId),
+                            )
+                          }
+                          className="h-8 w-8 items-center justify-center rounded-lg bg-rose-50 border border-rose-200"
+                        >
+                          <Feather name="trash-2" size={14} color="#E11D48" />
+                        </Pressable>
+                      </View>
+                    ))}
+                    <View className="mt-2 flex-row items-center justify-between rounded-2xl bg-brand-50 p-3 border border-brand-100">
+                      <Text className="text-xs font-medium text-brand-900">Est. Raw Material Cost:</Text>
+                      <Text className="text-sm font-bold text-brand-900">
+                        {formatMoney(
+                          recipeItems
+                            .reduce(
+                              (sum, i) => sum + parseFloat(i.cost || '0') * i.quantityRequired,
+                              0,
+                            )
+                            .toFixed(2),
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+
+          <SectionLabel>Other settings</SectionLabel>
             <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
               <CardHeader
                 icon="settings"

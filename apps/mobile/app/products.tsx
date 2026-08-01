@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
@@ -30,8 +30,302 @@ interface Product {
   brandName?: string;
 }
 
+interface RecipeItemRow {
+  ingredientProductId: string;
+  ingredientName: string;
+  quantityRequired: number;
+  unit: string;
+  cost: string;
+}
+
+function RecipeModal({
+  product,
+  onClose,
+  allProducts,
+}: {
+  product: Product | null;
+  onClose(): void;
+  allProducts: Product[];
+}) {
+  const queryClient = useQueryClient();
+  const [items, setItems] = useState<RecipeItemRow[]>([]);
+  const [selectedIngredientId, setSelectedIngredientId] = useState('');
+  const [quantityInput, setQuantityInput] = useState('1');
+  const [unitInput, setUnitInput] = useState('piece');
+
+  const recipeQuery = useQuery({
+    queryKey: ['product-recipe', product?.id],
+    enabled: Boolean(product?.id),
+    queryFn: async () => {
+      const res = await api<
+        Array<{
+          ingredientProductId: string;
+          ingredientName: string;
+          quantityRequired: number;
+          unit: string;
+          ingredientCost: string;
+        }>
+      >(`/products/${product!.id}/recipe`);
+      return res;
+    },
+  });
+
+  useEffect(() => {
+    if (recipeQuery.data) {
+      setItems(
+        recipeQuery.data.map((r) => ({
+          ingredientProductId: r.ingredientProductId,
+          ingredientName: r.ingredientName,
+          quantityRequired: r.quantityRequired,
+          unit: r.unit,
+          cost: r.ingredientCost || '0.00',
+        })),
+      );
+    }
+  }, [recipeQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (recipeItems: RecipeItemRow[]) => {
+      await api(`/products/${product!.id}/recipe`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          items: recipeItems.map((item) => ({
+            ingredientProductId: item.ingredientProductId,
+            quantityRequired: item.quantityRequired,
+            unit: item.unit,
+          })),
+        }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product-recipe', product?.id] });
+      Alert.alert('Recipe Saved', `Bill of Materials template for ${product?.name} has been updated.`);
+      onClose();
+    },
+    onError: (err: any) => {
+      Alert.alert('Error', err?.message || 'Failed to save recipe');
+    },
+  });
+
+  if (!product) return null;
+
+  const availableIngredients = allProducts.filter((p) => p.id !== product.id);
+
+  const totalIngredientCost = items.reduce((sum, item) => {
+    return sum + parseFloat(item.cost || '0') * item.quantityRequired;
+  }, 0);
+
+  const handleAddIngredient = () => {
+    if (!selectedIngredientId) return;
+    const ing = availableIngredients.find((p) => p.id === selectedIngredientId);
+    if (!ing) return;
+
+    const qty = parseFloat(quantityInput) || 1;
+    setItems((prev) => [
+      ...prev.filter((i) => i.ingredientProductId !== ing.id),
+      {
+        ingredientProductId: ing.id,
+        ingredientName: ing.name,
+        quantityRequired: qty,
+        unit: unitInput || ing.unit || 'piece',
+        cost: ing.cost || '0.00',
+      },
+    ]);
+    setSelectedIngredientId('');
+    setQuantityInput('1');
+  };
+
+  const handleRemoveIngredient = (id: string) => {
+    setItems((prev) => prev.filter((i) => i.ingredientProductId !== id));
+  };
+
+  return (
+    <Modal visible={Boolean(product)} animationType="fade" transparent>
+      <View className="flex-1 items-center justify-center bg-black/70 p-4 sm:p-6">
+        <View className="w-full max-w-lg max-h-[85%] rounded-3xl bg-slate-900 p-6 border border-slate-800 shadow-2xl">
+          <View className="flex-row items-center justify-between border-b border-slate-800 pb-4 mb-4">
+            <View className="flex-row items-center">
+              <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 mr-3">
+                <Feather name="coffee" size={20} color="#10B981" />
+              </View>
+              <View>
+                <Text className="text-lg font-bold text-white">Recipe & BOM Template</Text>
+                <Text className="text-xs text-slate-400">
+                  {product.name} ({formatMoney(product.sellingPrice)})
+                </Text>
+              </View>
+            </View>
+            <Pressable onPress={onClose} className="h-8 w-8 items-center justify-center rounded-full bg-slate-800">
+              <Feather name="x" size={18} color="#94A3B8" />
+            </Pressable>
+          </View>
+
+          <ScrollView className="mb-4">
+            <Text className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              Add Raw Ingredient
+            </Text>
+            <View className="mb-4 rounded-2xl bg-slate-800/80 p-4 border border-slate-700">
+              <Text className="text-xs font-medium text-slate-300 mb-2">Select Ingredient Product</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
+                <View className="flex-row gap-2">
+                  {availableIngredients.slice(0, 15).map((ing) => {
+                    const selected = selectedIngredientId === ing.id;
+                    return (
+                      <Pressable
+                        key={ing.id}
+                        onPress={() => {
+                          setSelectedIngredientId(ing.id);
+                          setUnitInput(ing.unit || 'piece');
+                        }}
+                        className={`px-3 py-2 rounded-xl border ${
+                          selected
+                            ? 'bg-emerald-500/20 border-emerald-500'
+                            : 'bg-slate-800 border-slate-700'
+                        }`}
+                      >
+                        <Text className={`text-xs font-medium ${selected ? 'text-emerald-400' : 'text-slate-300'}`}>
+                          {ing.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              <View className="mb-3">
+                <Text className="text-xs font-medium text-slate-300 mb-1">Select Unit</Text>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {[
+                    { code: 'piece', label: 'Piece (pc)' },
+                    { code: 'g', label: 'Grams (g)' },
+                    { code: 'kg', label: 'Kg (kg)' },
+                    { code: 'ml', label: 'Milliliters (ml)' },
+                    { code: 'l', label: 'Liters (L)' },
+                    { code: 'serving', label: 'Serving' },
+                    { code: 'pack', label: 'Pack' },
+                    { code: 'box', label: 'Box' },
+                  ].map((u) => {
+                    const selected = unitInput === u.code;
+                    return (
+                      <Pressable
+                        key={u.code}
+                        onPress={() => setUnitInput(u.code)}
+                        className={`rounded-lg border px-2.5 py-1.5 ${
+                          selected
+                            ? 'bg-emerald-500/20 border-emerald-500'
+                            : 'bg-slate-800 border-slate-700'
+                        }`}
+                      >
+                        <Text className={`text-xs font-medium ${selected ? 'text-emerald-400' : 'text-slate-300'}`}>
+                          {u.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View className="flex-row gap-3 items-center">
+                <View className="flex-1">
+                  <Text className="text-xs font-medium text-slate-300 mb-1">Qty per Serving</Text>
+                  <TextInput
+                    value={quantityInput}
+                    onChangeText={setQuantityInput}
+                    keyboardType="decimal-pad"
+                    className="h-10 rounded-xl bg-slate-900 px-3 text-white text-sm border border-slate-700"
+                    placeholder="e.g. 0.018 or 1"
+                    placeholderTextColor="#64748B"
+                  />
+                </View>
+                <Pressable
+                  onPress={handleAddIngredient}
+                  disabled={!selectedIngredientId}
+                  className={`h-10 px-5 mt-5 rounded-xl items-center justify-center ${
+                    selectedIngredientId ? 'bg-emerald-600' : 'bg-slate-700'
+                  }`}
+                >
+                  <Text className="text-xs font-bold text-white">Add</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <Text className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              Ingredient Breakdown ({items.length})
+            </Text>
+
+            {items.length === 0 ? (
+              <View className="p-6 rounded-2xl bg-slate-800/40 border border-dashed border-slate-700 items-center">
+                <Feather name="box" size={24} color="#64748B" />
+                <Text className="mt-2 text-xs text-slate-400">No ingredients added yet.</Text>
+                <Text className="text-[11px] text-slate-500 text-center mt-1">
+                  Select a raw inventory item above to build the recipe template.
+                </Text>
+              </View>
+            ) : (
+              <View className="gap-2">
+                {items.map((item) => (
+                  <View
+                    key={item.ingredientProductId}
+                    className="flex-row items-center justify-between p-3 rounded-xl bg-slate-800 border border-slate-700"
+                  >
+                    <View className="flex-1 pr-2">
+                      <Text className="text-sm font-semibold text-white">{item.ingredientName}</Text>
+                      <Text className="text-xs text-emerald-400">
+                        {item.quantityRequired} {item.unit} per serving (Est.{' '}
+                        {formatMoney((parseFloat(item.cost) * item.quantityRequired).toFixed(2))})
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => handleRemoveIngredient(item.ingredientProductId)}
+                      className="h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 border border-rose-500/20"
+                    >
+                      <Feather name="trash-2" size={14} color="#F43F5E" />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View className="mt-4 p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex-row justify-between items-center">
+              <View>
+                <Text className="text-xs text-emerald-300 font-medium">Est. Raw Material Cost</Text>
+                <Text className="text-lg font-bold text-emerald-400">
+                  {formatMoney(totalIngredientCost.toFixed(2))}
+                </Text>
+              </View>
+              <View className="items-end">
+                <Text className="text-xs text-slate-400 font-medium">Selling Price</Text>
+                <Text className="text-sm font-semibold text-white">{formatMoney(product.sellingPrice)}</Text>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View className="flex-row gap-3 pt-2">
+            <Pressable
+              onPress={onClose}
+              className="flex-1 h-12 rounded-xl border border-slate-700 bg-slate-800 items-center justify-center"
+            >
+              <Text className="text-sm font-semibold text-slate-300">Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => saveMutation.mutate(items)}
+              disabled={saveMutation.isPending}
+              className="flex-1 h-12 rounded-xl bg-emerald-600 items-center justify-center"
+            >
+              <Text className="text-sm font-semibold text-white">
+                {saveMutation.isPending ? 'Saving...' : 'Save Recipe (BOM)'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function ProductsContent() {
   const [search, setSearch] = useState('');
+  const [editingRecipeProduct, setEditingRecipeProduct] = useState<Product | null>(null);
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
   const queryClient = useQueryClient();
@@ -239,6 +533,14 @@ function ProductsContent() {
                       <Text className="ml-1 text-xs font-medium text-brand-700">Units</Text>
                     </Pressable>
                     <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setEditingRecipeProduct(item)}
+                      className="mt-2 min-h-8 flex-row items-center justify-center rounded-full bg-emerald-50 border border-emerald-200 px-3"
+                    >
+                      <Feather name="coffee" size={12} color="#059669" />
+                      <Text className="ml-1 text-xs font-medium text-emerald-700">Recipe (BOM)</Text>
+                    </Pressable>
+                    <Pressable
                       accessibilityRole="switch"
                       accessibilityState={{ checked: item.status === 'active' }}
                       disabled={statusMutation.isPending}
@@ -267,6 +569,12 @@ function ProductsContent() {
           )}
         />
       )}
+
+      <RecipeModal
+        product={editingRecipeProduct}
+        onClose={() => setEditingRecipeProduct(null)}
+        allProducts={products}
+      />
     </Screen>
   );
 }
