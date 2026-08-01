@@ -214,7 +214,7 @@ function ProductFormContent() {
     queryKey: ['all-products-for-recipe', branch?.id],
     queryFn: () =>
       api<any>(
-        `/products?includeInactive=true&includeIncoming=true&pageSize=200${
+        `/products?includeInactive=true&includeIncoming=true&pageSize=100${
           branch?.id ? `&branchId=${branch.id}` : ''
         }`,
       ),
