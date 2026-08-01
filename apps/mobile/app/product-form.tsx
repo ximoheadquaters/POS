@@ -242,20 +242,7 @@ function ProductFormContent() {
       >(`/products/${productId}/recipe`),
   });
 
-  useEffect(() => {
-    if (existingRecipeQuery.data && existingRecipeQuery.data.length > 0) {
-      setRecipeEnabled(true);
-      setRecipeItems(
-        existingRecipeQuery.data.map((r) => ({
-          ingredientProductId: r.ingredientProductId,
-          ingredientName: r.ingredientName,
-          quantityRequired: r.quantityRequired,
-          unit: r.unit,
-          cost: r.ingredientCost || '0.00',
-        })),
-      );
-    }
-  }, [existingRecipeQuery.data]);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
   const activeUnits =
     units.data?.filter((unit) => unit.isActive) ??
@@ -285,6 +272,18 @@ function ProductFormContent() {
       status: incoming ? 'pending_receipt' : 'active',
     },
   });
+
+  useEffect(() => {
+    if (recipeEnabled && recipeItems.length > 0) {
+      const totalCost = recipeItems.reduce(
+        (sum, item) => sum + parseFloat(item.cost || '0') * item.quantityRequired,
+        0,
+      );
+      if (totalCost > 0) {
+        form.setValue('cost', totalCost.toFixed(2));
+      }
+    }
+  }, [recipeItems, recipeEnabled, form]);
 
   useEffect(() => {
     const product = productDetails.data;
@@ -625,9 +624,52 @@ function ProductFormContent() {
               </View>
             ) : null}
 
-            <SectionLabel>Product setup</SectionLabel>
-            <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
-              <Text className="font-semibold text-slate-950">How is this product sold?</Text>
+            {/* Step Wizard Progress Bar */}
+            <View className="mb-6 rounded-3xl border border-slate-200 bg-white p-3">
+              <View className="flex-row items-center justify-between gap-1">
+                {[
+                  { step: 1, label: '1. Basic Info', icon: 'package' as const },
+                  { step: 2, label: '2. Pricing & Tax', icon: 'dollar-sign' as const },
+                  { step: 3, label: '3. Stock & Recipe', icon: 'box' as const },
+                  { step: 4, label: '4. Availability', icon: 'settings' as const },
+                ].map((s) => {
+                  const active = currentStep === s.step;
+                  const completed = currentStep > s.step;
+                  return (
+                    <Pressable
+                      key={s.step}
+                      onPress={() => setCurrentStep(s.step as any)}
+                      className={`flex-1 flex-row items-center justify-center rounded-2xl py-2.5 px-2 border ${
+                        active
+                          ? 'border-brand-700 bg-brand-700'
+                          : completed
+                            ? 'border-brand-200 bg-brand-50'
+                            : 'border-slate-200 bg-slate-50'
+                      }`}
+                    >
+                      <Feather
+                        name={completed ? 'check-circle' : s.icon}
+                        size={14}
+                        color={active ? '#FFFFFF' : completed ? '#1A593B' : '#64748B'}
+                      />
+                      <Text
+                        className={`ml-1.5 text-xs font-semibold ${
+                          active ? 'text-white' : completed ? 'text-brand-900' : 'text-slate-600'
+                        }`}
+                      >
+                        {s.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {currentStep === 1 ? (
+              <View>
+                <SectionLabel>Product setup</SectionLabel>
+                <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
+                  <Text className="font-semibold text-slate-950">How is this product sold?</Text>
               <Text className="mb-4 mt-1 text-sm leading-5 text-slate-500">
                 Choose the closest setup. You can fine-tune the unit and inventory settings below.
               </Text>
@@ -647,6 +689,9 @@ function ProductFormContent() {
                           shouldValidate: true,
                         });
                         if (!preset.trackInventory) setOpeningQuantity('0');
+                        if (preset.label === 'Prepared food' || preset.label === 'By weight') {
+                          setRecipeEnabled(true);
+                        }
                       }}
                       className={`min-h-24 flex-1 flex-row items-center rounded-2xl border p-4 ${
                         selected ? 'border-brand-500 bg-brand-50' : 'border-slate-200 bg-white'
@@ -831,12 +876,16 @@ function ProductFormContent() {
                 </View>
               </View>
             </View>
+          </View>
+        ) : null}
 
-            <SectionLabel>Pricing</SectionLabel>
-            <View
-              onLayout={(event) => setPricingOffset(event.nativeEvent.layout.y)}
-              className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white"
-            >
+          {currentStep === 2 ? (
+            <View>
+              <SectionLabel>Pricing</SectionLabel>
+              <View
+                onLayout={(event) => setPricingOffset(event.nativeEvent.layout.y)}
+                className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white"
+              >
               <CardHeader
                 icon="credit-card"
                 title="Price and tax"
@@ -890,9 +939,13 @@ function ProductFormContent() {
                 )}
               />
             </View>
+          </View>
+        ) : null}
 
-            <SectionLabel>Inventory and units</SectionLabel>
-            <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          {currentStep === 3 ? (
+            <View>
+              <SectionLabel>Inventory and units</SectionLabel>
+              <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
               <CardHeader
                 icon="box"
                 title="Stock setup"
@@ -1394,8 +1447,12 @@ function ProductFormContent() {
               </View>
             ) : null}
           </View>
+        </View>
+      ) : null}
 
-          <SectionLabel>Other settings</SectionLabel>
+        {currentStep === 4 ? (
+          <View>
+            <SectionLabel>Other settings</SectionLabel>
             <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
               <CardHeader
                 icon="settings"
@@ -1452,42 +1509,73 @@ function ProductFormContent() {
                 />
               )}
             </View>
+          </View>
+        ) : null}
 
-            <View className="rounded-3xl border border-slate-200 bg-white p-4">
-              <View className="gap-3 sm:flex-row">
+          {/* Wizard Navigation Footer Bar */}
+          <View className="mt-4 rounded-3xl border border-slate-200 bg-white p-4">
+            <View className="gap-3 sm:flex-row">
+              {currentStep > 1 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setCurrentStep((s) => (s - 1) as any)}
+                  className="min-h-14 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-36 active:bg-slate-50"
+                >
+                  <Feather name="chevron-left" size={18} color="#334155" />
+                  <Text className="ml-1 font-semibold text-slate-700">Back</Text>
+                </Pressable>
+              ) : (
                 <Pressable
                   accessibilityRole="button"
                   disabled={mutation.isPending}
                   onPress={() => router.back()}
-                  className="min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-40"
+                  className="min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-36 active:bg-slate-50"
                 >
-                  <Text className="font-medium text-slate-700">Cancel</Text>
+                  <Text className="font-semibold text-slate-700">Cancel</Text>
                 </Pressable>
+              )}
+
+              {currentStep < 4 ? (
                 <Pressable
                   accessibilityRole="button"
-                  disabled={mutation.isPending}
-                  onPress={form.handleSubmit((value) => mutation.mutate(value))}
-                  className={`min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 ${
-                    mutation.isPending ? 'opacity-50' : 'active:opacity-80'
-                  }`}
+                  onPress={() => setCurrentStep((s) => (s + 1) as any)}
+                  className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-slate-900 px-5 active:opacity-80"
                 >
-                  <Feather name="check" size={18} color="#FFFFFF" />
-                  <Text className="ml-2 text-base font-semibold text-white">
-                    {mutation.isPending
-                      ? 'Saving…'
-                      : isEditing
-                        ? 'Save changes'
-                        : addToCart
-                          ? 'Save and add to cart'
-                          : incoming
-                            ? 'Register incoming product'
-                            : 'Save product'}
+                  <Text className="mr-2 text-base font-semibold text-white">
+                    Next: {[
+                      '',
+                      'Pricing & Tax',
+                      'Stock & Recipe',
+                      'Media & Status'
+                    ][currentStep]}
                   </Text>
+                  <Feather name="chevron-right" size={18} color="#FFFFFF" />
                 </Pressable>
-              </View>
+              ) : null}
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={mutation.isPending}
+                onPress={form.handleSubmit((value) => mutation.mutate(value))}
+                className={`min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 ${
+                  mutation.isPending ? 'opacity-50' : 'active:opacity-80'
+                }`}
+              >
+                <Feather name="check" size={18} color="#FFFFFF" />
+                <Text className="ml-2 text-base font-semibold text-white">
+                  {mutation.isPending
+                    ? 'Saving…'
+                    : isEditing
+                      ? 'Save changes'
+                      : addToCart
+                        ? 'Save & Add'
+                        : 'Save product'}
+                </Text>
+              </Pressable>
             </View>
           </View>
-        </ScrollView>
+        </View>
+      </ScrollView>
       )}
 
       <Modal
