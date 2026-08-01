@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   createProductSchema,
+  organizationProfileSchema,
   organizationSettingsSchema,
   productUnitSchema,
+  saveRecipeSchema,
   supplierInvoiceSchema,
   supplierPaymentSchema,
   supplierRefundSchema,
@@ -85,6 +87,32 @@ describe('productUnitSchema', () => {
   });
 });
 
+describe('saveRecipeSchema', () => {
+  it('accepts BOM items with an optional manually adjusted product cost', () => {
+    expect(
+      saveRecipeSchema.parse({
+        items: [
+          {
+            ingredientProductId: '11111111-1111-4111-8111-111111111111',
+            quantityRequired: 0.25,
+            unit: 'kg',
+          },
+        ],
+        costOverride: '32.50',
+      }),
+    ).toMatchObject({ costOverride: '32.50' });
+  });
+
+  it('rejects an invalid manual cost adjustment', () => {
+    expect(() =>
+      saveRecipeSchema.parse({
+        items: [],
+        costOverride: '-1.00',
+      }),
+    ).toThrow();
+  });
+});
+
 describe('updateProductSchema', () => {
   it('keeps partial updates partial', () => {
     expect(updateProductSchema.parse({ status: 'inactive' })).toEqual({ status: 'inactive' });
@@ -124,6 +152,19 @@ describe('organizationSettingsSchema', () => {
         lowMarginThresholdPercent: '15.00',
       }),
     ).toThrow('Low-margin warning must not exceed the target margin');
+  });
+});
+
+describe('organizationProfileSchema', () => {
+  it('normalizes the organization currency and accepts a cleared logo', () => {
+    expect(
+      organizationProfileSchema.parse({
+        name: 'Ximo Store Group',
+        currency: 'php',
+        timezone: 'Asia/Manila',
+        logoPath: null,
+      }),
+    ).toMatchObject({ name: 'Ximo Store Group', currency: 'PHP', logoPath: null });
   });
 });
 

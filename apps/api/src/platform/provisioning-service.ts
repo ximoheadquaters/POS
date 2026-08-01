@@ -279,6 +279,8 @@ export class PlatformProvisioningService {
             ($1,'serving','Serving','discrete',1,true),
             ($1,'box','Box','discrete',1,true),
             ($1,'pack','Pack','discrete',1,true),
+            ($1,'bottle','Bottle','discrete',1,true),
+            ($1,'can','Can','discrete',1,true),
             ($1,'ml','Milliliter','decimal',100,true),
             ($1,'l','Liter','decimal',0.1,true),
             ($1,'g','Gram','decimal',100,true),

@@ -84,6 +84,17 @@ export type Permission = (typeof PERMISSIONS)[number];
 export const PAYMENT_METHODS = ['cash', 'card', 'ewallet'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
-export const PRODUCT_UNITS = ['piece', 'serving', 'box', 'pack', 'ml', 'l', 'g', 'kg'] as const;
+export const PRODUCT_UNITS = [
+  'piece',
+  'serving',
+  'box',
+  'pack',
+  'bottle',
+  'can',
+  'ml',
+  'l',
+  'g',
+  'kg',
+] as const;
 export type KnownProductUnit = (typeof PRODUCT_UNITS)[number];
 export type ProductUnit = string;

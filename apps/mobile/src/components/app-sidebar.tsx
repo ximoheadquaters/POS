@@ -139,6 +139,7 @@ const sidebarSections: SidebarSection[] = [
         title: 'Settings & Admin',
         icon: 'settings',
         children: [
+          { title: 'Organization', href: '/organization', permission: 'organization:read' },
           { title: 'Store Settings', href: '/settings' },
           { title: 'Staff & Roles', href: '/users', permission: 'users:manage' },
           { title: 'Audit Logs', href: '/audit', module: 'audit', permission: 'audit:read' },

@@ -56,6 +56,27 @@ function ShiftReportsContent() {
   const branch = useBranchStore((state) => state.activeBranch);
   const [period, setPeriod] = useState(2);
   const isModuleEnabled = currentUser?.modules.includes('registers');
+  const range = useMemo(() => {
+    const to = new Date();
+    to.setHours(0, 0, 0, 0);
+    to.setDate(to.getDate() + 1);
+    const from =
+      periods[period]!.days === null
+        ? new Date('2000-01-01T00:00:00.000Z')
+        : new Date(to.getTime());
+    if (periods[period]!.days !== null) from.setDate(from.getDate() - periods[period]!.days!);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [period]);
+  const query = useQuery({
+    queryKey: ['shift-reports', branch?.id, range.from, range.to],
+    queryFn: () =>
+      api<ShiftReportResponse>(
+        `/reports/shifts?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(
+          range.to,
+        )}&page=1&pageSize=100${branch?.id ? `&branchId=${branch.id}` : ''}`,
+      ),
+    enabled: Boolean(isModuleEnabled),
+  });
 
   if (!isModuleEnabled) {
     return (
@@ -76,26 +97,6 @@ function ShiftReportsContent() {
       </Screen>
     );
   }
-  const range = useMemo(() => {
-    const to = new Date();
-    to.setHours(0, 0, 0, 0);
-    to.setDate(to.getDate() + 1);
-    const from =
-      periods[period]!.days === null
-        ? new Date('2000-01-01T00:00:00.000Z')
-        : new Date(to.getTime());
-    if (periods[period]!.days !== null) from.setDate(from.getDate() - periods[period]!.days!);
-    return { from: from.toISOString(), to: to.toISOString() };
-  }, [period]);
-  const query = useQuery({
-    queryKey: ['shift-reports', branch?.id, range.from, range.to],
-    queryFn: () =>
-      api<ShiftReportResponse>(
-        `/reports/shifts?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(
-          range.to,
-        )}&page=1&pageSize=100${branch?.id ? `&branchId=${branch.id}` : ''}`,
-      ),
-  });
   return (
     <Screen>
       <Header

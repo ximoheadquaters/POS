@@ -22,8 +22,21 @@ export function inventoryRouter(database: Database): Router {
           bi.average_cost::text as "averageCost",
           bi.inventory_value::text as "inventoryValue",
           (bi.quantity<=bi.low_stock_level) as "isLowStock",
+          container.name as "containerName",container.unit as "containerUnit",
+          container.units_per_base::float8 as "containerUnitsPerBase",
           count(*) over()::int as total
          from branch_inventory bi join products p on p.id=bi.product_id
+         left join lateral (
+           select v.name,v.unit,v.units_per_base
+           from product_variants v
+           join product_units vu
+             on vu.organization_id=v.organization_id and vu.code=v.unit
+           where v.organization_id=bi.organization_id and v.product_id=bi.product_id
+             and v.is_active and vu.kind='discrete' and v.units_per_base>1
+           order by case when v.unit='bottle' then 0 when v.unit='can' then 1 else 2 end,
+             v.units_per_base desc
+           limit 1
+         ) container on true
          where bi.organization_id=$1 and bi.branch_id=$2 and p.track_inventory
            and ($3::text is null or p.name ilike '%'||$3||'%' or p.sku ilike '%'||$3||'%')
          order by p.name limit $4 offset $5`,

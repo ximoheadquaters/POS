@@ -8,6 +8,7 @@ import { loginSchema } from '@ximo/shared';
 import { z } from 'zod';
 import type { AuthActions, VerifyToken } from './auth/types.js';
 import type { Database } from './database/types.js';
+import type { AssetStorage } from './storage/assets.js';
 import { authenticate } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import { validateBody } from './middleware/validation.js';
@@ -38,6 +39,7 @@ export interface AppDependencies {
   database: Database;
   verifyToken: VerifyToken;
   authActions: AuthActions;
+  assetStorage?: AssetStorage;
 }
 
 export function createApp(dependencies: AppDependencies) {
@@ -45,7 +47,7 @@ export function createApp(dependencies: AppDependencies) {
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(cors({ origin: true, credentials: false }));
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '4mb' }));
   app.use((request, response, next) => {
     response.locals.requestId = request.header('x-request-id') ?? randomUUID();
     response.setHeader('x-request-id', response.locals.requestId);
@@ -107,7 +109,10 @@ export function createApp(dependencies: AppDependencies) {
   protectedApi.post('/auth/logout', (_request, response) =>
     sendData(response, { signedOut: true }),
   );
-  protectedApi.use('/organizations', organizationsRouter(dependencies.database));
+  protectedApi.use(
+    '/organizations',
+    organizationsRouter(dependencies.database, dependencies.assetStorage),
+  );
   protectedApi.use('/branches', branchesRouter(dependencies.database));
   protectedApi.use('/users', usersRouter(dependencies.database, dependencies.authActions));
   protectedApi.use('/categories', categoriesRouter(dependencies.database));

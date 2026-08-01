@@ -1,4 +1,4 @@
-import { Alert, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -35,6 +35,7 @@ function StockAdjustmentContent() {
     },
     onError: (error) => Alert.alert('Adjustment failed', error.message),
   });
+  const commonDeductionReasons = ['Waste', 'Spillage', 'Staff consumption', 'Expired'];
   return (
     <Screen>
       <Header
@@ -53,6 +54,24 @@ function StockAdjustmentContent() {
           onChangeText={setQuantity}
         />
         <Field label="Reason" value={reason} onChangeText={setReason} multiline />
+        <View className="mb-5 flex-row flex-wrap gap-2">
+          {commonDeductionReasons.map((item) => (
+            <Pressable
+              key={item}
+              accessibilityRole="button"
+              onPress={() => setReason(item)}
+              className={`min-h-10 items-center justify-center rounded-full border px-4 ${
+                reason === item ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
+              }`}
+            >
+              <Text
+                className={`text-xs font-medium ${reason === item ? 'text-white' : 'text-slate-700'}`}
+              >
+                {item}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
         <Button
           title={mutation.isPending ? 'Saving…' : 'Save adjustment'}
           disabled={mutation.isPending || !quantity || reason.trim().length < 3}

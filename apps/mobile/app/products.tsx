@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { convertRecipeQuantity } from '@ximo/shared';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
@@ -35,6 +36,7 @@ interface RecipeItemRow {
   ingredientName: string;
   quantityRequired: number;
   unit: string;
+  baseUnit?: string;
   cost: string;
 }
 
@@ -73,11 +75,12 @@ function RecipeModal({
   useEffect(() => {
     if (recipeQuery.data) {
       setItems(
-        recipeQuery.data.map((r) => ({
+        recipeQuery.data.map((r: any) => ({
           ingredientProductId: r.ingredientProductId,
           ingredientName: r.ingredientName,
           quantityRequired: r.quantityRequired,
           unit: r.unit,
+          baseUnit: r.baseUnit || r.unit,
           cost: r.ingredientCost || '0.00',
         })),
       );
@@ -112,7 +115,8 @@ function RecipeModal({
   const availableIngredients = allProducts.filter((p) => p.id !== product.id);
 
   const totalIngredientCost = items.reduce((sum, item) => {
-    return sum + parseFloat(item.cost || '0') * item.quantityRequired;
+    const effQty = convertRecipeQuantity(item.quantityRequired, item.unit, item.baseUnit);
+    return sum + parseFloat(item.cost || '0') * effQty;
   }, 0);
 
   const handleAddIngredient = () => {
@@ -121,13 +125,15 @@ function RecipeModal({
     if (!ing) return;
 
     const qty = parseFloat(quantityInput) || 1;
+    const selUnit = unitInput || ing.unit || 'piece';
     setItems((prev) => [
       ...prev.filter((i) => i.ingredientProductId !== ing.id),
       {
         ingredientProductId: ing.id,
         ingredientName: ing.name,
         quantityRequired: qty,
-        unit: unitInput || ing.unit || 'piece',
+        unit: selUnit,
+        baseUnit: ing.unit || 'piece',
         cost: ing.cost || '0.00',
       },
     ]);
@@ -138,6 +144,11 @@ function RecipeModal({
   const handleRemoveIngredient = (id: string) => {
     setItems((prev) => prev.filter((i) => i.ingredientProductId !== id));
   };
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredAvailable = availableIngredients.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase().trim()),
+  );
 
   return (
     <Modal visible={Boolean(product)} animationType="fade" transparent>
@@ -166,9 +177,26 @@ function RecipeModal({
             </Text>
             <View className="mb-4 rounded-2xl bg-slate-800/80 p-4 border border-slate-700">
               <Text className="text-xs font-medium text-slate-300 mb-2">Select Ingredient Product</Text>
+              {availableIngredients.length > 3 ? (
+                <View className="mb-3 flex-row items-center rounded-xl bg-slate-900 px-3 h-9 border border-slate-700">
+                  <Feather name="search" size={13} color="#94A3B8" />
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Filter ingredients..."
+                    placeholderTextColor="#64748B"
+                    className="ml-2 flex-1 text-xs text-white"
+                  />
+                  {searchQuery ? (
+                    <Pressable onPress={() => setSearchQuery('')}>
+                      <Feather name="x" size={13} color="#94A3B8" />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
                 <View className="flex-row gap-2">
-                  {availableIngredients.slice(0, 15).map((ing) => {
+                  {filteredAvailable.map((ing) => {
                     const selected = selectedIngredientId === ing.id;
                     return (
                       <Pressable
@@ -201,9 +229,6 @@ function RecipeModal({
                     { code: 'kg', label: 'Kg (kg)' },
                     { code: 'ml', label: 'Milliliters (ml)' },
                     { code: 'l', label: 'Liters (L)' },
-                    { code: 'serving', label: 'Serving' },
-                    { code: 'pack', label: 'Pack' },
-                    { code: 'box', label: 'Box' },
                   ].map((u) => {
                     const selected = unitInput === u.code;
                     return (
@@ -263,26 +288,30 @@ function RecipeModal({
               </View>
             ) : (
               <View className="gap-2">
-                {items.map((item) => (
-                  <View
-                    key={item.ingredientProductId}
-                    className="flex-row items-center justify-between p-3 rounded-xl bg-slate-800 border border-slate-700"
-                  >
-                    <View className="flex-1 pr-2">
-                      <Text className="text-sm font-semibold text-white">{item.ingredientName}</Text>
-                      <Text className="text-xs text-emerald-400">
-                        {item.quantityRequired} {item.unit} per serving (Est.{' '}
-                        {formatMoney((parseFloat(item.cost) * item.quantityRequired).toFixed(2))})
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => handleRemoveIngredient(item.ingredientProductId)}
-                      className="h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 border border-rose-500/20"
+                {items.map((item) => {
+                  const effQty = convertRecipeQuantity(item.quantityRequired, item.unit, item.baseUnit);
+                  const lineEstCost = (parseFloat(item.cost || '0') * effQty).toFixed(2);
+                  return (
+                    <View
+                      key={item.ingredientProductId}
+                      className="flex-row items-center justify-between p-3 rounded-xl bg-slate-800 border border-slate-700"
                     >
-                      <Feather name="trash-2" size={14} color="#F43F5E" />
-                    </Pressable>
-                  </View>
-                ))}
+                      <View className="flex-1 pr-2">
+                        <Text className="text-sm font-semibold text-white">{item.ingredientName}</Text>
+                        <Text className="text-xs text-emerald-400">
+                          {item.quantityRequired} {item.unit} per serving (Est.{' '}
+                          {formatMoney(lineEstCost)})
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => handleRemoveIngredient(item.ingredientProductId)}
+                        className="h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 border border-rose-500/20"
+                      >
+                        <Feather name="trash-2" size={14} color="#F43F5E" />
+                      </Pressable>
+                    </View>
+                  );
+                })}
               </View>
             )}
 

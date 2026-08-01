@@ -490,6 +490,7 @@ export function productsRouter(database: Database): Router {
          pr.ingredient_variant_id as "ingredientVariantId",
          pr.quantity_required::float8 as "quantityRequired",
          pr.unit,
+         p.unit as "baseUnit",
          p.name as "ingredientName", p.sku as "ingredientSku", p.cost::text as "ingredientCost"
        from product_recipes pr
        join products p on p.id = pr.ingredient_product_id and p.organization_id = pr.organization_id
@@ -538,18 +539,29 @@ export function productsRouter(database: Database): Router {
 
         // Automatically calculate and update product cost based on dynamic BOM ingredients
         const costRes = await tx.query<{ total_cost: string }>(
-          `select round(coalesce(sum(p.cost * pr.quantity_required), 0), 2)::text as total_cost
+          `select round(coalesce(sum(
+             p.cost * (
+               case
+                 when lower(p.unit) in ('kg','kilogram','kilograms') and lower(pr.unit) in ('g','gram','grams') then pr.quantity_required / 1000.0
+                 when lower(p.unit) in ('l','liter','liters') and lower(pr.unit) in ('ml','milliliter','milliliters') then pr.quantity_required / 1000.0
+                 when lower(p.unit) in ('g','gram','grams') and lower(pr.unit) in ('kg','kilogram','kilograms') then pr.quantity_required * 1000.0
+                 when lower(p.unit) in ('ml','milliliter','milliliters') and lower(pr.unit) in ('l','liter','liters') then pr.quantity_required * 1000.0
+                 else pr.quantity_required
+               end
+             )
+           ), 0), 2)::text as total_cost
            from product_recipes pr
            join products p on p.id = pr.ingredient_product_id and p.organization_id = pr.organization_id
            where pr.parent_product_id = $1 and pr.organization_id = $2`,
           [parentProductId, organizationId],
         );
         const computedBomCost = costRes.rows[0]?.total_cost || '0.00';
-        if (parseFloat(computedBomCost) > 0) {
+        const appliedProductCost = input.costOverride ?? computedBomCost;
+        if (input.items.length > 0) {
           await tx.query(
             `update products set cost = $3, updated_at = now()
              where id = $1 and organization_id = $2`,
-            [parentProductId, organizationId, computedBomCost],
+            [parentProductId, organizationId, appliedProductCost],
           );
         }
 
@@ -561,7 +573,12 @@ export function productsRouter(database: Database): Router {
             organizationId,
             request.authUser!.id,
             parentProductId,
-            JSON.stringify({ itemCount: input.items.length, computedBomCost }),
+            JSON.stringify({
+              itemCount: input.items.length,
+              computedBomCost,
+              appliedProductCost,
+              costOverridden: input.costOverride !== undefined,
+            }),
           ],
         );
       });

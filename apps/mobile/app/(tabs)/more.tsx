@@ -92,6 +92,13 @@ const links: Array<{
     permission: 'audit:read',
   },
   {
+    title: 'Organization',
+    subtitle: 'Business identity, plan and tenant overview',
+    icon: 'briefcase',
+    href: '/organization' as Href,
+    permission: 'organization:read',
+  },
+  {
     title: 'Settings',
     subtitle: 'Business, tax and receipt options',
     icon: 'settings',

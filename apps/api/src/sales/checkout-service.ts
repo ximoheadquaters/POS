@@ -1,5 +1,5 @@
 import type { CheckoutInput } from '@ximo/shared';
-import { minorToMoney, moneyToMinor } from '@ximo/shared';
+import { convertRecipeQuantity, minorToMoney, moneyToMinor } from '@ximo/shared';
 import type { Database, Queryable } from '../database/types.js';
 import { badRequest, conflict, forbidden, notFound } from '../shared/errors.js';
 
@@ -342,50 +342,66 @@ export class CheckoutService {
           ingredient_product_id: string;
           ingredient_variant_id: string | null;
           quantity_required: number;
+          unit: string;
+          base_unit: string;
         }>(
-          `select ingredient_product_id, ingredient_variant_id, quantity_required::float8 as quantity_required
-           from product_recipes
-           where organization_id = $1 and parent_product_id = $2`,
+          `select pr.ingredient_product_id, pr.ingredient_variant_id, pr.quantity_required::float8 as quantity_required,
+                  pr.unit, p.unit as base_unit
+           from product_recipes pr
+           join products p on p.id = pr.ingredient_product_id and p.organization_id = pr.organization_id
+           where pr.organization_id = $1 and pr.parent_product_id = $2`,
           [actor.organizationId, item.product.product_id],
         );
 
         for (const ingredient of recipeRes.rows) {
-          const totalDeduction = ingredient.quantity_required * item.quantity;
+          const effectiveQty = convertRecipeQuantity(
+            ingredient.quantity_required,
+            ingredient.unit,
+            ingredient.base_unit,
+          );
+          const totalDeduction = effectiveQty * item.quantity;
           const ingredientInv = await transaction.query<{ quantity: number }>(
             `update branch_inventory set
                quantity = quantity - $4,
                inventory_value = round(average_cost * (quantity - $4), 4),
                updated_at = now()
              where organization_id = $1 and branch_id = $2 and product_id = $3
-               and ($5::uuid is null or variant_id = $5) returning quantity::float8 as quantity`,
+               and variant_id is not distinct from $5::uuid
+               and ($6::boolean or quantity >= $4)
+             returning quantity::float8 as quantity`,
             [
               actor.organizationId,
               input.branchId,
               ingredient.ingredient_product_id,
               totalDeduction,
               ingredient.ingredient_variant_id ?? null,
+              context.allow_negative_inventory,
             ],
           );
 
-          if (ingredientInv.rows[0]) {
-            await transaction.query(
-              `insert into inventory_movements (
-                 organization_id, branch_id, product_id, variant_id, movement_type,
-                 quantity_delta, quantity_after, reason, reference_type, reference_id, created_by
-               ) values ($1,$2,$3,$4,'recipe_deduction',$5,$6,$7,'sale',$8,$9)`,
-              [
-                actor.organizationId,
-                input.branchId,
-                ingredient.ingredient_product_id,
-                ingredient.ingredient_variant_id ?? null,
-                -totalDeduction,
-                ingredientInv.rows[0].quantity,
-                `Recipe deduction for ${item.product.name}`,
-                saleId,
-                actor.userId,
-              ],
+          if (!ingredientInv.rows[0]) {
+            throw conflict(
+              'INSUFFICIENT_RECIPE_INVENTORY',
+              `${item.product.name} cannot be completed because an ingredient has insufficient inventory`,
             );
           }
+          await transaction.query(
+            `insert into inventory_movements (
+               organization_id, branch_id, product_id, variant_id, movement_type,
+               quantity_delta, quantity_after, reason, reference_type, reference_id, created_by
+             ) values ($1,$2,$3,$4,'recipe_deduction',$5,$6,$7,'sale',$8,$9)`,
+            [
+              actor.organizationId,
+              input.branchId,
+              ingredient.ingredient_product_id,
+              ingredient.ingredient_variant_id ?? null,
+              -totalDeduction,
+              ingredientInv.rows[0].quantity,
+              `Recipe deduction for ${item.product.name}`,
+              saleId,
+              actor.userId,
+            ],
+          );
         }
       }
 

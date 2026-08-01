@@ -121,7 +121,14 @@ export function normalizeQuantity(quantity: number): number {
 
 export function isDiscreteUnit(unit?: ProductUnit, kind?: 'discrete' | 'decimal'): boolean {
   if (kind) return kind === 'discrete';
-  return unit === 'piece' || unit === 'serving' || unit === 'box' || unit === 'pack';
+  return (
+    unit === 'piece' ||
+    unit === 'serving' ||
+    unit === 'box' ||
+    unit === 'pack' ||
+    unit === 'bottle' ||
+    unit === 'can'
+  );
 }
 
 function quantityToThousandths(quantity: number): bigint {

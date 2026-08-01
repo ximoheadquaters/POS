@@ -113,6 +113,7 @@ export const recipeItemSchema = z.object({
 
 export const saveRecipeSchema = z.object({
   items: z.array(recipeItemSchema),
+  costOverride: moneyStringSchema.optional(),
 });
 
 export const updateProductSchema = z.object({
@@ -401,6 +402,13 @@ export const organizationSettingsSchema = z
     },
   );
 
+export const organizationProfileSchema = z.object({
+  name: z.string().trim().min(2).max(180),
+  currency: z.string().trim().length(3).toUpperCase(),
+  timezone: z.string().trim().min(3).max(80),
+  logoPath: z.string().trim().max(500).nullable(),
+});
+
 export const roleCodeSchema = z.enum(ROLE_CODES);
 export const permissionSchema = z.enum(PERMISSIONS);
 export const moduleCodeSchema = z.enum(MODULE_CODES);
@@ -440,7 +448,10 @@ export const createPromotionSchema = z.object({
   description: z.string().trim().max(1000).optional(),
   type: promotionTypeSchema,
   comboPrice: moneyStringSchema.optional(),
-  discountPercentage: z.string().regex(/^(\d{1,2}(\.\d{1,2})?|100(\.0{1,2})?)$/).optional(),
+  discountPercentage: z
+    .string()
+    .regex(/^(\d{1,2}(\.\d{1,2})?|100(\.0{1,2})?)$/)
+    .optional(),
   discountAmount: moneyStringSchema.optional(),
   minOrderQuantity: z.number().int().min(1).optional(),
   startDate: z.string().optional(),
@@ -450,7 +461,9 @@ export const createPromotionSchema = z.object({
     .array(
       z.object({
         productId: uuidSchema,
-        role: z.enum(['trigger_item', 'discounted_item', 'combo_component']).default('combo_component'),
+        role: z
+          .enum(['trigger_item', 'discounted_item', 'combo_component'])
+          .default('combo_component'),
         requiredQuantity: z.number().int().min(1).default(1),
       }),
     )
@@ -484,3 +497,4 @@ export type CheckoutInput = z.infer<typeof checkoutSchema>;
 export type ReturnInput = z.infer<typeof returnSchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;
 export type OrganizationSettingsInput = z.infer<typeof organizationSettingsSchema>;
+export type OrganizationProfileInput = z.infer<typeof organizationProfileSchema>;

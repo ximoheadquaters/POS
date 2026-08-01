@@ -21,6 +21,7 @@ const input: CheckoutInput = {
 
 interface State {
   inventory: number;
+  ingredientInventory: number;
   sales: Array<Record<string, string>>;
   payments: number;
   movements: number;
@@ -28,9 +29,18 @@ interface State {
 }
 
 class CheckoutDatabase implements Database {
-  state: State = { inventory: 10, sales: [], payments: 0, movements: 0, failOnPayment: false };
+  state: State = {
+    inventory: 10,
+    ingredientInventory: 0,
+    sales: [],
+    payments: 0,
+    movements: 0,
+    failOnPayment: false,
+  };
   unitsPerBase = 1;
   sellingUnit = 'piece';
+  recipeQuantityRequired: number | null = null;
+  readonly ingredientProductId = '88888888-8888-4888-8888-888888888888';
 
   async query<T extends QueryResultRow>(text: string, values: readonly unknown[] = []) {
     const sql = text.replace(/\s+/g, ' ').trim();
@@ -90,7 +100,29 @@ class CheckoutDatabase implements Database {
       this.state.sales.push(sale);
       return result([{ id: sale.id } as unknown as T]);
     }
+    if (sql.startsWith('select pr.ingredient_product_id')) {
+      return result(
+        this.recipeQuantityRequired === null
+          ? []
+          : ([
+              {
+                ingredient_product_id: this.ingredientProductId,
+                ingredient_variant_id: null,
+                quantity_required: this.recipeQuantityRequired,
+                unit: 'ml',
+                base_unit: 'ml',
+              },
+            ] as unknown as T[]),
+      );
+    }
     if (sql.startsWith('update branch_inventory')) {
+      if (values[2] === this.ingredientProductId) {
+        const deduction = Number(values[3]);
+        const allowNegative = Boolean(values[5]);
+        if (!allowNegative && this.state.ingredientInventory < deduction) return result([]);
+        this.state.ingredientInventory -= deduction;
+        return result([{ quantity: this.state.ingredientInventory } as unknown as T]);
+      }
       this.state.inventory -= Number(values[3]);
       return result([{ quantity: this.state.inventory } as unknown as T]);
     }
@@ -173,6 +205,27 @@ describe('checkout transaction', () => {
       'checkout-pack-0001',
     );
     expect(database.state.inventory).toBe(0);
+  });
+
+  it('deducts measured recipe ingredients and keeps the opened-container remainder', async () => {
+    const database = new CheckoutDatabase();
+    database.recipeQuantityRequired = 500;
+    database.state.ingredientInventory = 1_500;
+    await new CheckoutService(database).complete(actor, input, 'checkout-recipe-0001');
+    expect(database.state.ingredientInventory).toBe(500);
+  });
+
+  it('rolls back checkout when a recipe ingredient is insufficient', async () => {
+    const database = new CheckoutDatabase();
+    database.recipeQuantityRequired = 500;
+    database.state.ingredientInventory = 750;
+    await expect(
+      new CheckoutService(database).complete(actor, input, 'checkout-recipe-0002'),
+    ).rejects.toMatchObject({
+      code: 'INSUFFICIENT_RECIPE_INVENTORY',
+    } satisfies Partial<AppError>);
+    expect(database.state.ingredientInventory).toBe(750);
+    expect(database.state.sales).toHaveLength(0);
   });
 
   it('rolls back the entire checkout when a database step fails', async () => {

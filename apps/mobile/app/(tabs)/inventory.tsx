@@ -17,6 +17,20 @@ interface Inventory {
   quantity: number;
   lowStockLevel: number;
   isLowStock: boolean;
+  containerName?: string | null;
+  containerUnit?: string | null;
+  containerUnitsPerBase?: number | null;
+}
+
+function containerBreakdown(item: Inventory): string | null {
+  const conversion = item.containerUnitsPerBase;
+  if (!conversion || conversion <= 1 || item.quantity < 0) return null;
+  const fullContainers = Math.floor((item.quantity + 0.000_001) / conversion);
+  const remainder = Math.round((item.quantity - fullContainers * conversion) * 1_000) / 1_000;
+  const containerLabel = item.containerName || item.containerUnit || 'container';
+  return remainder > 0
+    ? `${fullContainers} full ${containerLabel.toLowerCase()}${fullContainers === 1 ? '' : 's'} + ${remainder} ${item.unit} opened`
+    : `${fullContainers} full ${containerLabel.toLowerCase()}${fullContainers === 1 ? '' : 's'}`;
 }
 
 export default function InventoryScreen() {
@@ -49,33 +63,39 @@ export default function InventoryScreen() {
           ListEmptyComponent={
             <EmptyState title="No inventory" message="Create products and opening stock first." />
           }
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Adjust stock for ${item.name}`}
-              className="flex-row items-center rounded-2xl border border-slate-100 bg-white p-4 active:border-brand-300 active:bg-brand-50"
-              onPress={() =>
-                router.push({
-                  pathname: '/stock-adjustment',
-                  params: { productId: item.productId, name: item.name, unit: item.unit },
-                })
-              }
-            >
-              <View className="flex-1">
-                <Text className="font-bold text-slate-900">{item.name}</Text>
-                <Text className="mt-1 text-xs text-slate-500">{item.sku}</Text>
-              </View>
-              <View
-                className={`rounded-xl px-4 py-2 ${item.isLowStock ? 'bg-red-100' : 'bg-brand-50'}`}
+          renderItem={({ item }) => {
+            const breakdown = containerBreakdown(item);
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Adjust stock for ${item.name}`}
+                className="flex-row items-center rounded-2xl border border-slate-100 bg-white p-4 active:border-brand-300 active:bg-brand-50"
+                onPress={() =>
+                  router.push({
+                    pathname: '/stock-adjustment',
+                    params: { productId: item.productId, name: item.name, unit: item.unit },
+                  })
+                }
               >
-                <Text
-                  className={`text-lg font-black ${item.isLowStock ? 'text-red-700' : 'text-brand-700'}`}
+                <View className="flex-1">
+                  <Text className="font-bold text-slate-900">{item.name}</Text>
+                  <Text className="mt-1 text-xs text-slate-500">{item.sku}</Text>
+                  {breakdown ? (
+                    <Text className="mt-1 text-xs font-medium text-brand-700">{breakdown}</Text>
+                  ) : null}
+                </View>
+                <View
+                  className={`rounded-xl px-4 py-2 ${item.isLowStock ? 'bg-red-100' : 'bg-brand-50'}`}
                 >
-                  {item.quantity} {item.unit}
-                </Text>
-              </View>
-            </Pressable>
-          )}
+                  <Text
+                    className={`text-lg font-black ${item.isLowStock ? 'text-red-700' : 'text-brand-700'}`}
+                  >
+                    {item.quantity} {item.unit}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          }}
         />
       )}
     </Screen>
