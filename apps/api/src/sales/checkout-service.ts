@@ -336,6 +336,57 @@ export class CheckoutService {
             ],
           );
         }
+
+        // Deduct raw recipe ingredients if product has a recipe defined
+        const recipeRes = await transaction.query<{
+          ingredient_product_id: string;
+          ingredient_variant_id: string | null;
+          quantity_required: number;
+        }>(
+          `select ingredient_product_id, ingredient_variant_id, quantity_required::float8 as quantity_required
+           from product_recipes
+           where organization_id = $1 and parent_product_id = $2`,
+          [actor.organizationId, item.product.product_id],
+        );
+
+        for (const ingredient of recipeRes.rows) {
+          const totalDeduction = ingredient.quantity_required * item.quantity;
+          const ingredientInv = await transaction.query<{ quantity: number }>(
+            `update branch_inventory set
+               quantity = quantity - $4,
+               inventory_value = round(average_cost * (quantity - $4), 4),
+               updated_at = now()
+             where organization_id = $1 and branch_id = $2 and product_id = $3
+               and ($5::uuid is null or variant_id = $5) returning quantity::float8 as quantity`,
+            [
+              actor.organizationId,
+              input.branchId,
+              ingredient.ingredient_product_id,
+              totalDeduction,
+              ingredient.ingredient_variant_id ?? null,
+            ],
+          );
+
+          if (ingredientInv.rows[0]) {
+            await transaction.query(
+              `insert into inventory_movements (
+                 organization_id, branch_id, product_id, variant_id, movement_type,
+                 quantity_delta, quantity_after, reason, reference_type, reference_id, created_by
+               ) values ($1,$2,$3,$4,'recipe_deduction',$5,$6,$7,'sale',$8,$9)`,
+              [
+                actor.organizationId,
+                input.branchId,
+                ingredient.ingredient_product_id,
+                ingredient.ingredient_variant_id ?? null,
+                -totalDeduction,
+                ingredientInv.rows[0].quantity,
+                `Recipe deduction for ${item.product.name}`,
+                saleId,
+                actor.userId,
+              ],
+            );
+          }
+        }
       }
 
       for (const payment of input.payments) {

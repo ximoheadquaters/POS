@@ -104,6 +104,17 @@ export const productSchema = z.object({
   imagePath: z.string().trim().max(500).optional(),
 });
 
+export const recipeItemSchema = z.object({
+  ingredientProductId: uuidSchema,
+  ingredientVariantId: uuidSchema.nullable().optional(),
+  quantityRequired: z.number().positive().max(1_000_000),
+  unit: productUnitCodeSchema.default('piece'),
+});
+
+export const saveRecipeSchema = z.object({
+  items: z.array(recipeItemSchema),
+});
+
 export const updateProductSchema = z.object({
   categoryId: uuidSchema.nullable().optional(),
   brandId: uuidSchema.nullable().optional(),

@@ -8,6 +8,7 @@ import {
   productLookupSchema,
   productUnitSchema,
   productVariantSchema,
+  saveRecipeSchema,
   updateProductSchema,
   uuidSchema,
 } from '@ximo/shared';
@@ -202,14 +203,18 @@ export function productsRouter(database: Database): Router {
          ) effective
          left join categories c on c.id=p.category_id
          left join brands br on br.id=p.brand_id
-         where p.organization_id=$1 and (
-           ($5::uuid is null and ($6::boolean or p.status <> 'pending_receipt'))
-           or ($5::uuid is not null and (
-             p.status='active'
-             or ($6::boolean and p.status='pending_receipt')
-             or ($7::boolean and p.status='inactive')
-           ))
-         ) and ($2::text is null or
+          where p.organization_id=$1 and (
+            ($5::uuid is null and (
+              p.status='active'
+              or ($6::boolean and p.status='pending_receipt')
+              or ($7::boolean and p.status='inactive')
+            ))
+            or ($5::uuid is not null and (
+              p.status='active'
+              or ($6::boolean and p.status='pending_receipt')
+              or ($7::boolean and p.status='inactive')
+            ))
+          ) and ($2::text is null or
            p.name ilike '%'||$2||'%' or p.sku ilike '%'||$2||'%' or exists (
              select 1 from product_barcodes pb where pb.product_id=p.id and pb.barcode=$2
            ))
@@ -473,6 +478,97 @@ export function productsRouter(database: Database): Router {
     );
     sendData(response, result.rows);
   });
+
+  // GET /products/:id/recipe -> Fetch product recipe items
+  router.get('/:id/recipe', requirePermission('products:read'), async (request, response) => {
+    const parentProductId = uuidSchema.parse(request.params.id);
+    const organizationId = request.authUser!.organization.id;
+
+    const result = await database.query(
+      `select pr.id, pr.parent_product_id as "parentProductId",
+         pr.ingredient_product_id as "ingredientProductId",
+         pr.ingredient_variant_id as "ingredientVariantId",
+         pr.quantity_required::float8 as "quantityRequired",
+         pr.unit,
+         p.name as "ingredientName", p.sku as "ingredientSku", p.cost::text as "ingredientCost"
+       from product_recipes pr
+       join products p on p.id = pr.ingredient_product_id and p.organization_id = pr.organization_id
+       where pr.parent_product_id = $1 and pr.organization_id = $2
+       order by p.name`,
+      [parentProductId, organizationId],
+    );
+
+    sendData(response, result.rows);
+  });
+
+  // PUT /products/:id/recipe -> Save/Update product recipe items
+  router.put(
+    '/:id/recipe',
+    requirePermission('products:manage'),
+    validateBody(saveRecipeSchema),
+    async (request, response) => {
+      const parentProductId = uuidSchema.parse(request.params.id);
+      const organizationId = request.authUser!.organization.id;
+      const input = request.body;
+
+      await database.transaction(async (tx) => {
+        // Delete existing recipe items
+        await tx.query(
+          `delete from product_recipes where parent_product_id = $1 and organization_id = $2`,
+          [parentProductId, organizationId],
+        );
+
+        // Insert new recipe items
+        for (const item of input.items) {
+          await tx.query(
+            `insert into product_recipes (
+               organization_id, parent_product_id, ingredient_product_id, ingredient_variant_id,
+               quantity_required, unit
+             ) values ($1, $2, $3, $4, $5, $6)`,
+            [
+              organizationId,
+              parentProductId,
+              item.ingredientProductId,
+              item.ingredientVariantId ?? null,
+              item.quantityRequired,
+              item.unit,
+            ],
+          );
+        }
+
+        // Automatically calculate and update product cost based on dynamic BOM ingredients
+        const costRes = await tx.query<{ total_cost: string }>(
+          `select round(coalesce(sum(p.cost * pr.quantity_required), 0), 2)::text as total_cost
+           from product_recipes pr
+           join products p on p.id = pr.ingredient_product_id and p.organization_id = pr.organization_id
+           where pr.parent_product_id = $1 and pr.organization_id = $2`,
+          [parentProductId, organizationId],
+        );
+        const computedBomCost = costRes.rows[0]?.total_cost || '0.00';
+        if (parseFloat(computedBomCost) > 0) {
+          await tx.query(
+            `update products set cost = $3, updated_at = now()
+             where id = $1 and organization_id = $2`,
+            [parentProductId, organizationId, computedBomCost],
+          );
+        }
+
+        await tx.query(
+          `insert into audit_logs (
+             organization_id, actor_id, action, entity_type, entity_id, after_data
+           ) values ($1, $2, 'product.recipe_updated', 'product', $3, $4::jsonb)`,
+          [
+            organizationId,
+            request.authUser!.id,
+            parentProductId,
+            JSON.stringify({ itemCount: input.items.length, computedBomCost }),
+          ],
+        );
+      });
+
+      sendData(response, { success: true, count: input.items.length });
+    },
+  );
   router.post(
     '/:id/variants',
     requirePermission('products:manage'),
