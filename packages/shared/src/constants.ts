@@ -89,6 +89,7 @@ export const PRODUCT_UNITS = [
   'serving',
   'box',
   'pack',
+  'sack',
   'bottle',
   'can',
   'ml',

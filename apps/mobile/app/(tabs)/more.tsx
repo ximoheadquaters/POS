@@ -99,6 +99,13 @@ const links: Array<{
     permission: 'organization:read',
   },
   {
+    title: 'Branches',
+    subtitle: 'Locations, branch status and staff assignments',
+    icon: 'map-pin',
+    href: '/branches' as Href,
+    permission: 'branches:read',
+  },
+  {
     title: 'Settings',
     subtitle: 'Business, tax and receipt options',
     icon: 'settings',

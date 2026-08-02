@@ -16,6 +16,7 @@ interface Variant {
   cost?: string;
   sellingPrice?: string;
   isActive: boolean;
+  isPortioningContainer: boolean;
   barcodes: string[];
 }
 
@@ -45,6 +46,7 @@ function ProductVariantsContent() {
   const [cost, setCost] = useState('');
   const [price, setPrice] = useState('');
   const [barcode, setBarcode] = useState('');
+  const [isPortioningContainer, setIsPortioningContainer] = useState(false);
   const variants = useQuery({
     queryKey: ['product-variants', productId],
     queryFn: () => api<Variant[]>(`/products/${productId}/variants`),
@@ -63,6 +65,7 @@ function ProductVariantsContent() {
     setCost('');
     setPrice('');
     setBarcode('');
+    setIsPortioningContainer(false);
   };
   const save = useMutation({
     mutationFn: () => {
@@ -75,6 +78,7 @@ function ProductVariantsContent() {
         sellingPrice: price.trim() || undefined,
         barcode: barcode.trim() || undefined,
         isActive: editing?.isActive ?? true,
+        isPortioningContainer,
       };
       return api(
         editing
@@ -186,6 +190,22 @@ function ProductVariantsContent() {
             placeholder="Barcode (optional)"
             className="min-h-12 rounded-xl bg-slate-100 px-4"
           />
+          <View className="flex-row items-center rounded-2xl border border-brand-200 bg-brand-50 p-4">
+            <View className="flex-1 pr-3">
+              <Text className="text-sm font-semibold text-brand-950">
+                Whole container reserved for direct sale
+              </Text>
+              <Text className="mt-1 text-xs leading-5 text-brand-800">
+                When enabled, this unit uses sealed stock. The base unit and BOM recipes use only opened stock.
+              </Text>
+            </View>
+            <Switch
+              value={isPortioningContainer}
+              onValueChange={setIsPortioningContainer}
+              trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
+              thumbColor={isPortioningContainer ? '#1A593B' : '#FFFFFF'}
+            />
+          </View>
           <View className="flex-row gap-2">
             {editing ? <Button title="Cancel" variant="secondary" onPress={reset} /> : null}
             <View className="flex-1">
@@ -230,6 +250,7 @@ function ProductVariantsContent() {
                 setCost(item.cost ?? '');
                 setPrice(item.sellingPrice ?? '');
                 setBarcode(item.barcodes[0] ?? '');
+                setIsPortioningContainer(item.isPortioningContainer);
               }}
               className={`flex-row items-center rounded-2xl border border-slate-100 bg-white p-4 ${
                 item.isActive ? '' : 'opacity-60'
@@ -244,6 +265,13 @@ function ProductVariantsContent() {
                   {item.sellingPrice ? `₱${item.sellingPrice}` : 'Uses base price'}
                   {item.barcodes[0] ? ` · ${item.barcodes[0]}` : ''}
                 </Text>
+                {item.isPortioningContainer ? (
+                  <View className="mt-2 self-start rounded-full bg-amber-50 px-2.5 py-1">
+                    <Text className="text-[10px] font-semibold text-amber-800">
+                      Sealed stock container
+                    </Text>
+                  </View>
+                ) : null}
               </View>
               <Switch
                 value={item.isActive}

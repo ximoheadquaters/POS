@@ -22,7 +22,12 @@ interface ProductRow {
   selling_unit: string;
   unit_kind: 'discrete' | 'decimal';
   quantity: number;
+  portioning_variant_id: string | null;
+  sealed_quantity: number;
+  opened_quantity: number;
 }
+
+type InventoryPool = 'shared' | 'sealed' | 'opened';
 
 export interface CheckoutActor {
   userId: string;
@@ -123,6 +128,7 @@ export class CheckoutService {
         product: ProductRow;
         quantity: number;
         inventoryQuantity: number;
+        inventoryPool: InventoryPool;
       }> = [];
       for (const item of requested.values()) {
         const result = await transaction.query<ProductRow>(
@@ -137,7 +143,10 @@ export class CheckoutService {
             coalesce(v.units_per_base,1)::float8 as units_per_base,
             coalesce(v.unit,p.unit) as selling_unit,
             pu.kind as unit_kind,
-            bi.quantity::float8 as quantity
+            bi.quantity::float8 as quantity,
+            portioning.id as portioning_variant_id,
+            bi.sealed_quantity::float8 as sealed_quantity,
+            bi.opened_quantity::float8 as opened_quantity
            from products p
            left join product_variants v
              on v.product_id = p.id and v.organization_id = p.organization_id and v.id = $4
@@ -146,6 +155,9 @@ export class CheckoutService {
            join branch_inventory bi
              on bi.organization_id = p.organization_id and bi.branch_id = $2
              and bi.product_id = p.id and bi.variant_id is null
+           left join product_variants portioning
+             on portioning.organization_id=p.organization_id
+             and portioning.product_id=p.id and portioning.is_portioning_container
            where p.organization_id = $1 and p.id = $3 and p.status = 'active'
              and ($4::uuid is null or v.id is not null)
            for update of bi`,
@@ -160,14 +172,35 @@ export class CheckoutService {
           );
         }
         const inventoryQuantity = item.quantity * product.units_per_base;
+        const inventoryPool: InventoryPool = product.portioning_variant_id
+          ? product.variant_id === product.portioning_variant_id
+            ? 'sealed'
+            : 'opened'
+          : 'shared';
+        const availableQuantity =
+          inventoryPool === 'sealed'
+            ? product.sealed_quantity
+            : inventoryPool === 'opened'
+              ? product.opened_quantity
+              : product.quantity;
+        const requiredQuantity = inventoryPool === 'sealed' ? item.quantity : inventoryQuantity;
         if (
           product.track_inventory &&
           !context.allow_negative_inventory &&
-          product.quantity < inventoryQuantity
+          availableQuantity < requiredQuantity
         ) {
-          throw conflict('INSUFFICIENT_INVENTORY', `${product.name} has insufficient inventory`);
+          const poolLabel =
+            inventoryPool === 'sealed'
+              ? 'sealed container'
+              : inventoryPool === 'opened'
+                ? 'opened portion'
+                : '';
+          throw conflict(
+            'INSUFFICIENT_INVENTORY',
+            `${product.name} has insufficient ${poolLabel} inventory`.replace('  ', ' '),
+          );
         }
-        rows.push({ product, quantity: item.quantity, inventoryQuantity });
+        rows.push({ product, quantity: item.quantity, inventoryQuantity, inventoryPool });
       }
       if (!context.allow_negative_inventory) {
         const inventoryDemand = new Map<
@@ -175,13 +208,22 @@ export class CheckoutService {
           { name: string; requested: number; available: number; tracked: boolean }
         >();
         for (const row of rows) {
-          const demand = inventoryDemand.get(row.product.product_id);
-          if (demand) demand.requested += row.inventoryQuantity;
+          const demandKey = `${row.product.product_id}:${row.inventoryPool}`;
+          const requestedQuantity =
+            row.inventoryPool === 'sealed' ? row.quantity : row.inventoryQuantity;
+          const availableQuantity =
+            row.inventoryPool === 'sealed'
+              ? row.product.sealed_quantity
+              : row.inventoryPool === 'opened'
+                ? row.product.opened_quantity
+                : row.product.quantity;
+          const demand = inventoryDemand.get(demandKey);
+          if (demand) demand.requested += requestedQuantity;
           else {
-            inventoryDemand.set(row.product.product_id, {
+            inventoryDemand.set(demandKey, {
               name: row.product.name,
-              requested: row.inventoryQuantity,
-              available: row.product.quantity,
+              requested: requestedQuantity,
+              available: availableQuantity,
               tracked: row.product.track_inventory,
             });
           }
@@ -200,7 +242,7 @@ export class CheckoutService {
       let taxTotal = 0n;
       let totalBeforeDiscount = 0n;
       let costTotal = 0n;
-      const calculated = rows.map(({ product, quantity, inventoryQuantity }) => {
+      const calculated = rows.map(({ product, quantity, inventoryQuantity, inventoryPool }) => {
         const line = calculateLine(
           product.unit_price,
           product.unit_cost,
@@ -212,7 +254,7 @@ export class CheckoutService {
         taxTotal += line.tax;
         totalBeforeDiscount += line.total;
         costTotal += line.cost;
-        return { product, quantity, inventoryQuantity, line };
+        return { product, quantity, inventoryQuantity, inventoryPool, line };
       });
 
       let discountTotal = 0n;
@@ -310,14 +352,32 @@ export class CheckoutService {
           ],
         );
         if (item.product.track_inventory) {
-          const inventory = await transaction.query<{ quantity: number }>(
+          const sealedDeduction = item.inventoryPool === 'sealed' ? item.quantity : 0;
+          const openedDeduction = item.inventoryPool === 'opened' ? item.inventoryQuantity : 0;
+          const inventory = await transaction.query<{
+            quantity: number;
+            sealedQuantity: number;
+            openedQuantity: number;
+          }>(
             `update branch_inventory set
                quantity = quantity - $4,
                inventory_value = round(average_cost * (quantity - $4), 4),
+               sealed_quantity = sealed_quantity - $5,
+               opened_quantity = opened_quantity - $6,
                updated_at = now()
              where organization_id = $1 and branch_id = $2 and product_id = $3
-               and variant_id is null returning quantity::float8 as quantity`,
-            [actor.organizationId, input.branchId, item.product.product_id, item.inventoryQuantity],
+               and variant_id is null
+             returning quantity::float8 as quantity,
+               sealed_quantity::float8 as "sealedQuantity",
+               opened_quantity::float8 as "openedQuantity"`,
+            [
+              actor.organizationId,
+              input.branchId,
+              item.product.product_id,
+              item.inventoryQuantity,
+              sealedDeduction,
+              openedDeduction,
+            ],
           );
           await transaction.query(
             `insert into inventory_movements (
@@ -335,23 +395,53 @@ export class CheckoutService {
               actor.userId,
             ],
           );
+          if (item.inventoryPool !== 'shared') {
+            await transaction.query(
+              `insert into inventory_pool_movements (
+                organization_id,branch_id,product_id,container_variant_id,movement_type,
+                sealed_quantity_delta,opened_quantity_delta,sealed_quantity_after,
+                opened_quantity_after,reason,reference_type,reference_id,created_by
+               ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'POS sale','sale',$10,$11)`,
+              [
+                actor.organizationId,
+                input.branchId,
+                item.product.product_id,
+                item.product.portioning_variant_id,
+                item.inventoryPool === 'sealed' ? 'whole_sale' : 'portion_sale',
+                -sealedDeduction,
+                -openedDeduction,
+                inventory.rows[0]!.sealedQuantity,
+                inventory.rows[0]!.openedQuantity,
+                saleId,
+                actor.userId,
+              ],
+            );
+          }
         }
 
-        // Deduct raw recipe ingredients if product has a recipe defined
-        const recipeRes = await transaction.query<{
-          ingredient_product_id: string;
-          ingredient_variant_id: string | null;
-          quantity_required: number;
-          unit: string;
-          base_unit: string;
-        }>(
-          `select pr.ingredient_product_id, pr.ingredient_variant_id, pr.quantity_required::float8 as quantity_required,
-                  pr.unit, p.unit as base_unit
+        // Cooked-to-order products consume their BOM at checkout. Inventory-tracked
+        // finished products consumed their BOM when they were produced, so checkout
+        // must only deduct the finished item here.
+        const recipeRes = item.product.track_inventory
+          ? { rows: [] }
+          : await transaction.query<{
+              ingredient_product_id: string;
+              ingredient_variant_id: string | null;
+              quantity_required: number;
+              unit: string;
+              base_unit: string;
+              portioning_variant_id: string | null;
+            }>(
+              `select pr.ingredient_product_id, pr.ingredient_variant_id, pr.quantity_required::float8 as quantity_required,
+                  pr.unit, p.unit as base_unit,portioning.id as portioning_variant_id
            from product_recipes pr
            join products p on p.id = pr.ingredient_product_id and p.organization_id = pr.organization_id
+           left join product_variants portioning
+             on portioning.organization_id=p.organization_id
+             and portioning.product_id=p.id and portioning.is_portioning_container
            where pr.organization_id = $1 and pr.parent_product_id = $2`,
-          [actor.organizationId, item.product.product_id],
-        );
+              [actor.organizationId, item.product.product_id],
+            );
 
         for (const ingredient of recipeRes.rows) {
           const effectiveQty = convertRecipeQuantity(
@@ -360,15 +450,23 @@ export class CheckoutService {
             ingredient.base_unit,
           );
           const totalDeduction = effectiveQty * item.quantity;
-          const ingredientInv = await transaction.query<{ quantity: number }>(
+          const ingredientInv = await transaction.query<{
+            quantity: number;
+            sealedQuantity: number;
+            openedQuantity: number;
+          }>(
             `update branch_inventory set
                quantity = quantity - $4,
                inventory_value = round(average_cost * (quantity - $4), 4),
+               opened_quantity = opened_quantity - case when $7::uuid is null then 0 else $4 end,
                updated_at = now()
              where organization_id = $1 and branch_id = $2 and product_id = $3
                and variant_id is not distinct from $5::uuid
                and ($6::boolean or quantity >= $4)
-             returning quantity::float8 as quantity`,
+               and ($7::uuid is null or $6::boolean or opened_quantity >= $4)
+             returning quantity::float8 as quantity,
+               sealed_quantity::float8 as "sealedQuantity",
+               opened_quantity::float8 as "openedQuantity"`,
             [
               actor.organizationId,
               input.branchId,
@@ -376,6 +474,7 @@ export class CheckoutService {
               totalDeduction,
               ingredient.ingredient_variant_id ?? null,
               context.allow_negative_inventory,
+              ingredient.portioning_variant_id,
             ],
           );
 
@@ -402,6 +501,28 @@ export class CheckoutService {
               actor.userId,
             ],
           );
+          if (ingredient.portioning_variant_id) {
+            await transaction.query(
+              `insert into inventory_pool_movements (
+                organization_id,branch_id,product_id,container_variant_id,movement_type,
+                sealed_quantity_delta,opened_quantity_delta,sealed_quantity_after,
+                opened_quantity_after,reason,reference_type,reference_id,created_by
+               ) values ($1,$2,$3,$4,'recipe_deduction',0,$5,$6,$7,$8,
+                 'sale',$9,$10)`,
+              [
+                actor.organizationId,
+                input.branchId,
+                ingredient.ingredient_product_id,
+                ingredient.portioning_variant_id,
+                -totalDeduction,
+                ingredientInv.rows[0].sealedQuantity,
+                ingredientInv.rows[0].openedQuantity,
+                `Recipe deduction for ${item.product.name}`,
+                saleId,
+                actor.userId,
+              ],
+            );
+          }
         }
       }
 

@@ -49,14 +49,40 @@ function searchable(item: unknown): string {
     .toLowerCase();
 }
 
+function roleCounts(items: unknown[]) {
+  const counts = { all: items.length, sellable: 0, ingredient: 0, both: 0 };
+  for (const item of items) {
+    const role =
+      item && typeof item === 'object'
+        ? ((item as { inventoryRole?: string }).inventoryRole ?? 'sellable')
+        : 'sellable';
+    if (role === 'ingredient') counts.ingredient += 1;
+    else if (role === 'both') counts.both += 1;
+    else counts.sellable += 1;
+  }
+  return counts;
+}
+
 export async function offlineSnapshotFallback<T>(path: string): Promise<T | undefined> {
   const [pathname, rawQuery = ''] = path.split('?');
   const parameters = new URLSearchParams(rawQuery);
   const snapshot = await getOfflineSnapshot(parameters.get('branchId') ?? undefined);
   if (!snapshot) return undefined;
   const search = (parameters.get('search') ?? '').trim().toLowerCase();
+  const usage = parameters.get('usage');
+  const inventoryRole = parameters.get('inventoryRole');
   const filtered = (items: unknown[]) =>
-    search ? items.filter((item) => searchable(item).includes(search)) : items;
+    items.filter((item) => {
+      if (search && !searchable(item).includes(search)) return false;
+      if (!usage || !item || typeof item !== 'object') return true;
+      const role = (item as { inventoryRole?: string }).inventoryRole ?? 'sellable';
+      if (inventoryRole && role !== inventoryRole) return false;
+      if (usage === 'pos') return role === 'sellable' || role === 'both';
+      if (usage === 'bom') return role === 'ingredient' || role === 'both';
+      return true;
+    });
+  if (pathname === '/products/summary') return roleCounts(snapshot.products) as T;
+  if (pathname === '/inventory/summary') return roleCounts(snapshot.inventory) as T;
   if (pathname === '/products') return page(filtered(snapshot.products), parameters) as T;
   if (pathname === '/inventory') return page(filtered(snapshot.inventory), parameters) as T;
   if (pathname === '/customers') return page(filtered(snapshot.customers), parameters) as T;
@@ -67,7 +93,7 @@ export async function offlineSnapshotFallback<T>(path: string): Promise<T | unde
   if (pathname === '/settings') return snapshot.settings as T;
   if (pathname === '/products/lookup') {
     const code = parameters.get('code');
-    return snapshot.products.find((item) => {
+    return filtered(snapshot.products).find((item) => {
       const product = item as {
         sku?: string;
         barcodes?: string[];

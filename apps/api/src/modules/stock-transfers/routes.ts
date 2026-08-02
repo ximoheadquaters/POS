@@ -3,7 +3,7 @@ import { createStockTransferSchema, paginationSchema, uuidSchema } from '@ximo/s
 import type { Database } from '../../database/types.js';
 import { requireModule } from '../../middleware/auth.js';
 import { validateBody, validateQuery } from '../../middleware/validation.js';
-import { conflict, notFound, unprocessable } from '../../shared/errors.js';
+import { badRequest, conflict, notFound, unprocessable } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
 
 export function stockTransfersRouter(database: Database): Router {
@@ -87,6 +87,8 @@ export function stockTransfersRouter(database: Database): Router {
 
     const itemsResult = await database.query(
       `select sti.id, sti.product_id as "productId", sti.quantity::float8 as quantity,
+        sti.base_quantity::float8 as "baseQuantity",sti.stock_pool as pool,
+        sti.container_variant_id as "containerVariantId",
         p.name as "productName", p.sku, p.unit
        from stock_transfer_items sti
        join products p on p.id = sti.product_id
@@ -126,26 +128,80 @@ export function stockTransfersRouter(database: Database): Router {
 
         // Deduct inventory from source branch for each item
         for (const item of input.items) {
-          const inv = await tx.query<{ quantity: number }>(
-            `select bi.quantity::float8 as quantity from branch_inventory bi
-             where bi.organization_id=$1 and bi.branch_id=$2 and bi.product_id=$3`,
+          const inv = await tx.query<{
+            quantity: number;
+            sealedQuantity: number;
+            openedQuantity: number;
+            portioningVariantId: string | null;
+            unitsPerBase: number | null;
+          }>(
+            `select coalesce(bi.quantity,0)::float8 as quantity,
+              coalesce(bi.sealed_quantity,0)::float8 as "sealedQuantity",
+              coalesce(bi.opened_quantity,0)::float8 as "openedQuantity",
+              pv.id as "portioningVariantId",pv.units_per_base::float8 as "unitsPerBase"
+             from products p
+             left join branch_inventory bi on bi.organization_id=p.organization_id
+               and bi.branch_id=$2 and bi.product_id=p.id and bi.variant_id is null
+             left join product_variants pv on pv.organization_id=p.organization_id
+               and pv.product_id=p.id and pv.is_portioning_container
+             where p.organization_id=$1 and p.id=$3`,
             [organizationId, input.fromBranchId, item.productId],
           );
-
-          const currentQty = inv.rows[0]?.quantity ?? 0;
-          if (!allowNegative && currentQty < item.quantity) {
-            throw unprocessable('INSUFFICIENT_STOCK', `Insufficient inventory at source branch.`);
+          const stock = inv.rows[0];
+          if (!stock) throw notFound('Product');
+          const isPortioning = Boolean(stock.portioningVariantId);
+          if (isPortioning && item.pool === 'shared') {
+            throw badRequest(
+              'STOCK_POOL_REQUIRED',
+              'Choose whether to transfer sealed containers or opened portion stock',
+            );
+          }
+          if (!isPortioning && item.pool !== 'shared') {
+            throw badRequest('INVALID_STOCK_POOL', 'This product uses one shared stock balance');
+          }
+          if (item.pool === 'sealed' && !Number.isInteger(item.quantity)) {
+            throw badRequest('WHOLE_CONTAINER_REQUIRED', 'Sealed containers must be whole numbers');
+          }
+          const baseQuantity =
+            item.pool === 'sealed' ? item.quantity * Number(stock.unitsPerBase) : item.quantity;
+          const currentPoolQuantity =
+            item.pool === 'sealed'
+              ? stock.sealedQuantity
+              : item.pool === 'opened'
+                ? stock.openedQuantity
+                : stock.quantity;
+          if (!allowNegative && currentPoolQuantity < item.quantity) {
+            throw unprocessable(
+              'INSUFFICIENT_STOCK',
+              `Insufficient ${item.pool === 'shared' ? '' : `${item.pool} `}inventory at source branch.`,
+            );
           }
 
           // Deduct from sender branch inventory
-          await tx.query(
-            `insert into branch_inventory (organization_id, branch_id, product_id, quantity, average_cost, inventory_value)
-             values ($1, $2, $3, -$4, 0, 0)
-             on conflict (organization_id, branch_id, product_id) do update set
+          const updatedInventory = await tx.query<{
+            sealedQuantity: number;
+            openedQuantity: number;
+          }>(
+            `insert into branch_inventory (
+               organization_id,branch_id,product_id,quantity,average_cost,inventory_value,
+               sealed_quantity,opened_quantity
+             ) values ($1,$2,$3,-$4,0,0,-$5,-$6)
+             on conflict (branch_id,product_id,variant_id) do update set
                quantity = branch_inventory.quantity - $4,
+               sealed_quantity = branch_inventory.sealed_quantity - $5,
+               opened_quantity = branch_inventory.opened_quantity - $6,
                inventory_value = round(branch_inventory.average_cost * (branch_inventory.quantity - $4), 4),
-               updated_at = now()`,
-            [organizationId, input.fromBranchId, item.productId, item.quantity],
+               updated_at = now()
+             returning sealed_quantity::float8 as "sealedQuantity",
+               opened_quantity::float8 as "openedQuantity"`,
+            [
+              organizationId,
+              input.fromBranchId,
+              item.productId,
+              baseQuantity,
+              item.pool === 'sealed' ? item.quantity : 0,
+              item.pool === 'opened' ? item.quantity : 0,
+            ],
           );
 
           // Record sender movement
@@ -157,12 +213,33 @@ export function stockTransfersRouter(database: Database): Router {
               organizationId,
               input.fromBranchId,
               item.productId,
-              item.quantity,
-              currentQty - item.quantity,
+              baseQuantity,
+              stock.quantity - baseQuantity,
               `Stock transfer out ${transferNumber}`,
               userId,
             ],
           );
+          if (isPortioning) {
+            await tx.query(
+              `insert into inventory_pool_movements (
+                organization_id,branch_id,product_id,container_variant_id,movement_type,
+                sealed_quantity_delta,opened_quantity_delta,sealed_quantity_after,
+                opened_quantity_after,reason,reference_type,created_by
+               ) values ($1,$2,$3,$4,'stock_transfer_out',$5,$6,$7,$8,$9,'stock_transfer',$10)`,
+              [
+                organizationId,
+                input.fromBranchId,
+                item.productId,
+                stock.portioningVariantId,
+                item.pool === 'sealed' ? -item.quantity : 0,
+                item.pool === 'opened' ? -item.quantity : 0,
+                updatedInventory.rows[0]!.sealedQuantity,
+                updatedInventory.rows[0]!.openedQuantity,
+                `Stock transfer out ${transferNumber}`,
+                userId,
+              ],
+            );
+          }
         }
 
         // Insert stock transfer header
@@ -185,9 +262,17 @@ export function stockTransfersRouter(database: Database): Router {
         // Insert transfer items
         for (const item of input.items) {
           await tx.query(
-            `insert into stock_transfer_items (organization_id, stock_transfer_id, product_id, quantity)
-             values ($1, $2, $3, $4)`,
-            [organizationId, transferId, item.productId, item.quantity],
+            `insert into stock_transfer_items (
+               organization_id,stock_transfer_id,product_id,quantity,base_quantity,stock_pool,
+               container_variant_id
+             )
+             select $1,$2,$3,$4,
+               case when $5='sealed' then $4*pv.units_per_base else $4 end,$5,pv.id
+             from products p
+             left join product_variants pv on pv.organization_id=p.organization_id
+               and pv.product_id=p.id and pv.is_portioning_container
+             where p.organization_id=$1 and p.id=$3`,
+            [organizationId, transferId, item.productId, item.quantity, item.pool],
           );
         }
 
@@ -222,30 +307,59 @@ export function stockTransfersRouter(database: Database): Router {
         throw conflict('TRANSFER_NOT_IN_TRANSIT', `Transfer is already ${transfer.status}`);
       }
 
-      const itemsRes = await tx.query<{ product_id: string; quantity: number }>(
-        `select product_id, quantity::float8 as quantity from stock_transfer_items
+      const itemsRes = await tx.query<{
+        product_id: string;
+        quantity: number;
+        base_quantity: number;
+        stock_pool: 'shared' | 'sealed' | 'opened';
+        container_variant_id: string | null;
+      }>(
+        `select product_id,quantity::float8 as quantity,base_quantity::float8 as base_quantity,
+           stock_pool,container_variant_id from stock_transfer_items
          where stock_transfer_id = $1 and organization_id = $2`,
         [id, organizationId],
       );
 
       for (const item of itemsRes.rows) {
         // Fetch current destination quantity
-        const invRes = await tx.query<{ quantity: number }>(
-          `select quantity::float8 as quantity from branch_inventory
-           where organization_id = $1 and branch_id = $2 and product_id = $3`,
+        const invRes = await tx.query<{
+          quantity: number;
+          sealedQuantity: number;
+          openedQuantity: number;
+        }>(
+          `select quantity::float8 as quantity,sealed_quantity::float8 as "sealedQuantity",
+             opened_quantity::float8 as "openedQuantity" from branch_inventory
+           where organization_id = $1 and branch_id = $2 and product_id = $3
+             and variant_id is null`,
           [organizationId, transfer.to_branch_id, item.product_id],
         );
         const currentQty = invRes.rows[0]?.quantity ?? 0;
 
         // Add to destination inventory
-        await tx.query(
-          `insert into branch_inventory (organization_id, branch_id, product_id, quantity, average_cost, inventory_value)
-           values ($1, $2, $3, $4, 0, 0)
-           on conflict (organization_id, branch_id, product_id) do update set
+        const updatedInventory = await tx.query<{
+          sealedQuantity: number;
+          openedQuantity: number;
+        }>(
+          `insert into branch_inventory (
+             organization_id,branch_id,product_id,quantity,average_cost,inventory_value,
+             sealed_quantity,opened_quantity
+           ) values ($1,$2,$3,$4,0,0,$5,$6)
+           on conflict (branch_id,product_id,variant_id) do update set
              quantity = branch_inventory.quantity + $4,
+             sealed_quantity = branch_inventory.sealed_quantity + $5,
+             opened_quantity = branch_inventory.opened_quantity + $6,
              inventory_value = round(branch_inventory.average_cost * (branch_inventory.quantity + $4), 4),
-             updated_at = now()`,
-          [organizationId, transfer.to_branch_id, item.product_id, item.quantity],
+             updated_at = now()
+           returning sealed_quantity::float8 as "sealedQuantity",
+             opened_quantity::float8 as "openedQuantity"`,
+          [
+            organizationId,
+            transfer.to_branch_id,
+            item.product_id,
+            item.base_quantity,
+            item.stock_pool === 'sealed' ? item.quantity : 0,
+            item.stock_pool === 'opened' ? item.quantity : 0,
+          ],
         );
 
         // Record destination movement
@@ -257,12 +371,34 @@ export function stockTransfersRouter(database: Database): Router {
             organizationId,
             transfer.to_branch_id,
             item.product_id,
-            item.quantity,
-            currentQty + item.quantity,
+            item.base_quantity,
+            currentQty + item.base_quantity,
             `Received stock transfer ${transfer.transfer_number}`,
             userId,
           ],
         );
+        if (item.stock_pool !== 'shared') {
+          await tx.query(
+            `insert into inventory_pool_movements (
+              organization_id,branch_id,product_id,container_variant_id,movement_type,
+              sealed_quantity_delta,opened_quantity_delta,sealed_quantity_after,
+              opened_quantity_after,reason,reference_type,reference_id,created_by
+             ) values ($1,$2,$3,$4,'stock_transfer_in',$5,$6,$7,$8,$9,'stock_transfer',$10,$11)`,
+            [
+              organizationId,
+              transfer.to_branch_id,
+              item.product_id,
+              item.container_variant_id,
+              item.stock_pool === 'sealed' ? item.quantity : 0,
+              item.stock_pool === 'opened' ? item.quantity : 0,
+              updatedInventory.rows[0]!.sealedQuantity,
+              updatedInventory.rows[0]!.openedQuantity,
+              `Received stock transfer ${transfer.transfer_number}`,
+              id,
+              userId,
+            ],
+          );
+        }
       }
 
       // Mark completed
@@ -300,23 +436,68 @@ export function stockTransfersRouter(database: Database): Router {
         throw conflict('TRANSFER_NOT_IN_TRANSIT', `Transfer is already ${transfer.status}`);
       }
 
-      const itemsRes = await tx.query<{ product_id: string; quantity: number }>(
-        `select product_id, quantity::float8 as quantity from stock_transfer_items
+      const itemsRes = await tx.query<{
+        product_id: string;
+        quantity: number;
+        base_quantity: number;
+        stock_pool: 'shared' | 'sealed' | 'opened';
+        container_variant_id: string | null;
+      }>(
+        `select product_id,quantity::float8 as quantity,base_quantity::float8 as base_quantity,
+           stock_pool,container_variant_id from stock_transfer_items
          where stock_transfer_id = $1 and organization_id = $2`,
         [id, organizationId],
       );
 
       for (const item of itemsRes.rows) {
         // Restore stock to sender branch
-        await tx.query(
-          `insert into branch_inventory (organization_id, branch_id, product_id, quantity, average_cost, inventory_value)
-           values ($1, $2, $3, $4, 0, 0)
-           on conflict (organization_id, branch_id, product_id) do update set
+        const restoredInventory = await tx.query<{
+          sealedQuantity: number;
+          openedQuantity: number;
+        }>(
+          `insert into branch_inventory (
+             organization_id,branch_id,product_id,quantity,average_cost,inventory_value,
+             sealed_quantity,opened_quantity
+           ) values ($1,$2,$3,$4,0,0,$5,$6)
+           on conflict (branch_id,product_id,variant_id) do update set
              quantity = branch_inventory.quantity + $4,
+             sealed_quantity = branch_inventory.sealed_quantity + $5,
+             opened_quantity = branch_inventory.opened_quantity + $6,
              inventory_value = round(branch_inventory.average_cost * (branch_inventory.quantity + $4), 4),
-             updated_at = now()`,
-          [organizationId, transfer.from_branch_id, item.product_id, item.quantity],
+             updated_at = now()
+           returning sealed_quantity::float8 as "sealedQuantity",
+             opened_quantity::float8 as "openedQuantity"`,
+          [
+            organizationId,
+            transfer.from_branch_id,
+            item.product_id,
+            item.base_quantity,
+            item.stock_pool === 'sealed' ? item.quantity : 0,
+            item.stock_pool === 'opened' ? item.quantity : 0,
+          ],
         );
+        if (item.stock_pool !== 'shared') {
+          await tx.query(
+            `insert into inventory_pool_movements (
+              organization_id,branch_id,product_id,container_variant_id,movement_type,
+              sealed_quantity_delta,opened_quantity_delta,sealed_quantity_after,
+              opened_quantity_after,reason,reference_type,reference_id,created_by
+             ) values ($1,$2,$3,$4,'stock_transfer_in',$5,$6,$7,$8,$9,'stock_transfer',$10,$11)`,
+            [
+              organizationId,
+              transfer.from_branch_id,
+              item.product_id,
+              item.container_variant_id,
+              item.stock_pool === 'sealed' ? item.quantity : 0,
+              item.stock_pool === 'opened' ? item.quantity : 0,
+              restoredInventory.rows[0]!.sealedQuantity,
+              restoredInventory.rows[0]!.openedQuantity,
+              `Cancelled stock transfer ${transfer.transfer_number}`,
+              id,
+              userId,
+            ],
+          );
+        }
       }
 
       // Mark cancelled

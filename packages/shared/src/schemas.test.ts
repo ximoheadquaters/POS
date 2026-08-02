@@ -64,6 +64,16 @@ describe('createProductSchema', () => {
       }).status,
     ).toBe('pending_receipt');
   });
+
+  it('separates POS products from raw ingredients', () => {
+    expect(createProductSchema.parse(validProduct).inventoryRole).toBe('sellable');
+    expect(
+      createProductSchema.parse({ ...validProduct, inventoryRole: 'ingredient' }).inventoryRole,
+    ).toBe('ingredient');
+    expect(() =>
+      createProductSchema.parse({ ...validProduct, inventoryRole: 'sack' }),
+    ).toThrow();
+  });
 });
 
 describe('productUnitSchema', () => {

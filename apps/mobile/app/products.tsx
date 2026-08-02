@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,7 @@ interface Product {
   name: string;
   sku: string;
   unit?: string;
+  inventoryRole?: 'sellable' | 'ingredient' | 'both';
   sellingPrice: string;
   cost: string;
   averageCost: string;
@@ -29,6 +30,47 @@ interface Product {
   sellingUnits?: Array<{ variantId: string; name: string; unit: string; unitsPerBase: number }>;
   categoryName?: string;
   brandName?: string;
+}
+
+type ProductFilter = 'all' | 'sellable' | 'ingredient' | 'both';
+
+const PRODUCT_FILTERS: Array<{
+  id: ProductFilter;
+  title: string;
+  description: string;
+  icon: ComponentProps<typeof Feather>['name'];
+}> = [
+  { id: 'all', title: 'All products', description: 'Entire catalogue', icon: 'grid' },
+  {
+    id: 'sellable',
+    title: 'Products for sale',
+    description: 'Shown at the POS',
+    icon: 'shopping-cart',
+  },
+  {
+    id: 'ingredient',
+    title: 'Raw inventory',
+    description: 'Used by recipes',
+    icon: 'archive',
+  },
+  { id: 'both', title: 'Dual use', description: 'Sold and used in BOM', icon: 'repeat' },
+];
+
+function compatibleRecipeUnits(baseUnit?: string) {
+  const normalized = (baseUnit ?? '').trim().toLowerCase();
+  if (['g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms'].includes(normalized)) {
+    return [
+      { code: 'g', label: 'Grams (g)' },
+      { code: 'kg', label: 'Kilograms (kg)' },
+    ];
+  }
+  if (['ml', 'milliliter', 'milliliters', 'l', 'liter', 'liters'].includes(normalized)) {
+    return [
+      { code: 'ml', label: 'Milliliters (ml)' },
+      { code: 'l', label: 'Liters (L)' },
+    ];
+  }
+  return [{ code: 'piece', label: 'Pieces (pc)' }];
 }
 
 interface RecipeItemRow {
@@ -54,6 +96,7 @@ function RecipeModal({
   const [selectedIngredientId, setSelectedIngredientId] = useState('');
   const [quantityInput, setQuantityInput] = useState('1');
   const [unitInput, setUnitInput] = useState('piece');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const recipeQuery = useQuery({
     queryKey: ['product-recipe', product?.id],
@@ -112,7 +155,15 @@ function RecipeModal({
 
   if (!product) return null;
 
-  const availableIngredients = allProducts.filter((p) => p.id !== product.id);
+  const availableIngredients = allProducts.filter(
+    (candidate) =>
+      candidate.id !== product.id &&
+      (candidate.inventoryRole === 'ingredient' || candidate.inventoryRole === 'both'),
+  );
+  const selectedIngredient = availableIngredients.find(
+    (candidate) => candidate.id === selectedIngredientId,
+  );
+  const unitOptions = compatibleRecipeUnits(selectedIngredient?.unit);
 
   const totalIngredientCost = items.reduce((sum, item) => {
     const effQty = convertRecipeQuantity(item.quantityRequired, item.unit, item.baseUnit);
@@ -145,7 +196,6 @@ function RecipeModal({
     setItems((prev) => prev.filter((i) => i.ingredientProductId !== id));
   };
 
-  const [searchQuery, setSearchQuery] = useState('');
   const filteredAvailable = availableIngredients.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase().trim()),
   );
@@ -201,9 +251,9 @@ function RecipeModal({
                     return (
                       <Pressable
                         key={ing.id}
-                        onPress={() => {
-                          setSelectedIngredientId(ing.id);
-                          setUnitInput(ing.unit || 'piece');
+                         onPress={() => {
+                           setSelectedIngredientId(ing.id);
+                           setUnitInput(compatibleRecipeUnits(ing.unit)[0]!.code);
                         }}
                         className={`px-3 py-2 rounded-xl border ${
                           selected
@@ -223,23 +273,18 @@ function RecipeModal({
               <View className="mb-3">
                 <Text className="text-xs font-medium text-slate-300 mb-1">Select Unit</Text>
                 <View className="flex-row flex-wrap gap-1.5">
-                  {[
-                    { code: 'piece', label: 'Piece (pc)' },
-                    { code: 'g', label: 'Grams (g)' },
-                    { code: 'kg', label: 'Kg (kg)' },
-                    { code: 'ml', label: 'Milliliters (ml)' },
-                    { code: 'l', label: 'Liters (L)' },
-                  ].map((u) => {
+                  {unitOptions.map((u) => {
                     const selected = unitInput === u.code;
                     return (
-                      <Pressable
-                        key={u.code}
-                        onPress={() => setUnitInput(u.code)}
+                       <Pressable
+                         key={u.code}
+                         disabled={!selectedIngredient}
+                         onPress={() => setUnitInput(u.code)}
                         className={`rounded-lg border px-2.5 py-1.5 ${
                           selected
                             ? 'bg-emerald-500/20 border-emerald-500'
                             : 'bg-slate-800 border-slate-700'
-                        }`}
+                        } ${!selectedIngredient ? 'opacity-40' : ''}`}
                       >
                         <Text className={`text-xs font-medium ${selected ? 'text-emerald-400' : 'text-slate-300'}`}>
                           {u.label}
@@ -354,23 +399,46 @@ function RecipeModal({
 
 function ProductsContent() {
   const [search, setSearch] = useState('');
+  const [productFilter, setProductFilter] = useState<ProductFilter>('all');
   const [editingRecipeProduct, setEditingRecipeProduct] = useState<Product | null>(null);
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
   const queryClient = useQueryClient();
   const query = useInfiniteQuery({
-    queryKey: ['products', branch?.id, search],
+    queryKey: ['products', branch?.id, search, productFilter],
     initialPageParam: 1,
     enabled: Boolean(branch),
     queryFn: ({ pageParam }) =>
       api<Product[]>(
         `/products?branchId=${branch!.id}&includeInactive=true&page=${pageParam}&pageSize=30${
+          productFilter === 'all' ? '' : `&inventoryRole=${productFilter}`
+        }${
           search ? `&search=${encodeURIComponent(search)}` : ''
         }`,
       ),
     getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
   });
+  const summaryQuery = useQuery({
+    queryKey: ['product-summary'],
+    queryFn: () =>
+      api<{ all: number; sellable: number; ingredient: number; both: number }>(
+        '/products/summary',
+      ),
+  });
   const products = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
+  const productCounts = useMemo(
+    () => ({
+      all: products.length,
+      sellable: products.filter(
+        (product) => !product.inventoryRole || product.inventoryRole === 'sellable',
+      ).length,
+      ingredient: products.filter((product) => product.inventoryRole === 'ingredient').length,
+      both: products.filter((product) => product.inventoryRole === 'both').length,
+    }),
+    [products],
+  );
+  const displayedProductCounts = summaryQuery.data ?? productCounts;
+  const visibleProducts = products;
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: Pick<Product, 'id' | 'status'>) =>
       api(`/products/${id}`, {
@@ -425,6 +493,45 @@ function ProductsContent() {
         }
       />
       {products.length ? (
+        <View className="border-b border-slate-100 bg-slate-50 p-4">
+          <View className="flex-row flex-wrap gap-3">
+            {PRODUCT_FILTERS.map((filter) => {
+              const selected = productFilter === filter.id;
+              return (
+                <Pressable
+                  key={filter.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => setProductFilter(filter.id)}
+                  className={`min-w-[145px] flex-1 rounded-2xl border p-4 active:opacity-80 ${
+                    selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <View className="flex-row items-start justify-between">
+                    <View
+                      className={`h-10 w-10 items-center justify-center rounded-xl ${
+                        selected ? 'bg-white/15' : 'bg-brand-50'
+                      }`}
+                    >
+                      <Feather name={filter.icon} size={17} color={selected ? '#FFFFFF' : '#1A593B'} />
+                    </View>
+                    <Text className={`text-xl font-semibold ${selected ? 'text-white' : 'text-slate-950'}`}>
+                      {displayedProductCounts[filter.id]}
+                    </Text>
+                  </View>
+                  <Text className={`mt-3 text-sm font-semibold ${selected ? 'text-white' : 'text-slate-900'}`}>
+                    {filter.title}
+                  </Text>
+                  <Text className={`mt-1 text-xs ${selected ? 'text-brand-100' : 'text-slate-500'}`}>
+                    {filter.description}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+      {products.length ? (
         <View className="bg-white p-4">
           <TextInput
             value={search}
@@ -442,13 +549,15 @@ function ProductsContent() {
         <ErrorState message={query.error.message} retry={() => void query.refetch()} />
       ) : (
         <FlatList
-          data={products}
+          data={visibleProducts}
           keyExtractor={(item) => item.id}
           contentContainerClassName="p-4 gap-2"
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center py-36">
               <Feather name="box" size={42} color="#C7C0B8" />
-              <Text className="mt-4 text-base font-medium text-slate-700">No products yet</Text>
+              <Text className="mt-4 text-base font-medium text-slate-700">
+                {productFilter === 'all' ? 'No products yet' : 'No products in this group'}
+              </Text>
               <Text className="mt-2 text-sm text-slate-400">
                 Add your first product to get started
               </Text>
@@ -480,6 +589,12 @@ function ProductsContent() {
                 </Text>
                 <Text className="mt-1 text-xs text-slate-400">
                   {item.trackInventory ? 'Inventory tracked' : 'Stock not tracked'}
+                  {' Â· '}
+                  {item.inventoryRole === 'ingredient'
+                    ? 'Raw ingredient'
+                    : item.inventoryRole === 'both'
+                      ? 'POS + ingredient'
+                      : 'POS product'}
                   {item.sellingUnits?.length
                     ? ` · Also sold by ${item.sellingUnits.map((unit) => unit.unit).join(', ')}`
                     : ''}
@@ -561,14 +676,18 @@ function ProductsContent() {
                       <Feather name="copy" size={12} color="#1A593B" />
                       <Text className="ml-1 text-xs font-medium text-brand-700">Units</Text>
                     </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => setEditingRecipeProduct(item)}
-                      className="mt-2 min-h-8 flex-row items-center justify-center rounded-full bg-emerald-50 border border-emerald-200 px-3"
-                    >
-                      <Feather name="coffee" size={12} color="#059669" />
-                      <Text className="ml-1 text-xs font-medium text-emerald-700">Recipe (BOM)</Text>
-                    </Pressable>
+                    {item.inventoryRole !== 'ingredient' ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => setEditingRecipeProduct(item)}
+                        className="mt-2 min-h-8 flex-row items-center justify-center rounded-full bg-emerald-50 border border-emerald-200 px-3"
+                      >
+                        <Feather name="coffee" size={12} color="#059669" />
+                        <Text className="ml-1 text-xs font-medium text-emerald-700">
+                          Recipe (BOM)
+                        </Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable
                       accessibilityRole="switch"
                       accessibilityState={{ checked: item.status === 'active' }}

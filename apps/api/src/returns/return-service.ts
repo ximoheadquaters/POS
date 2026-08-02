@@ -18,6 +18,7 @@ interface SaleItemRow {
   unit_cost: string;
   track_inventory: boolean;
   units_per_base: number;
+  portioning_variant_id: string | null;
 }
 
 function quantityToThousandths(value: number): bigint {
@@ -68,11 +69,16 @@ export class ReturnService {
           `select si.id, si.product_id, si.variant_id, si.quantity::float8 as quantity,
             si.returned_quantity::float8 as returned_quantity, si.line_total::text,
             si.unit_cost::text,
-            p.track_inventory,coalesce(v.units_per_base,1)::float8 as units_per_base
+            p.track_inventory,coalesce(v.units_per_base,1)::float8 as units_per_base,
+            portioning.id as portioning_variant_id
            from sale_items si join products p
              on p.id=si.product_id and p.organization_id=si.organization_id
            left join product_variants v
              on v.id=si.variant_id and v.organization_id=si.organization_id
+           left join product_variants portioning
+             on portioning.product_id=si.product_id
+             and portioning.organization_id=si.organization_id
+             and portioning.is_portioning_container
            where si.id = $1 and si.sale_id = $2 and si.organization_id = $3
            for update of si`,
           [requested.saleItemId, saleId, actor.organizationId],
@@ -147,10 +153,20 @@ export class ReturnService {
         );
         if (item.source.track_inventory) {
           const inventoryQuantity = item.quantity * item.source.units_per_base;
+          const sealedReturn = item.source.variant_id === item.source.portioning_variant_id;
+          const sealedQuantity = sealedReturn ? item.quantity : 0;
+          const openedQuantity =
+            item.source.portioning_variant_id && !sealedReturn ? inventoryQuantity : 0;
           let currentQty = 0;
+          let sealedAfter = 0;
+          let openedAfter = 0;
 
           if (item.restock) {
-            const inventory = await tx.query<{ quantity: number }>(
+            const inventory = await tx.query<{
+              quantity: number;
+              sealedQuantity: number;
+              openedQuantity: number;
+            }>(
               `update branch_inventory set
                  quantity = quantity + $4,
                  inventory_value = round(inventory_value + $5::numeric * $6::numeric, 4),
@@ -159,9 +175,14 @@ export class ReturnService {
                    then round((inventory_value + $5::numeric * $6::numeric) / (quantity + $4), 4)
                    else average_cost
                  end,
+                 sealed_quantity=sealed_quantity+$8,
+                 opened_quantity=opened_quantity+$9,
                  updated_at = now()
                where organization_id = $1 and branch_id = $2 and product_id = $3
-                 and variant_id is not distinct from $7 returning quantity::float8 as quantity`,
+                 and variant_id is null
+               returning quantity::float8 as quantity,
+                 sealed_quantity::float8 as "sealedQuantity",
+                 opened_quantity::float8 as "openedQuantity"`,
               [
                 actor.organizationId,
                 input.branchId,
@@ -170,37 +191,73 @@ export class ReturnService {
                 item.quantity,
                 item.source.unit_cost,
                 item.source.variant_id,
+                sealedQuantity,
+                openedQuantity,
               ],
             );
             currentQty = inventory.rows[0]?.quantity ?? 0;
+            sealedAfter = inventory.rows[0]?.sealedQuantity ?? 0;
+            openedAfter = inventory.rows[0]?.openedQuantity ?? 0;
           } else {
-            const current = await tx.query<{ quantity: number }>(
-              `select quantity::float8 as quantity from branch_inventory
+            const current = await tx.query<{
+              quantity: number;
+              sealedQuantity: number;
+              openedQuantity: number;
+            }>(
+              `select quantity::float8 as quantity,
+                 sealed_quantity::float8 as "sealedQuantity",
+                 opened_quantity::float8 as "openedQuantity"
+               from branch_inventory
                where organization_id = $1 and branch_id = $2 and product_id = $3
-                 and variant_id is not distinct from $4`,
-              [actor.organizationId, input.branchId, item.source.product_id, item.source.variant_id],
+                 and variant_id is null`,
+              [actor.organizationId, input.branchId, item.source.product_id],
             );
             currentQty = current.rows[0]?.quantity ?? 0;
+            sealedAfter = current.rows[0]?.sealedQuantity ?? 0;
+            openedAfter = current.rows[0]?.openedQuantity ?? 0;
           }
 
-          await tx.query(
-            `insert into inventory_movements (
-              organization_id, branch_id, product_id, variant_id, movement_type,
-              quantity_delta, quantity_after, reason, reference_type, reference_id, created_by
-             ) values ($1,$2,$3,$4,$5,$6,$7,$8,'return',$9,$10)`,
-            [
-              actor.organizationId,
-              input.branchId,
-              item.source.product_id,
-              item.source.variant_id,
-              item.restock ? 'return' : 'damaged_return',
-              item.restock ? inventoryQuantity : 0,
-              currentQty,
-              item.restock ? input.reason : `[Damaged Return] ${input.reason}`,
-              returnId,
-              actor.userId,
-            ],
-          );
+          if (item.restock) {
+            await tx.query(
+              `insert into inventory_movements (
+                organization_id, branch_id, product_id, variant_id, movement_type,
+                quantity_delta, quantity_after, reason, reference_type, reference_id, created_by
+               ) values ($1,$2,$3,$4,'return',$5,$6,$7,'return',$8,$9)`,
+              [
+                actor.organizationId,
+                input.branchId,
+                item.source.product_id,
+                item.source.variant_id,
+                inventoryQuantity,
+                currentQty,
+                input.reason,
+                returnId,
+                actor.userId,
+              ],
+            );
+          }
+          if (item.restock && item.source.portioning_variant_id) {
+            await tx.query(
+              `insert into inventory_pool_movements (
+                organization_id,branch_id,product_id,container_variant_id,movement_type,
+                sealed_quantity_delta,opened_quantity_delta,sealed_quantity_after,
+                opened_quantity_after,reason,reference_type,reference_id,created_by
+               ) values ($1,$2,$3,$4,'sale_return',$5,$6,$7,$8,$9,'return',$10,$11)`,
+              [
+                actor.organizationId,
+                input.branchId,
+                item.source.product_id,
+                item.source.portioning_variant_id,
+                sealedQuantity,
+                openedQuantity,
+                sealedAfter,
+                openedAfter,
+                input.reason,
+                returnId,
+                actor.userId,
+              ],
+            );
+          }
         }
       }
       await tx.query(

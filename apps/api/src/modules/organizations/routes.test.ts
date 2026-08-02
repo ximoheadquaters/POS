@@ -2,6 +2,7 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import type { QueryResultRow } from 'pg';
 import { createApp } from '../../app.js';
+import type { AssetStorage } from '../../storage/assets.js';
 import { AuthorizationDatabase, result, testUser } from '../../test/fakes.js';
 
 const authActions = {
@@ -70,7 +71,7 @@ class OrganizationDatabase extends AuthorizationDatabase {
 
 function appFor(
   database: OrganizationDatabase,
-  assetStorage = {
+  assetStorage: AssetStorage = {
     uploadOrganizationLogo: async () => 'https://assets.example.com/organization/logo.jpg',
   },
 ) {

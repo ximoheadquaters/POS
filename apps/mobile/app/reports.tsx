@@ -1,5 +1,13 @@
 import { useMemo, useState, type ComponentProps, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useQuery } from '@tanstack/react-query';
@@ -7,95 +15,14 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { buildReportsExcel, buildReportsPdf } from '@/lib/report-export';
+import { saveReportExport, type ReportExportFormat } from '@/lib/save-report-export';
+import type { ReportsWorkspace } from '@/lib/report-types';
+import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 
 type ReportSection = 'overview' | 'sales' | 'inventory' | 'purchasing' | 'profit' | 'cash';
 type ReportPeriod = 'today' | '7d' | '30d' | 'all' | 'custom';
-
-interface ReportsWorkspace {
-  kpis: {
-    grossSales: string;
-    netSales: string;
-    customerRefunds: string;
-    discounts: string;
-    taxes: string;
-    transactions: number;
-    uniqueCustomers: number;
-    averageTransaction: string;
-    itemsSold: number;
-    netCost: string;
-    grossProfit: string;
-    grossMarginPercent: string;
-    refundRatePercent: string;
-  };
-  sales: {
-    paymentMethods: Array<{ method: string; total: string; transactions: number }>;
-    topProducts: Array<{
-      name: string;
-      sku: string;
-      unit: string;
-      quantity: number;
-      sales: string;
-      cost: string;
-      profit: string;
-    }>;
-    topCategories: Array<{ name: string; sales: string; quantity: number }>;
-    branches: Array<{ id: string; name: string; sales: string; transactions: number }>;
-    trend: Array<{ date: string; sales: string; transactions: number }>;
-  };
-  inventory: {
-    stockRecords: number;
-    activeProducts: number;
-    unitsOnHand: number;
-    inventoryValue: string;
-    stockValue: string;
-    lowStockCount: number;
-    outOfStockCount: number;
-    lowStock: Array<{
-      id: string;
-      name: string;
-      sku: string;
-      unit: string;
-      branchName: string;
-      quantity: number;
-      lowStockLevel: number;
-      inventoryValue: string;
-    }>;
-    byCategory: Array<{ name: string; value: string; quantity: number; products: number }>;
-    movements: Array<{ type: string; movements: number; quantity: number }>;
-  };
-  purchasing: {
-    purchaseOrders: number;
-    openOrders: number;
-    orderedValue: string;
-    receivedValue: string;
-    supplierReturns: string;
-    outstandingPayables: string;
-    supplierPayments: string;
-    supplierRefunds: string;
-    orderStatuses: Array<{ status: string; orders: number; value: string }>;
-    topSuppliers: Array<{ id: string; name: string; orders: number; value: string }>;
-  };
-  profit: {
-    grossSales: string;
-    refunds: string;
-    netSales: string;
-    netCost: string;
-    grossProfit: string;
-    grossMarginPercent: string;
-    trend: Array<{ date: string; netSales: string; netCost: string; profit: string }>;
-  };
-  cash: {
-    shifts: number;
-    openShifts: number;
-    cashSales: string;
-    cashRefunds: string;
-    countedCash: string;
-    variance: string;
-    cashIn: string;
-    cashOut: string;
-  };
-}
 
 const PERIODS = [
   { key: 'today', label: 'Today', days: 1 },
@@ -527,6 +454,7 @@ function ReportsContent() {
   const workspaceMaxWidth =
     width >= 3000 ? 2600 : width >= 2200 ? 2000 : width >= 1440 ? 1440 : 1200;
   const branch = useBranchStore((state) => state.activeBranch);
+  const { currentUser } = useSession();
   const defaultCustomRange = useMemo(() => {
     const to = new Date();
     const from = new Date(to);
@@ -540,6 +468,9 @@ function ReportsContent() {
   const [draftFrom, setDraftFrom] = useState(defaultCustomRange.from);
   const [draftTo, setDraftTo] = useState(defaultCustomRange.to);
   const [dateRangeError, setDateRangeError] = useState('');
+  const [exportVisible, setExportVisible] = useState(false);
+  const [exporting, setExporting] = useState<ReportExportFormat | null>(null);
+  const [exportError, setExportError] = useState('');
   const selectedPeriod = PERIODS.find((item) => item.key === period);
   const range = useMemo(() => {
     if (period === 'custom') {
@@ -568,6 +499,32 @@ function ReportsContent() {
       ),
   });
 
+  const exportReport = async (format: ReportExportFormat) => {
+    if (!query.data || exporting) return;
+    setExporting(format);
+    setExportError('');
+    try {
+      const metadata = {
+        organizationName: currentUser?.organization.name ?? 'Ximo POS',
+        branchName: branch?.name ?? 'All accessible branches',
+        rangeLabel,
+        from: range.from,
+        to: range.to,
+        generatedAt: new Date(),
+      };
+      const file =
+        format === 'pdf'
+          ? await buildReportsPdf(query.data, metadata)
+          : buildReportsExcel(query.data, metadata);
+      await saveReportExport(file.bytes, file.fileName, format);
+      setExportVisible(false);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'The report could not be exported.');
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <Screen>
       <Header
@@ -576,6 +533,23 @@ function ReportsContent() {
         showBack={!phone}
         backLabel="More"
         fallbackHref="/(tabs)/more"
+        action={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Export reports"
+            disabled={!query.data || Boolean(exporting)}
+            onPress={() => {
+              setExportError('');
+              setExportVisible(true);
+            }}
+            className={`min-h-10 flex-row items-center justify-center rounded-xl bg-brand-700 px-3 active:bg-brand-800 ${
+              !query.data || exporting ? 'opacity-40' : ''
+            }`}
+          >
+            <Feather name="download" size={16} color="#FFFFFF" />
+            {!phone ? <Text className="ml-2 text-sm font-medium text-white">Export</Text> : null}
+          </Pressable>
+        }
       />
       <ScrollView contentContainerClassName="items-center p-4 pb-12">
         <View className="w-full gap-4" style={{ maxWidth: workspaceMaxWidth }}>
@@ -761,6 +735,89 @@ function ReportsContent() {
                 onPress={() => setDateRangeVisible(false)}
               />
             </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={exportVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !exporting && setExportVisible(false)}
+      >
+        <View className="flex-1 items-center justify-center bg-black/40 p-5">
+          <View className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+            <View className="mb-5 flex-row items-start">
+              <View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-brand-50">
+                <Feather name="download" size={21} color="#1A593B" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-xl font-semibold text-slate-950">Export reports</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                  Exports every report section for {rangeLabel.toLowerCase()} and{' '}
+                  {branch?.name ?? 'all accessible branches'}.
+                </Text>
+              </View>
+            </View>
+
+            <View className="gap-3">
+              <Pressable
+                accessibilityRole="button"
+                disabled={Boolean(exporting)}
+                onPress={() => void exportReport('pdf')}
+                className="min-h-16 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 active:bg-slate-50"
+              >
+                <View className="h-10 w-10 items-center justify-center rounded-xl bg-red-50">
+                  {exporting === 'pdf' ? (
+                    <ActivityIndicator size="small" color="#DC2626" />
+                  ) : (
+                    <Feather name="file-text" size={18} color="#DC2626" />
+                  )}
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-sm font-semibold text-slate-900">PDF report</Text>
+                  <Text className="mt-0.5 text-xs text-slate-500">
+                    Print-ready, paginated business report
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color="#94A3B8" />
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={Boolean(exporting)}
+                onPress={() => void exportReport('xlsx')}
+                className="min-h-16 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 active:bg-slate-50"
+              >
+                <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+                  {exporting === 'xlsx' ? (
+                    <ActivityIndicator size="small" color="#047857" />
+                  ) : (
+                    <Feather name="grid" size={18} color="#047857" />
+                  )}
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-sm font-semibold text-slate-900">Excel workbook</Text>
+                  <Text className="mt-0.5 text-xs text-slate-500">
+                    Six editable sheets with detailed report data
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color="#94A3B8" />
+              </Pressable>
+            </View>
+
+            {exportError ? (
+              <View className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
+                <Text className="text-sm text-red-700">{exportError}</Text>
+              </View>
+            ) : null}
+
+            <Button
+              title="Cancel"
+              variant="secondary"
+              disabled={Boolean(exporting)}
+              onPress={() => setExportVisible(false)}
+              className="mt-4"
+            />
           </View>
         </View>
       </Modal>

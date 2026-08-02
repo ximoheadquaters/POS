@@ -84,6 +84,8 @@ export const productUnitSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const productInventoryRoleSchema = z.enum(['sellable', 'ingredient', 'both']);
+
 export const productSchema = z.object({
   categoryId: uuidSchema.nullable().optional(),
   brandId: uuidSchema.nullable().optional(),
@@ -91,6 +93,7 @@ export const productSchema = z.object({
   sku: z.string().trim().min(1).max(80),
   barcode: optionalBarcodeSchema,
   unit: productUnitCodeSchema.default('piece'),
+  inventoryRole: productInventoryRoleSchema.default('sellable'),
   trackInventory: z.boolean().default(true),
   description: z.string().trim().max(2000).optional(),
   cost: moneyStringSchema,
@@ -124,6 +127,7 @@ export const updateProductSchema = z.object({
   // Null explicitly removes an existing barcode. Undefined leaves it unchanged.
   barcode: optionalBarcodeSchema.nullable().optional(),
   unit: productUnitCodeSchema.optional(),
+  inventoryRole: productInventoryRoleSchema.optional(),
   trackInventory: z.boolean().optional(),
   description: z.string().trim().max(2000).optional(),
   cost: moneyStringSchema.optional(),
@@ -137,24 +141,58 @@ export const updateProductSchema = z.object({
   imagePath: z.string().trim().max(500).optional(),
 });
 
-export const createProductSchema = productSchema.extend({
-  branchId: uuidSchema,
-  openingQuantity: z.number().min(0).max(1_000_000).multipleOf(0.001).default(0),
-  sellingUnits: z
-    .array(
-      z.object({
-        name: z.string().trim().min(1).max(120),
-        sku: z.string().trim().min(1).max(80),
-        barcode: optionalBarcodeSchema,
-        unit: productUnitCodeSchema,
-        unitsPerBase: z.number().positive().max(1_000_000).multipleOf(0.001),
-        cost: moneyStringSchema.optional(),
-        sellingPrice: moneyStringSchema,
-      }),
-    )
-    .max(20)
-    .default([]),
-});
+export const createProductSchema = productSchema
+  .extend({
+    branchId: uuidSchema,
+    openingQuantity: z.number().min(0).max(1_000_000).multipleOf(0.001).default(0),
+    openingContainerQuantity: z.number().min(0).max(1_000_000).multipleOf(0.001).default(0),
+    sellingUnits: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(120),
+          sku: z.string().trim().min(1).max(80),
+          barcode: optionalBarcodeSchema,
+          unit: productUnitCodeSchema,
+          unitsPerBase: z.number().positive().max(1_000_000).multipleOf(0.001),
+          cost: moneyStringSchema.optional(),
+          sellingPrice: moneyStringSchema,
+          isPortioningContainer: z.boolean().default(false),
+        }),
+      )
+      .max(20)
+      .default([]),
+  })
+  .superRefine((input, context) => {
+    const portioningUnits = input.sellingUnits.filter((unit) => unit.isPortioningContainer);
+    if (portioningUnits.length > 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['sellingUnits'],
+        message: 'Select only one whole-container unit for portioning',
+      });
+    }
+    if (portioningUnits.some((unit) => unit.unitsPerBase <= 1)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['sellingUnits'],
+        message: 'A portioning container must contain more than one base unit',
+      });
+    }
+    if (input.openingContainerQuantity > 0 && portioningUnits.length !== 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['openingContainerQuantity'],
+        message: 'Choose a portioning container before entering sealed opening stock',
+      });
+    }
+    if (!Number.isInteger(input.openingContainerQuantity)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['openingContainerQuantity'],
+        message: 'Sealed opening stock must be a whole number of containers',
+      });
+    }
+  });
 
 export const productVariantSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -165,6 +203,7 @@ export const productVariantSchema = z.object({
   cost: moneyStringSchema.optional(),
   sellingPrice: moneyStringSchema.optional(),
   isActive: z.boolean().default(true),
+  isPortioningContainer: z.boolean().default(false),
 });
 
 export const stockAdjustmentSchema = z.object({
@@ -178,6 +217,21 @@ export const stockAdjustmentSchema = z.object({
     .multipleOf(0.001)
     .refine((value) => value !== 0),
   reason: z.string().trim().min(3).max(300),
+  pool: z.enum(['shared', 'sealed', 'opened']).default('shared'),
+});
+
+export const openPortioningStockSchema = z.object({
+  branchId: uuidSchema,
+  productId: uuidSchema,
+  containerQuantity: z.number().positive().max(1_000_000).multipleOf(0.001),
+  reason: z.string().trim().min(3).max(300).default('Opened for portioning'),
+});
+
+export const productionBatchSchema = z.object({
+  branchId: uuidSchema,
+  productId: uuidSchema,
+  quantityProduced: z.number().positive().max(1_000_000).multipleOf(0.001),
+  notes: z.string().trim().max(1000).optional(),
 });
 
 const purchaseQuantitySchema = z.number().positive().max(1_000_000).multipleOf(0.001);
@@ -423,6 +477,7 @@ export const createStockTransferSchema = z
         z.object({
           productId: uuidSchema,
           quantity: z.number().positive('Quantity must be greater than zero'),
+          pool: z.enum(['shared', 'sealed', 'opened']).default('shared'),
         }),
       )
       .min(1, 'At least one item is required'),
@@ -482,6 +537,7 @@ export type ProductInput = z.infer<typeof productSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductVariantInput = z.infer<typeof productVariantSchema>;
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
+export type ProductionBatchInput = z.infer<typeof productionBatchSchema>;
 export type SupplierInput = z.infer<typeof supplierSchema>;
 export type PurchaseOrderInput = z.infer<typeof purchaseOrderSchema>;
 export type ReceivePurchaseOrderInput = z.infer<typeof receivePurchaseOrderSchema>;

@@ -21,7 +21,11 @@ const input: CheckoutInput = {
 
 interface State {
   inventory: number;
+  sealedInventory: number;
+  openedInventory: number;
   ingredientInventory: number;
+  ingredientSealedInventory: number;
+  ingredientOpenedInventory: number;
   sales: Array<Record<string, string>>;
   payments: number;
   movements: number;
@@ -31,7 +35,11 @@ interface State {
 class CheckoutDatabase implements Database {
   state: State = {
     inventory: 10,
+    sealedInventory: 0,
+    openedInventory: 0,
     ingredientInventory: 0,
+    ingredientSealedInventory: 0,
+    ingredientOpenedInventory: 0,
     sales: [],
     payments: 0,
     movements: 0,
@@ -39,7 +47,10 @@ class CheckoutDatabase implements Database {
   };
   unitsPerBase = 1;
   sellingUnit = 'piece';
+  portioningVariantId: string | null = null;
+  trackInventory = true;
   recipeQuantityRequired: number | null = null;
+  ingredientPortioningVariantId: string | null = null;
   readonly ingredientProductId = '88888888-8888-4888-8888-888888888888';
 
   async query<T extends QueryResultRow>(text: string, values: readonly unknown[] = []) {
@@ -77,10 +88,13 @@ class CheckoutDatabase implements Database {
           unit_cost: '8.00',
           tax_rate: '12.00',
           is_tax_inclusive: false,
-          track_inventory: true,
+          track_inventory: this.trackInventory,
           units_per_base: this.unitsPerBase,
           selling_unit: this.sellingUnit,
           quantity: this.state.inventory,
+          portioning_variant_id: this.portioningVariantId,
+          sealed_quantity: this.state.sealedInventory,
+          opened_quantity: this.state.openedInventory,
         } as unknown as T,
       ]);
     }
@@ -111,6 +125,7 @@ class CheckoutDatabase implements Database {
                 quantity_required: this.recipeQuantityRequired,
                 unit: 'ml',
                 base_unit: 'ml',
+                portioning_variant_id: this.ingredientPortioningVariantId,
               },
             ] as unknown as T[]),
       );
@@ -119,12 +134,36 @@ class CheckoutDatabase implements Database {
       if (values[2] === this.ingredientProductId) {
         const deduction = Number(values[3]);
         const allowNegative = Boolean(values[5]);
-        if (!allowNegative && this.state.ingredientInventory < deduction) return result([]);
+        if (
+          !allowNegative &&
+          (this.state.ingredientInventory < deduction ||
+            (this.ingredientPortioningVariantId !== null &&
+              this.state.ingredientOpenedInventory < deduction))
+        ) {
+          return result([]);
+        }
         this.state.ingredientInventory -= deduction;
-        return result([{ quantity: this.state.ingredientInventory } as unknown as T]);
+        if (this.ingredientPortioningVariantId) {
+          this.state.ingredientOpenedInventory -= deduction;
+        }
+        return result([
+          {
+            quantity: this.state.ingredientInventory,
+            sealedQuantity: this.state.ingredientSealedInventory,
+            openedQuantity: this.state.ingredientOpenedInventory,
+          } as unknown as T,
+        ]);
       }
       this.state.inventory -= Number(values[3]);
-      return result([{ quantity: this.state.inventory } as unknown as T]);
+      this.state.sealedInventory -= Number(values[4] ?? 0);
+      this.state.openedInventory -= Number(values[5] ?? 0);
+      return result([
+        {
+          quantity: this.state.inventory,
+          sealedQuantity: this.state.sealedInventory,
+          openedQuantity: this.state.openedInventory,
+        } as unknown as T,
+      ]);
     }
     if (sql.startsWith('insert into inventory_movements')) {
       this.state.movements += 1;
@@ -207,8 +246,57 @@ describe('checkout transaction', () => {
     expect(database.state.inventory).toBe(0);
   });
 
+  it('sells a designated whole container from sealed stock only', async () => {
+    const database = new CheckoutDatabase();
+    const containerVariantId = '77777777-7777-4777-8777-777777777777';
+    database.portioningVariantId = containerVariantId;
+    database.unitsPerBase = 1_000;
+    database.sellingUnit = 'bottle';
+    database.state.inventory = 2_000;
+    database.state.sealedInventory = 2;
+    database.state.openedInventory = 0;
+
+    await new CheckoutService(database).complete(
+      actor,
+      {
+        ...input,
+        items: [
+          { productId: input.items[0]!.productId, variantId: containerVariantId, quantity: 1 },
+        ],
+        payments: [{ method: 'cash', amount: '16.80' }],
+      },
+      'checkout-sealed-0001',
+    );
+
+    expect(database.state.inventory).toBe(1_000);
+    expect(database.state.sealedInventory).toBe(1);
+    expect(database.state.openedInventory).toBe(0);
+  });
+
+  it('sells portions from opened stock without consuming a sealed container', async () => {
+    const database = new CheckoutDatabase();
+    database.portioningVariantId = '77777777-7777-4777-8777-777777777777';
+    database.state.inventory = 1_500;
+    database.state.sealedInventory = 1;
+    database.state.openedInventory = 500;
+
+    await new CheckoutService(database).complete(
+      actor,
+      {
+        ...input,
+        items: [{ productId: input.items[0]!.productId, quantity: 2 }],
+      },
+      'checkout-opened-0001',
+    );
+
+    expect(database.state.inventory).toBe(1_498);
+    expect(database.state.sealedInventory).toBe(1);
+    expect(database.state.openedInventory).toBe(498);
+  });
+
   it('deducts measured recipe ingredients and keeps the opened-container remainder', async () => {
     const database = new CheckoutDatabase();
+    database.trackInventory = false;
     database.recipeQuantityRequired = 500;
     database.state.ingredientInventory = 1_500;
     await new CheckoutService(database).complete(actor, input, 'checkout-recipe-0001');
@@ -217,6 +305,7 @@ describe('checkout transaction', () => {
 
   it('rolls back checkout when a recipe ingredient is insufficient', async () => {
     const database = new CheckoutDatabase();
+    database.trackInventory = false;
     database.recipeQuantityRequired = 500;
     database.state.ingredientInventory = 750;
     await expect(
@@ -226,6 +315,35 @@ describe('checkout transaction', () => {
     } satisfies Partial<AppError>);
     expect(database.state.ingredientInventory).toBe(750);
     expect(database.state.sales).toHaveLength(0);
+  });
+
+  it('does not let a recipe consume sealed ingredient stock', async () => {
+    const database = new CheckoutDatabase();
+    database.trackInventory = false;
+    database.recipeQuantityRequired = 500;
+    database.ingredientPortioningVariantId = '99999999-9999-4999-8999-999999999999';
+    database.state.ingredientInventory = 1_500;
+    database.state.ingredientSealedInventory = 1;
+    database.state.ingredientOpenedInventory = 250;
+
+    await expect(
+      new CheckoutService(database).complete(actor, input, 'checkout-recipe-pool-0001'),
+    ).rejects.toMatchObject({
+      code: 'INSUFFICIENT_RECIPE_INVENTORY',
+    } satisfies Partial<AppError>);
+    expect(database.state.ingredientSealedInventory).toBe(1);
+    expect(database.state.ingredientOpenedInventory).toBe(250);
+  });
+
+  it('does not consume a BOM again when selling tracked finished stock', async () => {
+    const database = new CheckoutDatabase();
+    database.recipeQuantityRequired = 500;
+    database.state.ingredientInventory = 1_500;
+
+    await new CheckoutService(database).complete(actor, input, 'checkout-finished-stock-0001');
+
+    expect(database.state.inventory).toBe(8);
+    expect(database.state.ingredientInventory).toBe(1_500);
   });
 
   it('rolls back the entire checkout when a database step fails', async () => {

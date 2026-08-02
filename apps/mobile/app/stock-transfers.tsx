@@ -4,7 +4,6 @@ import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
-import { formatMoney } from '@/lib/format';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, EmptyState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { useSession } from '@/providers/session';
@@ -27,7 +26,24 @@ interface ProductItem {
   name: string;
   sku?: string;
   unit?: string;
+  sellingUnits?: Array<{
+    variantId: string;
+    name: string;
+    unit: string;
+    unitsPerBase: number;
+    isPortioningContainer?: boolean;
+  }>;
 }
+
+type TransferPool = 'shared' | 'sealed' | 'opened';
+type SelectedTransferItem = {
+  productId: string;
+  name: string;
+  quantity: string;
+  pool: TransferPool;
+  baseUnit: string;
+  containerUnit?: string;
+};
 
 function StockTransfersContent() {
   const { currentUser } = useSession();
@@ -42,7 +58,7 @@ function StockTransfersContent() {
   // New transfer form state
   const [toBranchId, setToBranchId] = useState('');
   const [notes, setNotes] = useState('');
-  const [selectedItems, setSelectedItems] = useState<Array<{ productId: string; name: string; quantity: string }>>([]);
+  const [selectedItems, setSelectedItems] = useState<SelectedTransferItem[]>([]);
   const [productSearch, setProductSearch] = useState('');
 
   // Check SaaS module enablement
@@ -78,6 +94,7 @@ function StockTransfersContent() {
           items: selectedItems.map((item) => ({
             productId: item.productId,
             quantity: Number(item.quantity.replace(',', '.')),
+            pool: item.pool,
           })),
         }),
       }),
@@ -123,7 +140,18 @@ function StockTransfersContent() {
 
   const addItemToTransfer = (prod: ProductItem) => {
     if (selectedItems.some((i) => i.productId === prod.id)) return;
-    setSelectedItems((prev) => [...prev, { productId: prod.id, name: prod.name, quantity: '1' }]);
+    const container = prod.sellingUnits?.find((unit) => unit.isPortioningContainer);
+    setSelectedItems((prev) => [
+      ...prev,
+      {
+        productId: prod.id,
+        name: prod.name,
+        quantity: '1',
+        pool: container ? 'sealed' : 'shared',
+        baseUnit: prod.unit || 'unit',
+        containerUnit: container?.unit,
+      },
+    ]);
   };
 
   const removeItem = (prodId: string) => {
@@ -133,6 +161,12 @@ function StockTransfersContent() {
   const updateItemQty = (prodId: string, qty: string) => {
     setSelectedItems((prev) =>
       prev.map((i) => (i.productId === prodId ? { ...i, quantity: qty } : i)),
+    );
+  };
+
+  const updateItemPool = (prodId: string, pool: TransferPool) => {
+    setSelectedItems((prev) =>
+      prev.map((item) => (item.productId === prodId ? { ...item, pool } : item)),
     );
   };
 
@@ -224,8 +258,6 @@ function StockTransfersContent() {
         renderItem={({ item }) => {
           const isInTransit = item.status === 'in_transit';
           const isCompleted = item.status === 'completed';
-          const isCancelled = item.status === 'cancelled';
-
           return (
             <View className="rounded-2xl border border-slate-100 bg-white p-4">
               <View className="flex-row items-center justify-between">
@@ -392,14 +424,19 @@ function StockTransfersContent() {
                 {selectedItems.map((item) => (
                   <View
                     key={item.productId}
-                    className="flex-row items-center justify-between rounded-xl border border-slate-200 bg-white p-3"
+                    className="gap-3 rounded-xl border border-slate-200 bg-white p-3"
                   >
-                    <Text className="flex-1 font-bold text-slate-900 pr-2">{item.name}</Text>
-                    <View className="flex-row items-center gap-2">
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-1 pr-2">
+                        <Text className="font-bold text-slate-900">{item.name}</Text>
+                        <Text className="mt-0.5 text-xs text-slate-500">
+                          Quantity in {item.pool === 'sealed' ? item.containerUnit : item.baseUnit}
+                        </Text>
+                      </View>
                       <TextInput
                         value={item.quantity}
                         onChangeText={(qty) => updateItemQty(item.productId, qty)}
-                        keyboardType="decimal-pad"
+                        keyboardType={item.pool === 'sealed' ? 'number-pad' : 'decimal-pad'}
                         placeholder="Qty"
                         className="h-10 w-20 rounded-xl border border-slate-300 text-center font-bold text-slate-900"
                       />
@@ -407,6 +444,29 @@ function StockTransfersContent() {
                         <Feather name="trash-2" size={18} color="#EF4444" />
                       </Pressable>
                     </View>
+                    {item.containerUnit ? (
+                      <View className="flex-row rounded-xl bg-slate-100 p-1">
+                        {(['sealed', 'opened'] as const).map((candidate) => (
+                          <Pressable
+                            key={candidate}
+                            onPress={() => updateItemPool(item.productId, candidate)}
+                            className={`flex-1 rounded-lg px-3 py-2 ${
+                              item.pool === candidate ? 'bg-white shadow-sm' : ''
+                            }`}
+                          >
+                            <Text
+                              className={`text-center text-xs font-semibold ${
+                                item.pool === candidate ? 'text-brand-700' : 'text-slate-500'
+                              }`}
+                            >
+                              {candidate === 'sealed'
+                                ? `Sealed ${item.containerUnit}`
+                                : `Opened ${item.baseUnit}`}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
                   </View>
                 ))}
               </View>
@@ -425,7 +485,10 @@ function StockTransfersContent() {
                   createMutation.isPending ||
                   !toBranchId ||
                   selectedItems.length === 0 ||
-                  selectedItems.some((i) => !(parseFloat(i.quantity.replace(',', '.')) > 0))
+                  selectedItems.some((i) => {
+                    const quantity = parseFloat(i.quantity.replace(',', '.'));
+                    return !(quantity > 0) || (i.pool === 'sealed' && !Number.isInteger(quantity));
+                  })
                 }
                 onPress={() => createMutation.mutate()}
               />

@@ -6,12 +6,15 @@
 - Supabase Auth login, logout, session restoration, protected routes, current user, reset request
 - Derived tenant context, RLS defense, branch access, permissions, plan modules, organization
   overrides
-- Organization profile/settings, branches, assignments, employee account creation and editing,
-  role permission matrix management, account activation controls, and audit reads
+- Organization profile/settings, responsive branch management with operational counts and safe
+  activation controls, branch assignments, employee account creation and editing, role permission
+  matrix management, account activation controls, and audit reads
 - Categories, brands, configurable units, products, barcode search, complete selling-unit variant
-  management, pagination, and price audit
-- Per-branch inventory, low-stock threshold, manual adjustments, immutable movement history, and
-  negative-stock default prevention
+  management, prepared-product BOM costing, pagination, and price audit
+- Per-branch inventory, low-stock threshold, manual adjustments, immutable movement history,
+  negative-stock default prevention, and sealed-container/opened-portion pools. Whole-container
+  sales, portion sales, BOM deductions, purchasing, returns, and branch transfers preserve the
+  correct stock pool; staff explicitly open a container before its contents can be portioned.
 - Supplier directory, purchase-order drafts and sending, partial/full stock receiving, pack/box
   conversion into base inventory, supplier returns with refund/replacement/credit resolution,
   incoming-product registration and first-receipt activation, receiving/return history,
@@ -25,7 +28,8 @@
 - Customer CRUD endpoints and customer purchase/return history
 - Consolidated, branch-scoped reporting hub with executive KPIs plus sales, payment, product,
   category, branch, inventory valuation/alerts/movements, purchasing, supplier, payable, profit,
-  cash, and shift reports; date presets and shift drill-down are included
+  cash, and shift reports; date presets and shift drill-down are included. Reports can be exported
+  as a paginated PDF or a six-sheet Excel workbook on web, iOS, and Android.
 - Seeded plans/modules, organization, two branches, three categories, 20 barcode products, different
   branch inventory, and one register per branch
 - Optional hardware module catalog for barcode scanners, receipt printers, cash drawers, payment

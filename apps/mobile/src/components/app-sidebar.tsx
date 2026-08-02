@@ -101,7 +101,12 @@ const sidebarSections: SidebarSection[] = [
         title: 'Purchasing',
         icon: 'truck',
         children: [
-          { title: 'Purchase Orders', href: '/purchasing', module: 'purchasing', permission: 'purchasing:read' },
+          {
+            title: 'Purchase Orders',
+            href: '/purchasing',
+            module: 'purchasing',
+            permission: 'purchasing:read',
+          },
         ],
       },
       {
@@ -130,9 +135,7 @@ const sidebarSections: SidebarSection[] = [
         id: 'reports',
         title: 'Income & Reports',
         icon: 'trending-up',
-        children: [
-          { title: 'Overview', href: '/reports', module: 'reports' },
-        ],
+        children: [{ title: 'Overview', href: '/reports', module: 'reports' }],
       },
       {
         id: 'settings',
@@ -140,6 +143,7 @@ const sidebarSections: SidebarSection[] = [
         icon: 'settings',
         children: [
           { title: 'Organization', href: '/organization', permission: 'organization:read' },
+          { title: 'Branches', href: '/branches' as Href, permission: 'branches:read' },
           { title: 'Store Settings', href: '/settings' },
           { title: 'Staff & Roles', href: '/users', permission: 'users:manage' },
           { title: 'Audit Logs', href: '/audit', module: 'audit', permission: 'audit:read' },
@@ -155,7 +159,12 @@ function isPathActive(pathname: string, href: Href): boolean {
   const target = String(href).replace('/(tabs)', '');
   if (target === '/pos' && (pathname === '/pos' || pathname === '/')) return true;
   if (pathname === target) return true;
-  if (target !== '/pos' && target !== '/more' && target !== '/' && pathname.startsWith(target.replace(/\/$/, ''))) {
+  if (
+    target !== '/pos' &&
+    target !== '/more' &&
+    target !== '/' &&
+    pathname.startsWith(target.replace(/\/$/, ''))
+  ) {
     return true;
   }
   return false;
@@ -204,7 +213,8 @@ function SidebarMenu({ close }: { close(): void }) {
 
   const filterVisibleGroups = (groups: SidebarGroup[]) => {
     return groups.filter((group) => {
-      const hasPermission = !group.permission || currentUser?.permissions.includes(group.permission);
+      const hasPermission =
+        !group.permission || currentUser?.permissions.includes(group.permission);
       const hasModule = !group.module || currentUser?.modules.includes(group.module);
       if (!hasPermission || !hasModule) return false;
 
@@ -277,7 +287,9 @@ function SidebarMenu({ close }: { close(): void }) {
                     );
 
                     if (!hasChildren && group.href) {
-                      const isGroupDisabled = Boolean(group.module && !currentUser?.modules.includes(group.module));
+                      const isGroupDisabled = Boolean(
+                        group.module && !currentUser?.modules.includes(group.module),
+                      );
 
                       return (
                         <Pressable
@@ -362,10 +374,15 @@ function SidebarMenu({ close }: { close(): void }) {
                           <View className="ml-5 mt-1 border-l-2 border-slate-200/80 pl-3.5 gap-1.5 py-1">
                             {visibleChildren.map((subItem) => {
                               const active = isPathActive(pathname, subItem.href);
-                              const isSubDisabled = Boolean(subItem.module && !currentUser?.modules.includes(subItem.module));
+                              const isSubDisabled = Boolean(
+                                subItem.module && !currentUser?.modules.includes(subItem.module),
+                              );
 
                               return (
-                                <View key={subItem.title} className="relative flex-row items-center">
+                                <View
+                                  key={subItem.title}
+                                  className="relative flex-row items-center"
+                                >
                                   {/* Horizontal Curved Connector Line */}
                                   <View className="absolute -left-[15px] top-1/2 h-[2px] w-3.5 rounded-full bg-slate-200/90" />
                                   <Pressable
@@ -393,7 +410,9 @@ function SidebarMenu({ close }: { close(): void }) {
                                     {isSubDisabled ? (
                                       <View className="flex-row items-center gap-1 rounded-full bg-amber-100/80 px-2 py-0.5">
                                         <Feather name="lock" size={10} color="#B45309" />
-                                        <Text className="text-[10px] font-bold text-amber-800">Locked</Text>
+                                        <Text className="text-[10px] font-bold text-amber-800">
+                                          Locked
+                                        </Text>
                                       </View>
                                     ) : subItem.badge !== undefined ? (
                                       <View

@@ -605,11 +605,18 @@ export function purchasingRouter(database: Database): Router {
             received_quantity: number;
             unit_cost: string;
             product_name: string;
+            variant_id: string | null;
+            portioning_variant_id: string | null;
           }>(
             `select id,product_id,units_per_base::float8,ordered_quantity::float8,
-              received_quantity::float8,unit_cost::text,product_name
-             from purchase_order_items
-             where id=$1 and purchase_order_id=$2 and organization_id=$3 for update`,
+              received_quantity::float8,unit_cost::text,product_name,poi.variant_id,
+              portioning.id as portioning_variant_id
+             from purchase_order_items poi
+             left join product_variants portioning
+               on portioning.organization_id=poi.organization_id
+               and portioning.product_id=poi.product_id and portioning.is_portioning_container
+             where poi.id=$1 and poi.purchase_order_id=$2 and poi.organization_id=$3
+             for update of poi`,
             [requested.purchaseOrderItemId, id, organizationId],
           );
           const item = source.rows[0];
@@ -626,10 +633,15 @@ export function purchasingRouter(database: Database): Router {
             );
           }
           const baseQuantity = purchaseQuantityToBase(requested.quantity, item.units_per_base);
+          const sealedReceipt = item.variant_id === item.portioning_variant_id;
+          const sealedQuantity = sealedReceipt ? requested.quantity : 0;
+          const openedQuantity = item.portioning_variant_id && !sealedReceipt ? baseQuantity : 0;
           const inventory = await tx.query<{
             quantity: number;
             averageCost: string;
             inventoryValue: string;
+            sealedQuantity: number;
+            openedQuantity: number;
           }>(
             `update branch_inventory set
                quantity=quantity+$4,
@@ -653,11 +665,15 @@ export function purchasingRouter(database: Database): Router {
                    4
                  )
                end,
+               sealed_quantity=sealed_quantity+$7,
+               opened_quantity=opened_quantity+$8,
                updated_at=now()
              where organization_id=$1 and branch_id=$2 and product_id=$3
                and variant_id is null
              returning quantity::float8,average_cost::text as "averageCost",
-               inventory_value::text as "inventoryValue"`,
+               inventory_value::text as "inventoryValue",
+               sealed_quantity::float8 as "sealedQuantity",
+               opened_quantity::float8 as "openedQuantity"`,
             [
               organizationId,
               order.rows[0].branch_id,
@@ -665,6 +681,8 @@ export function purchasingRouter(database: Database): Router {
               baseQuantity,
               requested.quantity,
               item.unit_cost,
+              sealedQuantity,
+              openedQuantity,
             ],
           );
           if (!inventory.rows[0]) throw notFound('Branch inventory');
@@ -707,6 +725,29 @@ export function purchasingRouter(database: Database): Router {
               request.authUser!.id,
             ],
           );
+          if (item.portioning_variant_id) {
+            await tx.query(
+              `insert into inventory_pool_movements (
+                organization_id,branch_id,product_id,container_variant_id,movement_type,
+                sealed_quantity_delta,opened_quantity_delta,sealed_quantity_after,
+                opened_quantity_after,reason,reference_type,reference_id,created_by
+               ) values ($1,$2,$3,$4,'purchase_receipt',$5,$6,$7,$8,$9,
+                 'stock_receipt',$10,$11)`,
+              [
+                organizationId,
+                order.rows[0].branch_id,
+                item.product_id,
+                item.portioning_variant_id,
+                sealedQuantity,
+                openedQuantity,
+                inventory.rows[0].sealedQuantity,
+                inventory.rows[0].openedQuantity,
+                `Received ${created.rows[0]!.receiptNumber}`,
+                created.rows[0]!.id,
+                request.authUser!.id,
+              ],
+            );
+          }
         }
         const remaining = await tx.query<{ pending: boolean }>(
           `select exists(
@@ -764,6 +805,8 @@ export function purchasingRouter(database: Database): Router {
             returned_quantity: number;
             unit_cost: string;
             product_name: string;
+            variant_id: string | null;
+            portioning_variant_id: string | null;
           };
           baseQuantity: number;
           refundAmount: string;
@@ -781,11 +824,18 @@ export function purchasingRouter(database: Database): Router {
             returned_quantity: number;
             unit_cost: string;
             product_name: string;
+            variant_id: string | null;
+            portioning_variant_id: string | null;
           }>(
             `select id,product_id,units_per_base::float8,received_quantity::float8,
-              returned_quantity::float8,unit_cost::text,product_name
-             from purchase_order_items
-             where id=$1 and purchase_order_id=$2 and organization_id=$3 for update`,
+              returned_quantity::float8,unit_cost::text,product_name,poi.variant_id,
+              portioning.id as portioning_variant_id
+             from purchase_order_items poi
+             left join product_variants portioning
+               on portioning.organization_id=poi.organization_id
+               and portioning.product_id=poi.product_id and portioning.is_portioning_container
+             where poi.id=$1 and poi.purchase_order_id=$2 and poi.organization_id=$3
+             for update of poi`,
             [requested.purchaseOrderItemId, id, organizationId],
           );
           const item = source.rows[0];
@@ -837,14 +887,34 @@ export function purchasingRouter(database: Database): Router {
           ],
         );
         for (const { requested, item, baseQuantity, refundAmount } of plannedItems) {
-          const inventory = await tx.query<{ quantity: number }>(
+          const sealedReturn = item.variant_id === item.portioning_variant_id;
+          const sealedQuantity = sealedReturn ? requested.quantity : 0;
+          const openedQuantity = item.portioning_variant_id && !sealedReturn ? baseQuantity : 0;
+          const inventory = await tx.query<{
+            quantity: number;
+            sealedQuantity: number;
+            openedQuantity: number;
+          }>(
             `update branch_inventory set
                quantity=quantity-$4,
                inventory_value=round(average_cost*(quantity-$4),4),
+               sealed_quantity=sealed_quantity-$5,
+               opened_quantity=opened_quantity-$6,
                updated_at=now()
              where organization_id=$1 and branch_id=$2 and product_id=$3
-               and variant_id is null and quantity >= $4 returning quantity::float8`,
-            [organizationId, order.rows[0].branch_id, item.product_id, baseQuantity],
+               and variant_id is null and quantity >= $4
+               and sealed_quantity >= $5 and opened_quantity >= $6
+             returning quantity::float8,
+               sealed_quantity::float8 as "sealedQuantity",
+               opened_quantity::float8 as "openedQuantity"`,
+            [
+              organizationId,
+              order.rows[0].branch_id,
+              item.product_id,
+              baseQuantity,
+              sealedQuantity,
+              openedQuantity,
+            ],
           );
           if (!inventory.rows[0]) {
             throw conflict(
@@ -886,6 +956,29 @@ export function purchasingRouter(database: Database): Router {
               request.authUser!.id,
             ],
           );
+          if (item.portioning_variant_id) {
+            await tx.query(
+              `insert into inventory_pool_movements (
+                organization_id,branch_id,product_id,container_variant_id,movement_type,
+                sealed_quantity_delta,opened_quantity_delta,sealed_quantity_after,
+                opened_quantity_after,reason,reference_type,reference_id,created_by
+               ) values ($1,$2,$3,$4,'purchase_return',$5,$6,$7,$8,$9,
+                 'purchase_return',$10,$11)`,
+              [
+                organizationId,
+                order.rows[0].branch_id,
+                item.product_id,
+                item.portioning_variant_id,
+                -sealedQuantity,
+                -openedQuantity,
+                inventory.rows[0].sealedQuantity,
+                inventory.rows[0].openedQuantity,
+                input.reason,
+                created.rows[0]!.id,
+                request.authUser!.id,
+              ],
+            );
+          }
         }
         await audit(tx, {
           organizationId,

@@ -45,15 +45,34 @@ async function validateProductMasters(
   if (!state.brandValid) throw badRequest('INVALID_BRAND', 'Select an active brand');
 }
 
+function recipeUnitFamily(unit: string): 'mass' | 'volume' | 'piece' | null {
+  const normalized = unit.trim().toLowerCase();
+  if (['g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms'].includes(normalized)) return 'mass';
+  if (['ml', 'milliliter', 'milliliters', 'l', 'liter', 'liters'].includes(normalized)) {
+    return 'volume';
+  }
+  if (['piece', 'pieces', 'pc', 'pcs'].includes(normalized)) return 'piece';
+  return null;
+}
+
 export function productsRouter(database: Database): Router {
   const router = Router();
   router.use(requireModule('products'));
   router.get(
     '/lookup',
     requirePermission('products:read'),
-    validateQuery(productLookupSchema.extend({ branchId: uuidSchema.optional() })),
+    validateQuery(
+      productLookupSchema.extend({
+        branchId: uuidSchema.optional(),
+        usage: z.enum(['pos', 'bom']).optional(),
+      }),
+    ),
     async (request, response) => {
-      const { code, branchId } = request.query as unknown as { code: string; branchId?: string };
+      const { code, branchId, usage } = request.query as unknown as {
+        code: string;
+        branchId?: string;
+        usage?: 'pos' | 'bom';
+      };
       if (
         branchId &&
         !request.authUser!.branches.some((assignedBranch) => assignedBranch.id === branchId)
@@ -61,7 +80,7 @@ export function productsRouter(database: Database): Router {
         throw forbidden('BRANCH_ACCESS_DENIED', 'You do not have access to this branch');
       }
       const result = await database.query(
-        `select p.id,p.name,p.sku,p.unit,pu.kind as "unitKind",
+        `select p.id,p.name,p.sku,p.unit,p.inventory_role as "inventoryRole",pu.kind as "unitKind",
           pu.default_step::float8 as "defaultStep",p.category_id as "categoryId",
           p.brand_id as "brandId",p.track_inventory as "trackInventory",
           p.selling_price::text as "sellingPrice",
@@ -81,6 +100,7 @@ export function productsRouter(database: Database): Router {
               'variantId',v.id,'name',v.name,'sku',v.sku,'unit',v.unit,
               'unitKind',vu.kind,'defaultStep',vu.default_step::float8,
               'unitsPerBase',v.units_per_base::float8,
+              'isPortioningContainer',v.is_portioning_container,
               'cost',coalesce(v.cost,p.cost*v.units_per_base)::text,
               'sellingPrice',coalesce(v.selling_price,p.selling_price)::text,
               'barcodes',coalesce((
@@ -94,7 +114,11 @@ export function productsRouter(database: Database): Router {
           ),'[]') as "sellingUnits"
          from products p
          join product_units pu on pu.organization_id=p.organization_id and pu.code=p.unit
-         where p.organization_id=$1 and ($3::uuid is null or p.status='active') and (
+         where p.organization_id=$1 and ($3::uuid is null or p.status='active')
+           and ($4::text is null
+             or ($4='pos' and p.inventory_role in ('sellable','both'))
+             or ($4='bom' and p.inventory_role in ('ingredient','both')))
+           and (
            p.sku=$2 or exists (
              select 1 from product_variants sv
              where sv.product_id=p.id and sv.organization_id=$1 and sv.sku=$2 and sv.is_active
@@ -105,7 +129,7 @@ export function productsRouter(database: Database): Router {
          )
          order by case when p.sku=$2 then 0 else 1 end
          limit 1`,
-        [request.authUser!.organization.id, code, branchId ?? null],
+        [request.authUser!.organization.id, code, branchId ?? null, usage ?? null],
       );
       sendData(response, result.rows[0] ?? null);
     },
@@ -124,10 +148,21 @@ export function productsRouter(database: Database): Router {
           .enum(['true', 'false'])
           .optional()
           .transform((value) => value === 'true'),
+        usage: z.enum(['pos', 'bom']).optional(),
+        inventoryRole: z.enum(['sellable', 'ingredient', 'both']).optional(),
       }),
     ),
     async (request, response) => {
-      const { page, pageSize, search, branchId, includeIncoming, includeInactive } =
+      const {
+        page,
+        pageSize,
+        search,
+        branchId,
+        includeIncoming,
+        includeInactive,
+        usage,
+        inventoryRole,
+      } =
         request.query as unknown as {
           page: number;
           pageSize: number;
@@ -135,6 +170,8 @@ export function productsRouter(database: Database): Router {
           branchId?: string;
           includeIncoming: boolean;
           includeInactive: boolean;
+          usage?: 'pos' | 'bom';
+          inventoryRole?: 'sellable' | 'ingredient' | 'both';
         };
       if (
         branchId &&
@@ -145,7 +182,7 @@ export function productsRouter(database: Database): Router {
       const offset = (page - 1) * pageSize;
       const organizationId = request.authUser!.organization.id;
       const result = await database.query(
-        `select p.id,p.name,p.sku,p.unit,pu.kind as "unitKind",
+        `select p.id,p.name,p.sku,p.unit,p.inventory_role as "inventoryRole",pu.kind as "unitKind",
           pu.default_step::float8 as "defaultStep",p.category_id as "categoryId",
           p.brand_id as "brandId",p.track_inventory as "trackInventory",
           p.cost::text,p.selling_price::text as "sellingPrice",
@@ -175,6 +212,7 @@ export function productsRouter(database: Database): Router {
               'variantId',v.id,'name',v.name,'sku',v.sku,'unit',v.unit,
               'unitKind',vu.kind,'defaultStep',vu.default_step::float8,
               'unitsPerBase',v.units_per_base::float8,
+              'isPortioningContainer',v.is_portioning_container,
               'cost',coalesce(v.cost,p.cost*v.units_per_base)::text,
               'sellingPrice',coalesce(v.selling_price,p.selling_price)::text,
               'barcodes',coalesce((
@@ -214,10 +252,13 @@ export function productsRouter(database: Database): Router {
               or ($6::boolean and p.status='pending_receipt')
               or ($7::boolean and p.status='inactive')
             ))
-          ) and ($2::text is null or
+          ) and ($8::text is null
+            or ($8='pos' and p.inventory_role in ('sellable','both'))
+            or ($8='bom' and p.inventory_role in ('ingredient','both')))
+          and ($2::text is null or
            p.name ilike '%'||$2||'%' or p.sku ilike '%'||$2||'%' or exists (
              select 1 from product_barcodes pb where pb.product_id=p.id and pb.barcode=$2
-           ))
+           )) and ($9::text is null or p.inventory_role=$9)
          order by p.name limit $3 offset $4`,
         [
           organizationId,
@@ -227,6 +268,8 @@ export function productsRouter(database: Database): Router {
           branchId ?? null,
           includeIncoming,
           includeInactive,
+          usage ?? null,
+          inventoryRole ?? null,
         ],
       );
       const total = (result.rows[0] as { total?: number } | undefined)?.total ?? 0;
@@ -239,6 +282,22 @@ export function productsRouter(database: Database): Router {
       );
     },
   );
+  router.get('/summary', requirePermission('products:read'), async (request, response) => {
+    const result = await database.query<{
+      all: number;
+      sellable: number;
+      ingredient: number;
+      both: number;
+    }>(
+      `select count(*)::int as all,
+        count(*) filter (where inventory_role='sellable')::int as sellable,
+        count(*) filter (where inventory_role='ingredient')::int as ingredient,
+        count(*) filter (where inventory_role='both')::int as both
+       from products where organization_id=$1`,
+      [request.authUser!.organization.id],
+    );
+    sendData(response, result.rows[0] ?? { all: 0, sellable: 0, ingredient: 0, both: 0 });
+  });
   router.post(
     '/',
     requirePermission('products:manage'),
@@ -246,7 +305,13 @@ export function productsRouter(database: Database): Router {
     validateBody(createProductSchema),
     async (request, response) => {
       const product = await database.transaction(async (tx) => {
-        const { branchId, openingQuantity, sellingUnits, ...input } = request.body;
+        const {
+          branchId,
+          openingQuantity,
+          openingContainerQuantity,
+          sellingUnits,
+          ...input
+        } = request.body;
         const organizationId = request.authUser!.organization.id;
         await validateProductMasters(tx, organizationId, input);
         const created = await tx.query<{
@@ -254,6 +319,7 @@ export function productsRouter(database: Database): Router {
           name: string;
           sku: string;
           unit: string;
+          inventoryRole: string;
           trackInventory: boolean;
           sellingPrice: string;
           taxRate: string;
@@ -261,10 +327,10 @@ export function productsRouter(database: Database): Router {
           status: string;
         }>(
           `insert into products (
-            organization_id,category_id,brand_id,name,sku,unit,track_inventory,description,cost,
-            selling_price,tax_rate,is_tax_inclusive,status,image_path
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-           returning id,name,sku,unit,track_inventory as "trackInventory",
+            organization_id,category_id,brand_id,name,sku,unit,inventory_role,track_inventory,
+            description,cost,selling_price,tax_rate,is_tax_inclusive,status,image_path
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+           returning id,name,sku,unit,inventory_role as "inventoryRole",track_inventory as "trackInventory",
              selling_price::text as "sellingPrice",tax_rate::text as "taxRate",
              is_tax_inclusive as "isTaxInclusive",status`,
           [
@@ -274,6 +340,7 @@ export function productsRouter(database: Database): Router {
             input.name,
             input.sku,
             input.unit,
+            input.inventoryRole,
             input.trackInventory,
             input.description ?? null,
             input.cost,
@@ -290,11 +357,14 @@ export function productsRouter(database: Database): Router {
             [organizationId, created.rows[0]!.id, input.barcode],
           );
         }
+        let portioningContainer: { id: string; unitsPerBase: number } | null = null;
         for (const sellingUnit of sellingUnits) {
+          await validateProductMasters(tx, organizationId, { unit: sellingUnit.unit });
           const variant = await tx.query<{ id: string }>(
             `insert into product_variants (
-              organization_id,product_id,name,sku,unit,units_per_base,cost,selling_price,is_active
-             ) values ($1,$2,$3,$4,$5,$6,$7,$8,true) returning id`,
+              organization_id,product_id,name,sku,unit,units_per_base,cost,selling_price,
+              is_active,is_portioning_container
+             ) values ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) returning id`,
             [
               organizationId,
               created.rows[0]!.id,
@@ -304,8 +374,15 @@ export function productsRouter(database: Database): Router {
               sellingUnit.unitsPerBase,
               sellingUnit.cost ?? null,
               sellingUnit.sellingPrice,
+              sellingUnit.isPortioningContainer,
             ],
           );
+          if (sellingUnit.isPortioningContainer) {
+            portioningContainer = {
+              id: variant.rows[0]!.id,
+              unitsPerBase: sellingUnit.unitsPerBase,
+            };
+          }
           if (sellingUnit.barcode) {
             await tx.query(
               `insert into product_barcodes (
@@ -315,32 +392,48 @@ export function productsRouter(database: Database): Router {
             );
           }
         }
+        const sealedOpeningQuantity = portioningContainer ? openingContainerQuantity : 0;
+        const openedOpeningQuantity = portioningContainer ? openingQuantity : 0;
+        const totalOpeningQuantity = portioningContainer
+          ? openedOpeningQuantity + sealedOpeningQuantity * portioningContainer.unitsPerBase
+          : openingQuantity;
         await tx.query(
           `insert into branch_inventory (
-            organization_id,branch_id,product_id,variant_id,quantity,inventory_value,average_cost
+            organization_id,branch_id,product_id,variant_id,quantity,inventory_value,average_cost,
+            sealed_quantity,opened_quantity
            )
            select $1,b.id,$2,null,
              case when b.id=$3 then $4 else 0 end,
              case when b.id=$3 then round($4::numeric*$5::numeric,4) else 0 end,
-             round($5::numeric,4)
+             round($5::numeric,4),
+             case when b.id=$3 then $6 else 0 end,
+             case when b.id=$3 then $7 else 0 end
            from branches b
            where b.organization_id=$1 and b.is_active`,
           [
             organizationId,
             created.rows[0]!.id,
             branchId,
-            input.trackInventory ? openingQuantity : 0,
+            input.trackInventory ? totalOpeningQuantity : 0,
             input.cost,
+            input.trackInventory ? sealedOpeningQuantity : 0,
+            input.trackInventory ? openedOpeningQuantity : 0,
           ],
         );
-        if (input.trackInventory && openingQuantity > 0) {
+        if (input.trackInventory && totalOpeningQuantity > 0) {
           const movement = await tx.query<{ id: string }>(
             `insert into inventory_movements (
               organization_id,branch_id,product_id,variant_id,movement_type,quantity_delta,
               quantity_after,reason,reference_type,created_by
              ) values ($1,$2,$3,null,'adjustment',$4,$4,'Opening stock','product_setup',$5)
              returning id`,
-            [organizationId, branchId, created.rows[0]!.id, openingQuantity, request.authUser!.id],
+            [
+              organizationId,
+              branchId,
+              created.rows[0]!.id,
+              totalOpeningQuantity,
+              request.authUser!.id,
+            ],
           );
           await tx.query(
             `insert into audit_logs (
@@ -353,7 +446,9 @@ export function productsRouter(database: Database): Router {
               movement.rows[0]!.id,
               JSON.stringify({
                 productId: created.rows[0]!.id,
-                quantity: openingQuantity,
+                quantity: totalOpeningQuantity,
+                sealedQuantity: sealedOpeningQuantity,
+                openedQuantity: openedOpeningQuantity,
               }),
             ],
           );
@@ -367,6 +462,7 @@ export function productsRouter(database: Database): Router {
           ...created.rows[0]!,
           barcodes: input.barcode ? [input.barcode] : [],
           sellingUnits,
+          portioningEnabled: Boolean(portioningContainer),
         };
       });
       sendData(response, product, 201);
@@ -376,10 +472,21 @@ export function productsRouter(database: Database): Router {
     const id = uuidSchema.parse(request.params.id);
     const result = await database.query(
       `select p.id,p.category_id as "categoryId",p.brand_id as "brandId",
-        p.name,p.sku,p.unit,p.track_inventory as "trackInventory",p.description,
+        p.name,p.sku,p.unit,p.inventory_role as "inventoryRole",
+        p.track_inventory as "trackInventory",p.description,
         p.cost::text,p.selling_price::text as "sellingPrice",
         p.tax_rate::text as "taxRate",p.is_tax_inclusive as "isTaxInclusive",
         p.status,p.image_path as "imagePath",
+        exists(
+          select 1 from product_variants pv
+          where pv.organization_id=p.organization_id and pv.product_id=p.id
+            and pv.is_portioning_container
+        ) as "portioningEnabled",
+        (
+          select pv.id from product_variants pv
+          where pv.organization_id=p.organization_id and pv.product_id=p.id
+            and pv.is_portioning_container limit 1
+        ) as "portioningVariantId",
         (select pb.barcode from product_barcodes pb
           where pb.organization_id=p.organization_id and pb.product_id=p.id
             and pb.variant_id is null order by pb.created_at limit 1) as barcode
@@ -398,7 +505,8 @@ export function productsRouter(database: Database): Router {
       const organizationId = request.authUser!.organization.id;
       const existing = await database.query<any>(
         `select *,selling_price::text as "sellingPrice",tax_rate::text as "taxRate",
-          track_inventory as "trackInventory",is_tax_inclusive as "isTaxInclusive",
+          inventory_role as "inventoryRole",track_inventory as "trackInventory",
+          is_tax_inclusive as "isTaxInclusive",
           category_id as "categoryId",brand_id as "brandId",image_path as "imagePath"
          from products where id=$1 and organization_id=$2`,
         [id, organizationId],
@@ -410,11 +518,12 @@ export function productsRouter(database: Database): Router {
       const updated = await database.transaction(async (tx) => {
         await validateProductMasters(tx, organizationId, input);
         const row = await tx.query(
-          `update products set category_id=$3,brand_id=$4,name=$5,sku=$6,unit=$7,track_inventory=$8,
-            description=$9,cost=$10,selling_price=$11,tax_rate=$12,is_tax_inclusive=$13,
-            status=$14,image_path=$15
+          `update products set category_id=$3,brand_id=$4,name=$5,sku=$6,unit=$7,
+            inventory_role=$8,track_inventory=$9,description=$10,cost=$11,selling_price=$12,
+            tax_rate=$13,is_tax_inclusive=$14,status=$15,image_path=$16
            where id=$1 and organization_id=$2
-           returning id,name,sku,unit,track_inventory as "trackInventory",
+           returning id,name,sku,unit,inventory_role as "inventoryRole",
+             track_inventory as "trackInventory",
              cost::text,selling_price::text as "sellingPrice"`,
           [
             id,
@@ -424,6 +533,7 @@ export function productsRouter(database: Database): Router {
             input.name,
             input.sku,
             input.unit,
+            input.inventoryRole,
             input.trackInventory,
             input.description ?? null,
             input.cost,
@@ -470,6 +580,7 @@ export function productsRouter(database: Database): Router {
       `select v.id,v.name,v.sku,v.unit,pu.kind as "unitKind",
         pu.default_step::float8 as "defaultStep",v.units_per_base::float8 as "unitsPerBase",
         v.cost::text,v.selling_price::text as "sellingPrice",v.is_active as "isActive",
+        v.is_portioning_container as "isPortioningContainer",
         coalesce((select jsonb_agg(pb.barcode) from product_barcodes pb where pb.variant_id=v.id),'[]') as barcodes
        from product_variants v
        join product_units pu on pu.organization_id=v.organization_id and pu.code=v.unit
@@ -521,6 +632,27 @@ export function productsRouter(database: Database): Router {
 
         // Insert new recipe items
         for (const item of input.items) {
+          const ingredient = await tx.query<{ unit: string; inventoryRole: string }>(
+            `select unit,inventory_role as "inventoryRole"
+             from products where id=$1 and organization_id=$2`,
+            [item.ingredientProductId, organizationId],
+          );
+          const ingredientProduct = ingredient.rows[0];
+          if (!ingredientProduct) throw badRequest('INVALID_INGREDIENT', 'Ingredient was not found');
+          if (!['ingredient', 'both'].includes(ingredientProduct.inventoryRole)) {
+            throw badRequest(
+              'PRODUCT_NOT_AN_INGREDIENT',
+              'Only products marked Raw ingredient or Sellable + ingredient can be used in a BOM',
+            );
+          }
+          const baseFamily = recipeUnitFamily(ingredientProduct.unit);
+          const recipeFamily = recipeUnitFamily(item.unit);
+          if (!baseFamily || baseFamily !== recipeFamily) {
+            throw badRequest(
+              'INCOMPATIBLE_RECIPE_UNIT',
+              `Use a compatible measured unit for this ingredient. ${ingredientProduct.unit} inventory cannot be consumed as ${item.unit}.`,
+            );
+          }
           await tx.query(
             `insert into product_recipes (
                organization_id, parent_product_id, ingredient_product_id, ingredient_variant_id,
@@ -596,10 +728,30 @@ export function productsRouter(database: Database): Router {
       const input = request.body;
       const created = await database.transaction(async (tx) => {
         await validateProductMasters(tx, organizationId, { unit: input.unit });
+        if (input.isPortioningContainer && input.unitsPerBase <= 1) {
+          throw badRequest(
+            'INVALID_PORTIONING_CONTAINER',
+            'A whole container must contain more than one base inventory unit',
+          );
+        }
+        if (input.isPortioningContainer) {
+          const designated = await tx.query(
+            `select 1 from product_variants
+             where organization_id=$1 and product_id=$2 and is_portioning_container limit 1`,
+            [organizationId, productId],
+          );
+          if (designated.rowCount) {
+            throw conflict(
+              'PORTIONING_CONTAINER_EXISTS',
+              'This product already has a designated whole container',
+            );
+          }
+        }
         const result = await tx.query<{ id: string }>(
           `insert into product_variants (
-            organization_id,product_id,name,sku,unit,units_per_base,cost,selling_price,is_active
-           ) select $1,p.id,$3,$4,$5,$6,$7,$8,$9 from products p
+            organization_id,product_id,name,sku,unit,units_per_base,cost,selling_price,
+            is_active,is_portioning_container
+           ) select $1,p.id,$3,$4,$5,$6,$7,$8,$9,$10 from products p
              where p.id=$2 and p.organization_id=$1 returning id`,
           [
             organizationId,
@@ -611,9 +763,20 @@ export function productsRouter(database: Database): Router {
             input.cost ?? null,
             input.sellingPrice ?? null,
             input.isActive,
+            input.isPortioningContainer,
           ],
         );
         if (!result.rows[0]) throw notFound('Product');
+        if (input.isPortioningContainer) {
+          await tx.query(
+            `update branch_inventory set
+               sealed_quantity=floor(quantity/$3::numeric),
+               opened_quantity=quantity-(floor(quantity/$3::numeric)*$3::numeric),
+               updated_at=now()
+             where organization_id=$1 and product_id=$2 and variant_id is null`,
+            [organizationId, productId, input.unitsPerBase],
+          );
+        }
         if (input.barcode) {
           await tx.query(
             `insert into product_barcodes (organization_id,product_id,variant_id,barcode)
@@ -649,6 +812,7 @@ export function productsRouter(database: Database): Router {
         const existing = await tx.query<any>(
           `select v.*,v.units_per_base::float8 as "unitsPerBase",
             v.selling_price::text as "sellingPrice",v.is_active as "isActive",
+            v.is_portioning_container as "isPortioningContainer",
             (select barcode from product_barcodes where variant_id=v.id limit 1) as barcode
            from product_variants v
            where v.id=$1 and v.product_id=$2 and v.organization_id=$3 for update`,
@@ -657,12 +821,52 @@ export function productsRouter(database: Database): Router {
         if (!existing.rows[0]) throw notFound('Product variant');
         const input = { ...existing.rows[0], ...request.body };
         await validateProductMasters(tx, organizationId, { unit: input.unit });
+        const wasPortioningContainer = Boolean(existing.rows[0].isPortioningContainer);
+        const willBePortioningContainer = Boolean(input.isPortioningContainer);
+        const conversionChanged =
+          wasPortioningContainer &&
+          Number(input.unitsPerBase) !== Number(existing.rows[0].unitsPerBase);
+        if (input.isPortioningContainer && input.unitsPerBase <= 1) {
+          throw badRequest(
+            'INVALID_PORTIONING_CONTAINER',
+            'A whole container must contain more than one base inventory unit',
+          );
+        }
+        if (willBePortioningContainer) {
+          const otherContainer = await tx.query(
+            `select 1 from product_variants
+             where organization_id=$1 and product_id=$2 and id<>$3
+               and is_portioning_container limit 1`,
+            [organizationId, productId, variantId],
+          );
+          if (otherContainer.rowCount) {
+            throw conflict(
+              'PORTIONING_CONTAINER_EXISTS',
+              'This product already has a designated whole container',
+            );
+          }
+        }
+        if (conversionChanged) {
+          const pooled = await tx.query(
+            `select 1 from branch_inventory
+             where organization_id=$1 and product_id=$2
+               and (quantity<>0 or sealed_quantity<>0 or opened_quantity<>0) limit 1`,
+            [organizationId, productId],
+          );
+          if (pooled.rowCount) {
+            throw conflict(
+              'PORTIONING_POOL_IN_USE',
+              'Clear sealed and opened stock before changing the container conversion',
+            );
+          }
+        }
         const row = await tx.query(
           `update product_variants set name=$4,sku=$5,unit=$6,units_per_base=$7,
-            cost=$8,selling_price=$9,is_active=$10,updated_at=now()
+            cost=$8,selling_price=$9,is_active=$10,is_portioning_container=$11,updated_at=now()
            where id=$1 and product_id=$2 and organization_id=$3
            returning id,name,sku,unit,units_per_base::float8 as "unitsPerBase",
-             cost::text,selling_price::text as "sellingPrice",is_active as "isActive"`,
+             cost::text,selling_price::text as "sellingPrice",is_active as "isActive",
+             is_portioning_container as "isPortioningContainer"`,
           [
             variantId,
             productId,
@@ -674,8 +878,25 @@ export function productsRouter(database: Database): Router {
             input.cost ?? null,
             input.sellingPrice ?? null,
             input.isActive,
+            input.isPortioningContainer,
           ],
         );
+        if (!wasPortioningContainer && willBePortioningContainer) {
+          await tx.query(
+            `update branch_inventory set
+               sealed_quantity=floor(quantity/$3::numeric),
+               opened_quantity=quantity-(floor(quantity/$3::numeric)*$3::numeric),
+               updated_at=now()
+             where organization_id=$1 and product_id=$2 and variant_id is null`,
+            [organizationId, productId, input.unitsPerBase],
+          );
+        } else if (wasPortioningContainer && !willBePortioningContainer) {
+          await tx.query(
+            `update branch_inventory set sealed_quantity=0,opened_quantity=0,updated_at=now()
+             where organization_id=$1 and product_id=$2 and variant_id is null`,
+            [organizationId, productId],
+          );
+        }
         if (request.body.barcode !== undefined) {
           await tx.query(
             'delete from product_barcodes where organization_id=$1 and variant_id=$2',

@@ -51,7 +51,7 @@ export default function ProductScanScreen() {
     setChecking(true);
     try {
       const existing = await api<CartProduct | null>(
-        `/products/lookup?code=${encodeURIComponent(barcode)}${
+        `/products/lookup?usage=pos&code=${encodeURIComponent(barcode)}${
           addToCart && branch ? `&branchId=${branch.id}` : ''
         }`,
       );

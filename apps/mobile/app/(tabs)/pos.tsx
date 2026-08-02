@@ -248,7 +248,7 @@ export default function PosScreen() {
     enabled: Boolean(branch),
     queryFn: ({ pageParam }) =>
       api<CartProduct[]>(
-        `/products?branchId=${branch!.id}&page=${pageParam}&pageSize=30${debounced ? `&search=${encodeURIComponent(debounced)}` : ''}`,
+        `/products?usage=pos&branchId=${branch!.id}&page=${pageParam}&pageSize=30${debounced ? `&search=${encodeURIComponent(debounced)}` : ''}`,
       ),
     getNextPageParam: (lastPage, allPages) =>
       lastPage.length === 30 ? allPages.length + 1 : undefined,
@@ -347,7 +347,7 @@ export default function PosScreen() {
 
       if (!exact) {
         exact = await api<CartProduct | null>(
-          `/products/lookup?code=${encodeURIComponent(barcode)}&branchId=${branch!.id}`,
+          `/products/lookup?usage=pos&code=${encodeURIComponent(barcode)}&branchId=${branch!.id}`,
         );
       }
 
