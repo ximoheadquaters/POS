@@ -49,9 +49,32 @@ export interface SidebarSection {
 }
 
 const sidebarSections: SidebarSection[] = [
+  // Retail Tools – catalogue and inventory specific to retail businesses
   {
-    sectionTitle: 'MAIN',
+    sectionTitle: 'RETAIL TOOLS',
     groups: [
+      {
+        id: 'products',
+        title: 'Product',
+        icon: 'box',
+        children: [
+          { title: 'Overview', href: '/products', module: 'products' },
+          { title: 'Categories', href: '/catalogue', module: 'products' },
+          { title: 'Variants & SKUs', href: '/product-variants', module: 'products' },
+          { title: 'Stock Inventory', href: '/(tabs)/inventory', module: 'inventory' },
+          { title: 'Repacking', href: '/production', module: 'production' },
+          { title: 'Stock Transfers', href: '/stock-transfers', module: 'stock_transfers' },
+          { title: 'Adjustments', href: '/stock-adjustment', module: 'inventory' },
+        ],
+      },
+      { id: 'customers', title: 'Customers', icon: 'user', href: '/customers', module: 'customers' },
+    ],
+  },
+  // Operations – shared across all profiles (POS, Sales, Purchasing, Promotions, Registers, Analytics, Settings)
+  {
+    sectionTitle: 'OPERATIONS',
+    groups: [
+      // POS & Sales (core)
       {
         id: 'pos',
         title: 'Dashboard & POS',
@@ -66,56 +89,19 @@ const sidebarSections: SidebarSection[] = [
         href: '/(tabs)/sales',
         module: 'pos',
       },
-    ],
-  },
-  {
-    sectionTitle: 'CATALOG & INVENTORY',
-    groups: [
-      {
-        id: 'products',
-        title: 'Product',
-        icon: 'box',
-        children: [
-          { title: 'Overview', href: '/products', module: 'products' },
-          { title: 'Categories', href: '/catalogue', module: 'products' },
-          { title: 'Variants & SKUs', href: '/product-variants', module: 'products' },
-          { title: 'Stock Inventory', href: '/(tabs)/inventory', module: 'inventory' },
-          { title: 'Stock Transfers', href: '/stock-transfers', module: 'stock_transfers' },
-          { title: 'Adjustments', href: '/stock-adjustment', module: 'inventory' },
-        ],
-      },
-      {
-        id: 'customers',
-        title: 'Customers',
-        icon: 'user',
-        href: '/customers',
-        module: 'customers',
-      },
-    ],
-  },
-  {
-    sectionTitle: 'OPERATIONS & CASH',
-    groups: [
+      // Purchasing & Suppliers
       {
         id: 'purchasing',
         title: 'Purchasing',
         icon: 'truck',
         children: [
-          {
-            title: 'Purchase Orders',
-            href: '/purchasing',
-            module: 'purchasing',
-            permission: 'purchasing:read',
-          },
+          { title: 'Purchase Orders', href: '/purchasing', module: 'purchasing', permission: 'purchasing:read' },
+          { title: 'Suppliers', href: '/purchasing?tab=suppliers' as Href, module: 'suppliers' },
         ],
       },
-      {
-        id: 'promotions',
-        title: 'Promotions & Combos',
-        icon: 'tag',
-        href: '/promotions',
-        module: 'promotions',
-      },
+      // Promotions & Combos
+      { id: 'promotions', title: 'Promotions & Combos', icon: 'tag', href: '/promotions', module: 'promotions' },
+      // Registers & Shifts
       {
         id: 'registers',
         title: 'Registers & Shifts',
@@ -126,11 +112,7 @@ const sidebarSections: SidebarSection[] = [
           { title: 'Shift History', href: '/shift-reports', module: 'registers' },
         ],
       },
-    ],
-  },
-  {
-    sectionTitle: 'ANALYTICS & SYSTEM',
-    groups: [
+      // Analytics & System grouped under Operations
       {
         id: 'reports',
         title: 'Income & Reports',
@@ -147,17 +129,51 @@ const sidebarSections: SidebarSection[] = [
           { title: 'Store Settings', href: '/settings' },
           { title: 'Staff & Roles', href: '/users', permission: 'users:manage' },
           { title: 'Audit Logs', href: '/audit', module: 'audit', permission: 'audit:read' },
-          { title: 'Hardware Devices', href: '/hardware' },
-          { title: 'Offline Data Sync', href: '/offline-sync' },
+          { title: 'Hardware Devices', href: '/hardware', module: 'receipt_printer' },
+          { title: 'Offline Data Sync', href: '/offline-sync', module: 'offline' },
+        ],
+      },
+    ],
+  },
+  // Food Service – specific tools for food_service businesses
+  {
+    sectionTitle: 'FOOD SERVICE',
+    groups: [
+      {
+        id: 'food_service',
+        title: 'Food & Recipes',
+        icon: 'coffee',
+        children: [
+          { title: 'Raw Ingredients', href: '/products?inventoryRole=ingredient', module: 'ingredients' },
+          { title: 'BOM Recipes', href: '/products?preparationBehavior=cook_to_order', module: 'recipes' },
+          { title: 'Batch Production', href: '/production', module: 'production' },
+          { title: 'Parked / Held Sales', href: '/held-sales' as Href, module: 'held_sales' },
         ],
       },
     ],
   },
 ];
 
+function filterSectionsByProfile(user: any): SidebarSection[] {
+  const profile = user?.organization?.businessProfile ?? user?.businessProfile ?? 'retail';
+  const ops = ['OPERATIONS'];
+  const retail = ['RETAIL TOOLS'];
+  const food = ['FOOD SERVICE'];
+  if (profile === 'food_service') {
+    return sidebarSections.filter((s) => ops.includes(s.sectionTitle ?? '') || food.includes(s.sectionTitle ?? ''));
+  }
+  if (profile === 'retail') {
+    return sidebarSections.filter((s) => ops.includes(s.sectionTitle ?? '') || retail.includes(s.sectionTitle ?? ''));
+  }
+  // hybrid or other profiles – show everything
+  return sidebarSections;
+}
+
 function isPathActive(pathname: string, href: Href): boolean {
   const target = String(href).replace('/(tabs)', '');
   if (target === '/pos' && (pathname === '/pos' || pathname === '/')) return true;
+  if (target === '/products' && (pathname === '/products' || pathname.startsWith('/product') || pathname === '/catalogue')) return true;
+  if (target === '/purchasing' && (pathname === '/purchasing' || pathname.startsWith('/purchase') || pathname.startsWith('/supplier'))) return true;
   if (pathname === target) return true;
   if (
     target !== '/pos' &&
@@ -176,22 +192,28 @@ function SidebarMenu({ close }: { close(): void }) {
   const branch = useBranchStore((state) => state.activeBranch);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    products: true,
-    registers: true,
-  });
-
-  // Auto-expand groups when active route changes
-  useEffect(() => {
+  const getActiveGroupId = (currentPath: string) => {
     for (const section of sidebarSections) {
       for (const group of section.groups) {
         if (group.children) {
-          const hasActiveChild = group.children.some((child) => isPathActive(pathname, child.href));
-          if (hasActiveChild) {
-            setExpandedGroups((prev) => ({ ...prev, [group.id]: true }));
-          }
+          const hasActiveChild = group.children.some((child) => isPathActive(currentPath, child.href));
+          if (hasActiveChild) return group.id;
         }
       }
+    }
+    return null;
+  };
+
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
+    const active = getActiveGroupId(pathname);
+    return active ? { [active]: true } : { products: true };
+  });
+
+  // Auto-expand active group and collapse non-active groups when route changes
+  useEffect(() => {
+    const active = getActiveGroupId(pathname);
+    if (active) {
+      setExpandedGroups({ [active]: true });
     }
   }, [pathname]);
 
@@ -264,7 +286,7 @@ function SidebarMenu({ close }: { close(): void }) {
       {/* Navigation Sections & Hierarchy */}
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="pb-6">
-          {sidebarSections.map((section, sectionIdx) => {
+          {filterSectionsByProfile(currentUser).map((section, sectionIdx) => {
             const visibleGroups = filterVisibleGroups(section.groups);
             if (visibleGroups.length === 0) return null;
 

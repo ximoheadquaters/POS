@@ -22,6 +22,7 @@ export function testUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
       name: 'Organization A',
       currency: 'PHP',
       timezone: 'Asia/Manila',
+      businessProfile: 'retail',
       subscriptionStatus: 'active',
     },
     role: 'cashier',
@@ -58,10 +59,14 @@ export class AuthorizationDatabase implements Database {
           subscription_status: user.organization.subscriptionStatus,
           role: user.role,
           permissions: user.permissions,
-          modules: user.modules,
           branches: user.branches,
         } as unknown as T,
       ]);
+    }
+    if (text.includes('from modules m') && text.includes('join lateral')) {
+      return result(
+        (this.user.modules ?? ['products', 'pos']).map((code) => ({ code }) as unknown as T),
+      );
     }
     if (text.includes('from products p')) {
       return result([

@@ -12,6 +12,7 @@ import type { AssetStorage } from './storage/assets.js';
 import { authenticate } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import { validateBody } from './middleware/validation.js';
+import { adminRouter } from './modules/admin/routes.js';
 import { auditRouter } from './modules/audit/routes.js';
 import { branchesRouter } from './modules/branches/routes.js';
 import { customersRouter } from './modules/customers/routes.js';
@@ -102,6 +103,7 @@ export function createApp(dependencies: AppDependencies) {
   );
   app.use('/api/v1/auth', auth);
   app.use('/api/v1/platform', platformRouter(dependencies.database, dependencies.authActions));
+  app.use('/api/v1/admin', adminRouter(dependencies.database, dependencies.verifyToken));
 
   const protectedApi = express.Router();
   protectedApi.use(authenticate(dependencies.database, dependencies.verifyToken));

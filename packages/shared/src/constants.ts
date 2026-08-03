@@ -10,6 +10,12 @@ export type RoleCode = (typeof ROLE_CODES)[number];
 export const EMPLOYEE_ROLE_CODES = ['manager', 'cashier', 'inventory_staff'] as const;
 export type EmployeeRoleCode = (typeof EMPLOYEE_ROLE_CODES)[number];
 
+export const BUSINESS_PROFILES = ['retail', 'food_service', 'hybrid'] as const;
+export type BusinessProfile = (typeof BUSINESS_PROFILES)[number];
+
+export const PREPARATION_BEHAVIORS = ['standard', 'cook_to_order', 'preproduced'] as const;
+export type PreparationBehavior = (typeof PREPARATION_BEHAVIORS)[number];
+
 export const HARDWARE_MODULE_CODES = [
   'barcode_scanner',
   'receipt_printer',
@@ -18,6 +24,30 @@ export const HARDWARE_MODULE_CODES = [
   'customer_display',
 ] as const;
 export type HardwareModuleCode = (typeof HARDWARE_MODULE_CODES)[number];
+
+export const FOOD_SERVICE_MODULE_CODES = [
+  'ingredients',
+  'recipes',
+  'prepared_food',
+  'production',
+  'held_sales',
+] as const;
+export type FoodServiceModuleCode = (typeof FOOD_SERVICE_MODULE_CODES)[number];
+
+export const PLANNED_MODULE_CODES = [
+  'food_waste',
+  'order_types',
+  'tables',
+  'menu_modifiers',
+  'kitchen_tickets',
+  'kitchen_display',
+  'order_status',
+  'waiter_assignment',
+  'split_bill',
+  'service_charge',
+  'delivery_orders',
+] as const;
+export type PlannedModuleCode = (typeof PLANNED_MODULE_CODES)[number];
 
 export const MODULE_CODES = [
   'dashboard',
@@ -36,9 +66,23 @@ export const MODULE_CODES = [
   'loyalty',
   'integrations',
   'audit',
+  'offline',
   ...HARDWARE_MODULE_CODES,
+  ...FOOD_SERVICE_MODULE_CODES,
+  ...PLANNED_MODULE_CODES,
 ] as const;
 export type ModuleCode = (typeof MODULE_CODES)[number];
+
+export const MODULE_DEPENDENCIES: Partial<Record<ModuleCode, readonly ModuleCode[]>> = {
+  ingredients: ['products', 'inventory'],
+  recipes: ['ingredients', 'products', 'inventory'],
+  prepared_food: ['recipes'],
+  production: ['recipes', 'inventory'],
+  held_sales: ['pos'],
+  purchasing: ['suppliers', 'inventory'],
+  stock_transfers: ['inventory'],
+  offline: ['pos'],
+} as const;
 
 export const PERMISSIONS = [
   'organization:read',

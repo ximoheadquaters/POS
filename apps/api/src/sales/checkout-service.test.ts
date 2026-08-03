@@ -49,6 +49,7 @@ class CheckoutDatabase implements Database {
   sellingUnit = 'piece';
   portioningVariantId: string | null = null;
   trackInventory = true;
+  preparationBehavior: 'standard' | 'cook_to_order' | 'preproduced' | null = null;
   recipeQuantityRequired: number | null = null;
   ingredientPortioningVariantId: string | null = null;
   readonly ingredientProductId = '88888888-8888-4888-8888-888888888888';
@@ -89,6 +90,7 @@ class CheckoutDatabase implements Database {
           tax_rate: '12.00',
           is_tax_inclusive: false,
           track_inventory: this.trackInventory,
+          preparation_behavior: this.preparationBehavior ?? (this.trackInventory ? 'standard' : 'cook_to_order'),
           units_per_base: this.unitsPerBase,
           selling_unit: this.sellingUnit,
           quantity: this.state.inventory,

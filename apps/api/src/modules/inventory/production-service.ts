@@ -61,6 +61,7 @@ export class ProductionService {
            and bi.branch_id=$2 and bi.product_id=p.id and bi.variant_id is null
          where p.organization_id=$1 and p.id=$3 and p.status='active'
            and p.track_inventory and p.inventory_role in ('sellable','both')
+           and coalesce(p.preparation_behavior, 'preproduced') = 'preproduced'
          for update of bi`,
         [actor.organizationId, input.branchId, input.productId],
       );

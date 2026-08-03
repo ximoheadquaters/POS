@@ -1,8 +1,19 @@
 import type { NextFunction, Request, Response } from 'express';
-import type { ModuleCode, Permission, RoleCode } from '@ximo/shared';
+import {
+  type BusinessProfile,
+  type ModuleCode,
+  type Permission,
+  type RoleCode,
+} from '@ximo/shared';
 import type { Queryable } from '../database/types.js';
 import { forbidden, unauthorized } from '../shared/errors.js';
 import type { VerifyToken } from '../auth/types.js';
+import {
+  EntitlementService,
+  pruneDisabledDependentModules,
+} from '../services/entitlement-service.js';
+
+export { pruneDisabledDependentModules };
 
 interface ContextRow {
   id: string;
@@ -12,36 +23,23 @@ interface ContextRow {
   organization_name: string;
   currency: string;
   timezone: string;
+  business_profile: BusinessProfile;
   subscription_status: string;
   role: RoleCode;
   permissions: Permission[] | null;
-  modules: ModuleCode[] | null;
   branches: Array<{ id: string; name: string; code: string }> | null;
 }
 
-const CONTEXT_SQL = `
+export const CONTEXT_SQL = `
 select p.id, p.email, p.display_name, p.organization_id,
   o.name as organization_name, o.currency, o.timezone,
-  coalesce(s.status::text, 'cancelled') as subscription_status, r.code as role,
+  coalesce(o.business_profile, 'retail') as business_profile,
+  coalesce(current_sub.status::text, 'cancelled') as subscription_status, r.code as role,
   coalesce((
     select array_agg(distinct pe.code)
     from role_permissions rp join permissions pe on pe.id = rp.permission_id
     where rp.role_id = r.id
   ), '{}') as permissions,
-  coalesce((
-    select array_agg(distinct m.code)
-    from modules m
-    where coalesce(
-      (select om.enabled from organization_modules om
-       where om.organization_id = p.organization_id and om.module_id = m.id),
-      exists (
-        select 1 from subscriptions sx
-        join plan_modules pm on pm.plan_id = sx.plan_id
-        where sx.organization_id = p.organization_id and pm.module_id = m.id
-          and sx.status in ('trialing','active')
-      )
-    )
-  ), '{}') as modules,
   coalesce((
     select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name, 'code', b.code) order by b.name)
     from branches b
@@ -53,11 +51,19 @@ select p.id, p.email, p.display_name, p.organization_id,
 from profiles p
 join organizations o on o.id = p.organization_id
 join roles r on r.id = p.role_id and r.organization_id = p.organization_id
-left join subscriptions s on s.organization_id = p.organization_id
+left join lateral (
+  select sub.id, sub.plan_id, sub.status
+  from subscriptions sub
+  where sub.organization_id = p.organization_id
+    and sub.status in ('trialing', 'active')
+  order by sub.created_at desc, sub.id desc
+  limit 1
+) current_sub on true
 where p.id = $1 and p.is_active
 `;
 
 export function authenticate(db: Queryable, verifyToken: VerifyToken) {
+  const entitlementService = new EntitlementService(db);
   return async (request: Request, _response: Response, next: NextFunction) => {
     try {
       const header = request.header('authorization');
@@ -67,6 +73,10 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
       const result = await db.query<ContextRow>(CONTEXT_SQL, [verified.id]);
       const row = result.rows[0];
       if (!row) throw unauthorized('No active POS profile is linked to this account');
+      const effectiveModules = await entitlementService.getEffectiveModules(
+        row.organization_id,
+        row.business_profile,
+      );
       request.authToken = token;
       request.authUser = {
         id: row.id,
@@ -77,11 +87,12 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
           name: row.organization_name,
           currency: row.currency,
           timezone: row.timezone,
+          businessProfile: row.business_profile || 'retail',
           subscriptionStatus: row.subscription_status,
         },
         role: row.role,
         permissions: row.permissions ?? [],
-        modules: row.modules ?? [],
+        modules: effectiveModules,
         branches: row.branches ?? [],
       };
       next();

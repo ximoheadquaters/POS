@@ -17,6 +17,7 @@ interface Product {
   sku: string;
   unit?: string;
   inventoryRole?: 'sellable' | 'ingredient' | 'both';
+  preparationBehavior?: 'standard' | 'cook_to_order' | 'preproduced';
   sellingPrice: string;
   cost: string;
   averageCost: string;
@@ -34,7 +35,7 @@ interface Product {
 
 type ProductFilter = 'all' | 'sellable' | 'ingredient' | 'both';
 
-const PRODUCT_FILTERS: Array<{
+const ALL_PRODUCT_FILTERS: Array<{
   id: ProductFilter;
   title: string;
   description: string;
@@ -118,83 +119,87 @@ function RecipeModal({
   useEffect(() => {
     if (recipeQuery.data) {
       setItems(
-        recipeQuery.data.map((r: any) => ({
-          ingredientProductId: r.ingredientProductId,
-          ingredientName: r.ingredientName,
-          quantityRequired: r.quantityRequired,
-          unit: r.unit,
-          baseUnit: r.baseUnit || r.unit,
-          cost: r.ingredientCost || '0.00',
-        })),
-      );
-    }
-  }, [recipeQuery.data]);
-
-  const saveMutation = useMutation({
-    mutationFn: async (recipeItems: RecipeItemRow[]) => {
-      await api(`/products/${product!.id}/recipe`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          items: recipeItems.map((item) => ({
+        recipeQuery.data.map((item) => {
+          const matchingProduct = allProducts.find((p) => p.id === item.ingredientProductId);
+          return {
             ingredientProductId: item.ingredientProductId,
+            ingredientName: item.ingredientName,
             quantityRequired: item.quantityRequired,
             unit: item.unit,
-          })),
+            baseUnit: matchingProduct?.unit ?? 'piece',
+            cost: item.ingredientCost,
+          };
         }),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['product-recipe', product?.id] });
-      Alert.alert('Recipe Saved', `Bill of Materials template for ${product?.name} has been updated.`);
-      onClose();
-    },
-    onError: (err: any) => {
-      Alert.alert('Error', err?.message || 'Failed to save recipe');
-    },
-  });
+      );
+    }
+  }, [allProducts, recipeQuery.data]);
 
   if (!product) return null;
 
   const availableIngredients = allProducts.filter(
-    (candidate) =>
-      candidate.id !== product.id &&
-      (candidate.inventoryRole === 'ingredient' || candidate.inventoryRole === 'both'),
+    (p) =>
+      p.id !== product.id &&
+      (p.inventoryRole === 'ingredient' || p.inventoryRole === 'both') &&
+      !items.some((existing) => existing.ingredientProductId === p.id),
   );
-  const selectedIngredient = availableIngredients.find(
-    (candidate) => candidate.id === selectedIngredientId,
-  );
+
+  const selectedIngredient = allProducts.find((p) => p.id === selectedIngredientId);
   const unitOptions = compatibleRecipeUnits(selectedIngredient?.unit);
 
-  const totalIngredientCost = items.reduce((sum, item) => {
-    const effQty = convertRecipeQuantity(item.quantityRequired, item.unit, item.baseUnit);
-    return sum + parseFloat(item.cost || '0') * effQty;
-  }, 0);
+  const addItem = () => {
+    if (!selectedIngredient) return;
+    const qty = Number(quantityInput);
+    if (!Number.isFinite(qty) || qty <= 0) return;
 
-  const handleAddIngredient = () => {
-    if (!selectedIngredientId) return;
-    const ing = availableIngredients.find((p) => p.id === selectedIngredientId);
-    if (!ing) return;
-
-    const qty = parseFloat(quantityInput) || 1;
-    const selUnit = unitInput || ing.unit || 'piece';
     setItems((prev) => [
-      ...prev.filter((i) => i.ingredientProductId !== ing.id),
+      ...prev,
       {
-        ingredientProductId: ing.id,
-        ingredientName: ing.name,
+        ingredientProductId: selectedIngredient.id,
+        ingredientName: selectedIngredient.name,
         quantityRequired: qty,
-        unit: selUnit,
-        baseUnit: ing.unit || 'piece',
-        cost: ing.cost || '0.00',
+        unit: unitInput,
+        baseUnit: selectedIngredient.unit ?? 'piece',
+        cost: selectedIngredient.averageCost || selectedIngredient.cost,
       },
     ]);
     setSelectedIngredientId('');
     setQuantityInput('1');
+    setSearchQuery('');
   };
 
-  const handleRemoveIngredient = (id: string) => {
-    setItems((prev) => prev.filter((i) => i.ingredientProductId !== id));
+  const removeItem = (id: string) => {
+    setItems((prev) => prev.filter((item) => item.ingredientProductId !== id));
   };
+
+  const saveMutation = useMutation({
+    mutationFn: async (updatedItems: RecipeItemRow[]) => {
+      await api(`/products/${product.id}/recipe`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          items: updatedItems.map((i) => ({
+            ingredientProductId: i.ingredientProductId,
+            quantityRequired: i.quantityRequired,
+            unit: i.unit,
+          })),
+        }),
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
+      await queryClient.invalidateQueries({ queryKey: ['product-recipe', product.id] });
+      Alert.alert('Recipe Saved', `BOM recipe template for ${product.name} updated.`);
+      onClose();
+    },
+    onError: (err) => {
+      Alert.alert('Error Saving Recipe', err.message);
+    },
+  });
+
+  const totalRecipeCost = items.reduce((sum, item) => {
+    const costPerBase = Number(item.cost) || 0;
+    const baseQty = convertRecipeQuantity(item.quantityRequired, item.unit, item.baseUnit);
+    return sum + costPerBase * baseQty;
+  }, 0);
 
   const filteredAvailable = availableIngredients.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase().trim()),
@@ -251,9 +256,9 @@ function RecipeModal({
                     return (
                       <Pressable
                         key={ing.id}
-                         onPress={() => {
-                           setSelectedIngredientId(ing.id);
-                           setUnitInput(compatibleRecipeUnits(ing.unit)[0]!.code);
+                        onPress={() => {
+                          setSelectedIngredientId(ing.id);
+                          setUnitInput(compatibleRecipeUnits(ing.unit)[0]!.code);
                         }}
                         className={`px-3 py-2 rounded-xl border ${
                           selected
@@ -276,10 +281,10 @@ function RecipeModal({
                   {unitOptions.map((u) => {
                     const selected = unitInput === u.code;
                     return (
-                       <Pressable
-                         key={u.code}
-                         disabled={!selectedIngredient}
-                         onPress={() => setUnitInput(u.code)}
+                      <Pressable
+                        key={u.code}
+                        disabled={!selectedIngredient}
+                        onPress={() => setUnitInput(u.code)}
                         className={`rounded-lg border px-2.5 py-1.5 ${
                           selected
                             ? 'bg-emerald-500/20 border-emerald-500'
@@ -297,81 +302,66 @@ function RecipeModal({
 
               <View className="flex-row gap-3 items-center">
                 <View className="flex-1">
-                  <Text className="text-xs font-medium text-slate-300 mb-1">Qty per Serving</Text>
+                  <Text className="text-xs font-medium text-slate-300 mb-1">Quantity Required</Text>
                   <TextInput
                     value={quantityInput}
                     onChangeText={setQuantityInput}
                     keyboardType="decimal-pad"
-                    className="h-10 rounded-xl bg-slate-900 px-3 text-white text-sm border border-slate-700"
-                    placeholder="e.g. 0.018 or 1"
+                    placeholder="e.g. 150"
                     placeholderTextColor="#64748B"
+                    className="h-10 rounded-xl bg-slate-900 border border-slate-700 px-3 text-xs text-white"
                   />
                 </View>
                 <Pressable
-                  onPress={handleAddIngredient}
-                  disabled={!selectedIngredientId}
-                  className={`h-10 px-5 mt-5 rounded-xl items-center justify-center ${
-                    selectedIngredientId ? 'bg-emerald-600' : 'bg-slate-700'
+                  onPress={addItem}
+                  disabled={!selectedIngredient}
+                  className={`mt-4 h-10 px-4 rounded-xl bg-emerald-600 items-center justify-center ${
+                    !selectedIngredient ? 'opacity-40' : ''
                   }`}
                 >
-                  <Text className="text-xs font-bold text-white">Add</Text>
+                  <Text className="text-xs font-semibold text-white">Add Item</Text>
                 </Pressable>
               </View>
             </View>
 
             <Text className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-              Ingredient Breakdown ({items.length})
+              Recipe Ingredients ({items.length})
             </Text>
 
             {items.length === 0 ? (
-              <View className="p-6 rounded-2xl bg-slate-800/40 border border-dashed border-slate-700 items-center">
-                <Feather name="box" size={24} color="#64748B" />
-                <Text className="mt-2 text-xs text-slate-400">No ingredients added yet.</Text>
-                <Text className="text-[11px] text-slate-500 text-center mt-1">
-                  Select a raw inventory item above to build the recipe template.
-                </Text>
+              <View className="rounded-2xl border border-dashed border-slate-800 p-6 items-center">
+                <Text className="text-xs text-slate-500">No ingredients added to this recipe yet.</Text>
               </View>
             ) : (
               <View className="gap-2">
-                {items.map((item) => {
-                  const effQty = convertRecipeQuantity(item.quantityRequired, item.unit, item.baseUnit);
-                  const lineEstCost = (parseFloat(item.cost || '0') * effQty).toFixed(2);
-                  return (
-                    <View
-                      key={item.ingredientProductId}
-                      className="flex-row items-center justify-between p-3 rounded-xl bg-slate-800 border border-slate-700"
-                    >
-                      <View className="flex-1 pr-2">
-                        <Text className="text-sm font-semibold text-white">{item.ingredientName}</Text>
-                        <Text className="text-xs text-emerald-400">
-                          {item.quantityRequired} {item.unit} per serving (Est.{' '}
-                          {formatMoney(lineEstCost)})
-                        </Text>
-                      </View>
-                      <Pressable
-                        onPress={() => handleRemoveIngredient(item.ingredientProductId)}
-                        className="h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 border border-rose-500/20"
-                      >
-                        <Feather name="trash-2" size={14} color="#F43F5E" />
-                      </Pressable>
+                {items.map((item) => (
+                  <View
+                    key={item.ingredientProductId}
+                    className="flex-row items-center justify-between rounded-xl bg-slate-800/50 p-3 border border-slate-800"
+                  >
+                    <View className="flex-1">
+                      <Text className="text-xs font-medium text-white">{item.ingredientName}</Text>
+                      <Text className="text-[11px] text-slate-400">
+                        {item.quantityRequired} {item.unit}
+                      </Text>
                     </View>
-                  );
-                })}
+                    <Pressable
+                      onPress={() => removeItem(item.ingredientProductId)}
+                      className="h-7 w-7 items-center justify-center rounded-lg bg-red-500/10"
+                    >
+                      <Feather name="trash-2" size={14} color="#EF4444" />
+                    </Pressable>
+                  </View>
+                ))}
               </View>
             )}
 
-            <View className="mt-4 p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex-row justify-between items-center">
-              <View>
-                <Text className="text-xs text-emerald-300 font-medium">Est. Raw Material Cost</Text>
-                <Text className="text-lg font-bold text-emerald-400">
-                  {formatMoney(totalIngredientCost.toFixed(2))}
-                </Text>
+            {items.length > 0 ? (
+              <View className="mt-4 flex-row items-center justify-between rounded-2xl bg-emerald-950/40 p-4 border border-emerald-800/40">
+                <Text className="text-xs font-semibold text-emerald-300">Estimated Ingredient Cost</Text>
+                <Text className="text-sm font-bold text-emerald-400">{formatMoney(totalRecipeCost.toFixed(2))}</Text>
               </View>
-              <View className="items-end">
-                <Text className="text-xs text-slate-400 font-medium">Selling Price</Text>
-                <Text className="text-sm font-semibold text-white">{formatMoney(product.sellingPrice)}</Text>
-              </View>
-            </View>
+            ) : null}
           </ScrollView>
 
           <View className="flex-row gap-3 pt-2">
@@ -404,6 +394,22 @@ function ProductsContent() {
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
   const queryClient = useQueryClient();
+
+  const businessProfile =
+    currentUser?.organization?.businessProfile ?? (currentUser as any)?.businessProfile ?? 'retail';
+  const isFoodService =
+    businessProfile === 'food_service' ||
+    businessProfile === 'hybrid' ||
+    (currentUser?.modules ?? []).includes('recipes');
+
+  // Filter out raw/ingredient tabs for pure retail businesses
+  const productFilters = useMemo(() => {
+    if (!isFoodService) {
+      return ALL_PRODUCT_FILTERS.filter((f) => f.id === 'all' || f.id === 'sellable');
+    }
+    return ALL_PRODUCT_FILTERS;
+  }, [isFoodService]);
+
   const query = useInfiniteQuery({
     queryKey: ['products', branch?.id, search, productFilter],
     initialPageParam: 1,
@@ -453,6 +459,7 @@ function ProductsContent() {
     },
     onError: (error) => Alert.alert('Could not update product', error.message),
   });
+
   return (
     <Screen>
       <Header
@@ -495,7 +502,7 @@ function ProductsContent() {
       {products.length ? (
         <View className="border-b border-slate-100 bg-slate-50 p-4">
           <View className="flex-row flex-wrap gap-3">
-            {PRODUCT_FILTERS.map((filter) => {
+            {productFilters.map((filter) => {
               const selected = productFilter === filter.id;
               return (
                 <Pressable
@@ -589,12 +596,15 @@ function ProductsContent() {
                 </Text>
                 <Text className="mt-1 text-xs text-slate-400">
                   {item.trackInventory ? 'Inventory tracked' : 'Stock not tracked'}
-                  {' Â· '}
-                  {item.inventoryRole === 'ingredient'
-                    ? 'Raw ingredient'
-                    : item.inventoryRole === 'both'
-                      ? 'POS + ingredient'
-                      : 'POS product'}
+                  {isFoodService
+                    ? ` · ${
+                        item.inventoryRole === 'ingredient'
+                          ? 'Raw ingredient'
+                          : item.inventoryRole === 'both'
+                            ? 'POS + ingredient'
+                            : 'POS product'
+                      }`
+                    : ''}
                   {item.sellingUnits?.length
                     ? ` · Also sold by ${item.sellingUnits.map((unit) => unit.unit).join(', ')}`
                     : ''}
@@ -676,7 +686,7 @@ function ProductsContent() {
                       <Feather name="copy" size={12} color="#1A593B" />
                       <Text className="ml-1 text-xs font-medium text-brand-700">Units</Text>
                     </Pressable>
-                    {item.inventoryRole !== 'ingredient' ? (
+                    {isFoodService && item.inventoryRole !== 'ingredient' ? (
                       <Pressable
                         accessibilityRole="button"
                         onPress={() => setEditingRecipeProduct(item)}
@@ -718,11 +728,13 @@ function ProductsContent() {
         />
       )}
 
-      <RecipeModal
-        product={editingRecipeProduct}
-        onClose={() => setEditingRecipeProduct(null)}
-        allProducts={products}
-      />
+      {isFoodService ? (
+        <RecipeModal
+          product={editingRecipeProduct}
+          onClose={() => setEditingRecipeProduct(null)}
+          allProducts={products}
+        />
+      ) : null}
     </Screen>
   );
 }

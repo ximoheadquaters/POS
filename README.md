@@ -100,6 +100,8 @@ derives organization, role, permission, module, and branch context from PostgreS
 `organization_id` values are never accepted. The service-role key and database credentials are
 server-only.
 
-Read [architecture.md](docs/architecture.md), [database.md](docs/database.md),
+Start with the comprehensive [system documentation](docs/system-documentation.md) for onboarding
+and long-term maintenance. Focused references remain available in
+[architecture.md](docs/architecture.md), [database.md](docs/database.md),
 [api.md](docs/api.md), [demo-users.md](docs/demo-users.md), and
-[features.md](docs/features.md) for details.
+[features.md](docs/features.md).

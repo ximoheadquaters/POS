@@ -4,8 +4,7 @@ import { appStorage } from './storage';
 import { useConnectivityStore } from '@/store/connectivity';
 import { offlineSnapshotFallback } from './offline-snapshot';
 
-const baseUrl =
-  process.env.EXPO_PUBLIC_API_URL ?? 'https://ximo-pos-api.onrender.com/api/v1';
+const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? 'https://ximo-pos-api.onrender.com/api/v1';
 export const API_ORIGIN = baseUrl.replace(/\/api\/v1\/?$/, '');
 
 function cacheKey(path: string): string {
@@ -50,7 +49,14 @@ export async function api<T>(
   if (idempotencyKey) headers.set('idempotency-key', idempotencyKey);
   let serverResponded = false;
   try {
-    const response = await fetch(`${baseUrl}${path}`, { ...requestInit, headers });
+    const response = await fetch(`${baseUrl}${path}`, {
+      ...requestInit,
+      // The app maintains its own offline cache below. Bypassing the browser's
+      // HTTP cache prevents stale 404 responses and body-less 304 responses
+      // after a newly deployed API route becomes available.
+      cache: 'no-store',
+      headers,
+    });
     serverResponded = true;
     const body = (await response.json()) as ApiResponse<T>;
     if (!body.success) {

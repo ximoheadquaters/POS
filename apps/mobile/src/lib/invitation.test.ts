@@ -46,6 +46,7 @@ const owner: CurrentUser = {
     name: 'Client Business',
     currency: 'PHP',
     timezone: 'Asia/Manila',
+    businessProfile: 'retail',
     subscriptionStatus: 'active',
   },
   role: 'owner',

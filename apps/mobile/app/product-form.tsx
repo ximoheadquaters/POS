@@ -17,6 +17,7 @@ import { api } from '@/lib/api';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { formatMoney } from '@/lib/format';
+import { calculateBulkCostSuggestion, formatCalculatedUnitCost } from '@/lib/bulk-cost';
 import { normalizeBarcode } from '@/lib/product-scan';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
@@ -38,35 +39,8 @@ const UNIT_OPTIONS = [
 
 type StockSaleMode = 'single_unit' | 'whole_and_portions' | 'portions_only';
 type PackageMeasureUnit = 'g' | 'kg' | 'ml' | 'l';
-type InventoryRole = 'sellable' | 'ingredient' | 'both';
 
 const PACKAGE_UNIT_CODES = ['sack', 'pack', 'box', 'bottle', 'can'] as const;
-
-const INVENTORY_ROLE_OPTIONS: Array<{
-  id: InventoryRole;
-  title: string;
-  description: string;
-  icon: ComponentProps<typeof Feather>['name'];
-}> = [
-  {
-    id: 'sellable',
-    title: 'Sell at POS',
-    description: 'Shown to cashiers; not available as a BOM ingredient.',
-    icon: 'shopping-cart',
-  },
-  {
-    id: 'ingredient',
-    title: 'Raw ingredient',
-    description: 'Used by recipes and inventory; hidden from the POS.',
-    icon: 'archive',
-  },
-  {
-    id: 'both',
-    title: 'Sell + ingredient',
-    description: 'Can be sold directly and consumed by a recipe.',
-    icon: 'repeat',
-  },
-];
 
 function recipeUnitOptions(baseUnit?: string) {
   const normalized = (baseUnit ?? '').trim().toLowerCase();
@@ -82,7 +56,42 @@ function recipeUnitOptions(baseUnit?: string) {
       { code: 'l', label: 'Liters (L)' },
     ];
   }
-  return [{ code: 'piece', label: 'Pieces (pc)' }];
+  const discreteUnits: Record<string, { code: string; label: string }> = {
+    piece: { code: 'piece', label: 'Pieces (pc)' },
+    pieces: { code: 'piece', label: 'Pieces (pc)' },
+    pc: { code: 'piece', label: 'Pieces (pc)' },
+    pcs: { code: 'piece', label: 'Pieces (pc)' },
+    serving: { code: 'serving', label: 'Servings' },
+    servings: { code: 'serving', label: 'Servings' },
+    pack: { code: 'pack', label: 'Packs' },
+    packs: { code: 'pack', label: 'Packs' },
+    box: { code: 'box', label: 'Boxes' },
+    boxes: { code: 'box', label: 'Boxes' },
+    sack: { code: 'sack', label: 'Sacks' },
+    sacks: { code: 'sack', label: 'Sacks' },
+    bottle: { code: 'bottle', label: 'Bottles' },
+    bottles: { code: 'bottle', label: 'Bottles' },
+    can: { code: 'can', label: 'Cans' },
+    cans: { code: 'can', label: 'Cans' },
+  };
+  return [discreteUnits[normalized] ?? discreteUnits.piece!];
+}
+
+function isMeasuredInventoryUnit(unit?: string): boolean {
+  return [
+    'g',
+    'gram',
+    'grams',
+    'kg',
+    'kilogram',
+    'kilograms',
+    'ml',
+    'milliliter',
+    'milliliters',
+    'l',
+    'liter',
+    'liters',
+  ].includes((unit ?? '').trim().toLowerCase());
 }
 
 function packageSizeInBaseUnits(size: string, _unit: PackageMeasureUnit): number {
@@ -94,39 +103,59 @@ function packageSizeInBaseUnits(size: string, _unit: PackageMeasureUnit): number
 const PRODUCT_PRESETS = [
   {
     id: 'retail' as const,
-    label: 'Retail item',
-    description: 'Packaged goods with stock',
+    label: 'Retail Product',
+    description: 'Standard packaged goods sold directly from stock',
     icon: 'shopping-bag' as const,
     unit: 'piece' as ProductUnit,
+    inventoryRole: 'sellable' as const,
+    preparationBehavior: 'standard' as const,
     trackInventory: true,
   },
   {
+    id: 'raw' as const,
+    label: 'Raw Ingredient',
+    description: 'Raw inventory materials used in recipes; excluded from retail POS',
+    icon: 'archive' as const,
+    unit: 'kg' as ProductUnit,
+    inventoryRole: 'ingredient' as const,
+    preparationBehavior: 'standard' as const,
+    trackInventory: true,
+    sellingPrice: '0.00',
+  },
+  {
     id: 'prepared_food' as const,
-    label: 'Prepared food',
-    description: 'Meals sold per serving',
+    label: 'Cook-to-Order Prepared Food',
+    description: 'Cooked meals sold per serving; ingredients deducted at checkout',
     icon: 'coffee' as const,
     unit: 'serving' as ProductUnit,
+    inventoryRole: 'sellable' as const,
+    preparationBehavior: 'cook_to_order' as const,
     trackInventory: false,
   },
   {
     id: 'repacked' as const,
-    label: 'Prepared / repacked',
-    description: 'Made in advance, then sold from finished stock',
+    label: 'Repacking',
+    description: 'Bulk items repacked or portioned into smaller units or packs',
     icon: 'layers' as const,
-    unit: 'piece' as ProductUnit,
-    trackInventory: true,
-  },
-  {
-    id: 'by_weight' as const,
-    label: 'By weight',
-    description: 'Meat, fish, rice, or produce',
-    icon: 'activity' as const,
-    unit: 'kg' as ProductUnit,
+    unit: 'pack' as ProductUnit,
+    inventoryRole: 'sellable' as const,
+    preparationBehavior: 'preproduced' as const,
     trackInventory: true,
   },
 ] as const;
 
 type ProductSetup = (typeof PRODUCT_PRESETS)[number]['id'];
+
+function generatedSku(name: string): string {
+  const prefix = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 18);
+  const suffix = Date.now().toString(36).slice(-4).toUpperCase();
+  return `${prefix || 'ITEM'}-${suffix}`;
+}
 
 const CAMERA_BARCODE_TYPES = [
   'ean13',
@@ -170,6 +199,8 @@ interface IngredientOption {
   averageCost?: string | null;
   unit: string;
   status: string;
+  inventoryRole?: 'sellable' | 'ingredient' | 'both';
+  trackInventory?: boolean;
 }
 
 function SectionLabel({ children }: { children: string }) {
@@ -273,6 +304,8 @@ function ProductFormContent() {
   const [stockSaleMode, setStockSaleMode] = useState<StockSaleMode>('single_unit');
   const [packageSize, setPackageSize] = useState('25');
   const [packageMeasureUnit, setPackageMeasureUnit] = useState<PackageMeasureUnit>('kg');
+  const [packagePurchaseCost, setPackagePurchaseCost] = useState('');
+  const [loosePurchaseQuantity, setLoosePurchaseQuantity] = useState('');
   const [alternateEnabled, setAlternateEnabled] = useState(false);
   const [portioningEnabled, setPortioningEnabled] = useState(false);
   const [alternateUnit, setAlternateUnit] = useState<ProductUnit>('pack');
@@ -286,6 +319,8 @@ function ProductFormContent() {
   const queryClient = useQueryClient();
 
   const [productSetup, setProductSetup] = useState<ProductSetup>('retail');
+  const [showAdditionalDetails, setShowAdditionalDetails] = useState(false);
+  const [showAdvancedInventory, setShowAdvancedInventory] = useState(false);
   const [recipeEnabled, setRecipeEnabled] = useState(false);
   const [recipeItems, setRecipeItems] = useState<
     Array<{
@@ -320,10 +355,10 @@ function ProductFormContent() {
   });
 
   const allProductsQuery = useQuery({
-    queryKey: ['all-products-for-recipe', branch?.id],
+    queryKey: ['all-inventory-products-for-bom', branch?.id],
     queryFn: () =>
       api<any>(
-        `/products?usage=bom&includeInactive=true&includeIncoming=true&pageSize=100${
+        `/products?includeInactive=true&includeIncoming=true&pageSize=100${
           branch?.id ? `&branchId=${branch.id}` : ''
         }`,
       ),
@@ -336,23 +371,52 @@ function ProductFormContent() {
       : Array.isArray(raw?.items)
         ? raw.items
         : [];
+    const rolePriority = { ingredient: 0, both: 1, sellable: 2 } as const;
     return list
-      .filter((product) => product.id !== productId)
+      .filter((product) => product.id !== productId && product.trackInventory !== false)
       .map((product) => ({
         ...product,
         cost: product.averageCost || product.cost || '0.00',
-      }));
+      }))
+      .sort(
+        (left, right) =>
+          (rolePriority[left.inventoryRole ?? 'sellable'] ?? 2) -
+            (rolePriority[right.inventoryRole ?? 'sellable'] ?? 2) ||
+          left.name.localeCompare(right.name),
+      );
   }, [allProductsQuery.data, productId]);
 
   const [recipeSearchQuery, setRecipeSearchQuery] = useState('');
+  const [showSellableBomSources, setShowSellableBomSources] = useState(false);
 
-  const filteredAvailableIngredients = useMemo(() => {
-    if (!recipeSearchQuery.trim()) return availableIngredients;
-    const q = recipeSearchQuery.toLowerCase().trim();
-    return availableIngredients.filter(
-      (ing: any) => ing.name?.toLowerCase().includes(q) || ing.sku?.toLowerCase().includes(q),
+  const rawIngredientSources = useMemo(
+    () =>
+      availableIngredients.filter(
+        (ingredient) =>
+          ingredient.inventoryRole === 'ingredient' || ingredient.inventoryRole === 'both',
+      ),
+    [availableIngredients],
+  );
+  const sellableOnlySources = useMemo(
+    () =>
+      availableIngredients.filter(
+        (ingredient) => !ingredient.inventoryRole || ingredient.inventoryRole === 'sellable',
+      ),
+    [availableIngredients],
+  );
+  const filterRecipeSources = (sources: IngredientOption[]) => {
+    const query = recipeSearchQuery.toLowerCase().trim();
+    if (!query) return sources;
+    return sources.filter(
+      (ingredient) =>
+        ingredient.name?.toLowerCase().includes(query) ||
+        ingredient.sku?.toLowerCase().includes(query),
     );
-  }, [availableIngredients, recipeSearchQuery]);
+  };
+  const filteredRawIngredientSources = filterRecipeSources(rawIngredientSources);
+  const filteredSellableOnlySources = filterRecipeSources(sellableOnlySources);
+  const visibleRawIngredientSources = filteredRawIngredientSources.slice(0, 8);
+  const visibleSellableOnlySources = filteredSellableOnlySources.slice(0, 8);
 
   const selectedRecipeIngredient = useMemo(
     () => availableIngredients.find((product) => product.id === recipeSelectedIngredientId),
@@ -361,6 +425,9 @@ function ProductFormContent() {
   const compatibleRecipeUnits = useMemo(
     () => recipeUnitOptions(selectedRecipeIngredient?.unit),
     [selectedRecipeIngredient?.unit],
+  );
+  const selectedSourceIsPackaged = Boolean(
+    selectedRecipeIngredient && !isMeasuredInventoryUnit(selectedRecipeIngredient.unit),
   );
 
   const existingRecipeQuery = useQuery({
@@ -384,7 +451,11 @@ function ProductFormContent() {
   const wizardSteps = recipeEnabled
     ? [
         { step: 1, label: 'Product Setup', icon: 'package' as const },
-        { step: 2, label: 'Recipe (BOM)', icon: 'coffee' as const },
+        {
+          step: 2,
+          label: productSetup === 'repacked' ? 'Repacking (BOM)' : 'Recipe (BOM)',
+          icon: productSetup === 'repacked' ? ('layers' as const) : ('coffee' as const),
+        },
         { step: 3, label: 'Pricing & Tax', icon: 'dollar-sign' as const },
         { step: 4, label: 'Availability', icon: 'settings' as const },
       ]
@@ -481,13 +552,16 @@ function ProductFormContent() {
       status: product.status,
       imagePath: product.imagePath ?? undefined,
     });
-    if (product.unit === 'serving' && !product.trackInventory) {
+    if (product.inventoryRole === 'ingredient') {
+      setProductSetup('raw');
+      setRecipeEnabled(false);
+    } else if (existingRecipeQuery.data?.length) {
+      // The recipe-loading effect identifies prepared food versus tracked
+      // prepared/repacked stock.
+    } else if (product.unit === 'serving' && !product.trackInventory) {
       setProductSetup('prepared_food');
       setRecipeEnabled(true);
-    } else if (product.unit === 'kg' && product.trackInventory) {
-      setProductSetup('by_weight');
-      setRecipeEnabled(false);
-    } else if (!existingRecipeQuery.data?.length) {
+    } else {
       setProductSetup('retail');
       setRecipeEnabled(false);
     }
@@ -496,7 +570,37 @@ function ProductFormContent() {
   const trackInventory = form.watch('trackInventory');
   const baseUnit = form.watch('unit') ?? 'piece';
   const inventoryRole = form.watch('inventoryRole') ?? 'sellable';
+  const isRepackedProduct = productSetup === 'repacked';
+  const recipeOutputLabel = isRepackedProduct
+    ? baseUnit === 'piece'
+      ? 'finished unit'
+      : `finished ${baseUnit}`
+    : 'serving';
   const sellingPrice = form.watch('sellingPrice');
+  const productCost = form.watch('cost');
+  const portionCostUnit = isMeasuredInventoryUnit(baseUnit)
+    ? (baseUnit as PackageMeasureUnit)
+    : packageMeasureUnit;
+  const portionCostQuantity =
+    stockSaleMode === 'whole_and_portions' ? packageSize : loosePurchaseQuantity;
+  const showPortionCostCalculator =
+    trackInventory &&
+    stockSaleMode !== 'single_unit' &&
+    isMeasuredInventoryUnit(baseUnit) &&
+    !recipeEnabled;
+  const bulkCostSuggestion = useMemo(
+    () =>
+      calculateBulkCostSuggestion(
+        Number(packagePurchaseCost),
+        Number(portionCostQuantity),
+        portionCostUnit,
+      ),
+    [packagePurchaseCost, portionCostQuantity, portionCostUnit],
+  );
+  const bulkCostApplied = Boolean(
+    bulkCostSuggestion &&
+    Math.abs(Number(productCost) - Number(bulkCostSuggestion.primaryUnitCost.toFixed(2))) < 0.001,
+  );
   const suggestionApplied =
     Boolean(suggestedPrice) &&
     Number.isFinite(Number(suggestedPrice)) &&
@@ -568,6 +672,15 @@ function ProductFormContent() {
       });
       form.setFocus('sellingPrice');
     }, 100);
+  };
+
+  const applyBulkCostSuggestion = () => {
+    if (!bulkCostSuggestion) return;
+    form.setValue('cost', bulkCostSuggestion.primaryUnitCost.toFixed(2), {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
   };
 
   const openScanner = async (target: 'barcode' | 'alternate') => {
@@ -675,11 +788,18 @@ function ProductFormContent() {
         throw new Error('Add a whole selling unit before enabling portioning');
       }
       let savedProduct: CartProduct;
+      const activePreparationBehavior =
+        productSetup === 'prepared_food'
+          ? 'cook_to_order'
+          : productSetup === 'repacked'
+            ? 'preproduced'
+            : 'standard';
       if (isEditing) {
         savedProduct = await api<CartProduct>(`/products/${productId}`, {
           method: 'PATCH',
           body: JSON.stringify({
             ...input,
+            preparationBehavior: activePreparationBehavior,
             barcode: input.barcode ?? null,
           }),
         });
@@ -688,6 +808,7 @@ function ProductFormContent() {
           method: 'POST',
           body: JSON.stringify({
             ...input,
+            preparationBehavior: activePreparationBehavior,
             status: incoming ? 'pending_receipt' : input.status,
             trackInventory: incoming ? true : input.trackInventory,
             branchId: branch.id,
@@ -755,27 +876,41 @@ function ProductFormContent() {
     onError: (error) => Alert.alert('Could not save product', error.message),
   });
 
-  const submitProduct = form.handleSubmit(
-    (value) => mutation.mutate(value),
-    (errors) => {
-      const firstField = Object.keys(errors)[0] ?? '';
-      const pricingStep = 3;
-      const inventoryStep = recipeEnabled ? 1 : 2;
-      if (['cost', 'sellingPrice', 'taxRate', 'isTaxInclusive'].includes(firstField)) {
-        setCurrentStep(pricingStep);
-      } else if (['unit', 'trackInventory'].includes(firstField)) {
-        setCurrentStep(inventoryStep);
-      } else if (firstField === 'status') {
-        setCurrentStep(4);
-      } else {
-        setCurrentStep(1);
-      }
-      Alert.alert(
-        'Product information is incomplete',
-        firstFormErrorMessage(errors) ?? 'Review the highlighted product fields and try again.',
-      );
-    },
-  );
+  const submitProduct = () => {
+    const nameVal = form.getValues('name')?.trim() || '';
+    if (!nameVal) {
+      setCurrentStep(1);
+      Alert.alert('Product name required', 'Please enter a product name before saving.');
+      return;
+    }
+    if (!form.getValues('sku')?.trim()) {
+      form.setValue('sku', generatedSku(nameVal), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+    form.handleSubmit(
+      (value) => {
+        const cleanCost = (value.cost || '0.00').replace(/[^0-9.]/g, '') || '0.00';
+        const cleanPrice = (value.sellingPrice || '0.00').replace(/[^0-9.]/g, '') || '0.00';
+        const cleanTax = (value.taxRate || '12.00').replace(/[^0-9.]/g, '') || '12.00';
+        mutation.mutate({
+          ...value,
+          name: nameVal,
+          cost: cleanCost,
+          sellingPrice: cleanPrice,
+          taxRate: cleanTax,
+        });
+      },
+      (errors) => {
+        if (errors.sku) setShowAdditionalDetails(true);
+        Alert.alert(
+          'Product information is incomplete',
+          firstFormErrorMessage(errors) ?? 'Review the highlighted product fields and try again.',
+        );
+      },
+    )();
+  };
 
   const renderTextField = (
     name: keyof ProductInput,
@@ -803,7 +938,7 @@ function ProductFormContent() {
             autoCapitalize={options.autoCapitalize}
             multiline={options.multiline}
             textAlignVertical={options.multiline ? 'top' : 'center'}
-            placeholder={placeholder}
+            placeholder={name === 'cost' || name === 'sellingPrice' ? '\u20B10.00' : placeholder}
             placeholderTextColor="#A8A099"
             selectionColor="#1A593B"
             className={`rounded-xl border bg-white px-4 text-base text-slate-900 focus:border-brand-700 ${
@@ -822,14 +957,22 @@ function ProductFormContent() {
 
   const goToNextStep = async () => {
     if (currentStep === 1) {
+      if (!form.getValues('sku')?.trim()) {
+        form.setValue('sku', generatedSku(form.getValues('name') ?? ''), {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
       const basicInfoIsValid = await form.trigger(['name', 'sku']);
       if (!basicInfoIsValid) return;
     }
 
     if (recipeEnabled && currentStep === 2 && recipeItems.length === 0) {
       Alert.alert(
-        'Add recipe ingredients',
-        'Prepared food needs at least one ingredient in its bill of materials.',
+        isRepackedProduct ? 'Add source materials' : 'Add recipe ingredients',
+        isRepackedProduct
+          ? 'A prepared or repacked product needs at least one raw material in its bill of materials.'
+          : 'Prepared food needs at least one ingredient in its bill of materials.',
       );
       return;
     }
@@ -927,39 +1070,34 @@ function ProductFormContent() {
               </View>
             ) : null}
 
-            {/* Step Wizard Progress Bar */}
-            <View className="mb-6 rounded-3xl border border-slate-200 bg-white p-3">
-              <View className="flex-row items-center justify-between gap-1">
-                {wizardSteps.map((s) => {
-                  const active = currentStep === s.step;
-                  const completed = currentStep > s.step;
-                  return (
-                    <Pressable
-                      key={s.step}
-                      onPress={() => setCurrentStep(s.step as any)}
-                      className={`flex-1 flex-row items-center justify-center rounded-2xl py-2.5 px-2 border ${
-                        active
-                          ? 'border-brand-700 bg-brand-700'
-                          : completed
-                            ? 'border-brand-200 bg-brand-50'
-                            : 'border-slate-200 bg-slate-50'
-                      }`}
-                    >
-                      <Feather
-                        name={completed ? 'check-circle' : s.icon}
-                        size={14}
-                        color={active ? '#FFFFFF' : completed ? '#1A593B' : '#64748B'}
-                      />
-                      <Text
-                        className={`ml-1.5 text-xs font-semibold ${
-                          active ? 'text-white' : completed ? 'text-brand-900' : 'text-slate-600'
-                        }`}
-                      >
-                        {s.step}. {s.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+            {/* Compact progress keeps attention on one decision at a time. */}
+            <View className="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
+              <View className="flex-row items-center">
+                <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
+                  <Feather
+                    name={wizardSteps[currentStep - 1]?.icon ?? 'circle'}
+                    size={17}
+                    color="#1A593B"
+                  />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Step {currentStep} of {wizardSteps.length}
+                  </Text>
+                  <Text className="mt-0.5 text-base font-semibold text-slate-950">
+                    {wizardSteps[currentStep - 1]?.label}
+                  </Text>
+                </View>
+              </View>
+              <View className="mt-3 flex-row gap-1.5">
+                {wizardSteps.map((step) => (
+                  <View
+                    key={step.step}
+                    className={`h-1.5 flex-1 rounded-full ${
+                      currentStep >= step.step ? 'bg-brand-700' : 'bg-slate-200'
+                    }`}
+                  />
+                ))}
               </View>
             </View>
 
@@ -967,13 +1105,20 @@ function ProductFormContent() {
               <View>
                 <SectionLabel>Product setup</SectionLabel>
                 <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
-                  <Text className="font-semibold text-slate-950">How is this product sold?</Text>
+                  <Text className="font-semibold text-slate-950">What are you adding?</Text>
                   <Text className="mb-4 mt-1 text-sm leading-5 text-slate-500">
-                    Choose the closest setup. You can fine-tune the unit and inventory settings
-                    below.
+                    Pick one. Ximo will set the recommended inventory behavior automatically.
                   </Text>
-                  <View className="gap-3 md:flex-row">
-                    {PRODUCT_PRESETS.map((preset) => {
+                  <View className="gap-3 sm:flex-row sm:flex-wrap">
+                    {PRODUCT_PRESETS.filter((preset) => {
+                      const profile = currentUser?.organization?.businessProfile ?? (currentUser as any)?.businessProfile ?? 'retail';
+                      if (profile === 'retail' && preset.id !== 'retail' && preset.id !== 'repacked') return false;
+                      const userModules = currentUser?.modules ?? [];
+                      if (preset.id === 'raw' && !userModules.includes('ingredients')) return false;
+                      if (preset.id === 'prepared_food' && (!userModules.includes('recipes') || !userModules.includes('prepared_food'))) return false;
+                      if (preset.id === 'repacked' && !userModules.includes('production') && !userModules.includes('inventory')) return false;
+                      return true;
+                    }).map((preset) => {
                       const selected = productSetup === preset.id;
                       return (
                         <Pressable
@@ -986,18 +1131,29 @@ function ProductFormContent() {
                             const usesRecipe = preparedFood || preset.id === 'repacked';
                             setProductSetup(preset.id);
                             setRecipeEnabled(usesRecipe);
+                            form.setValue(
+                              'inventoryRole',
+                              preset.id === 'raw' ? 'ingredient' : 'sellable',
+                              { shouldValidate: true },
+                            );
                             form.setValue('unit', preset.unit, { shouldValidate: true });
                             form.setValue('trackInventory', preset.trackInventory, {
                               shouldValidate: true,
                             });
+                            setStockSaleMode(
+                              preset.id === 'raw'
+                                ? 'portions_only'
+                                : 'single_unit',
+                            );
+                            setShowAdvancedInventory(false);
                             if (usesRecipe) setOpeningQuantity('0');
-                            if (!preset.trackInventory) {
+                            if (!preset.trackInventory || preset.id !== 'retail') {
                               setAlternateEnabled(false);
                               setPortioningEnabled(false);
                               setOpeningContainerQuantity('0');
                             }
                           }}
-                          className={`min-h-24 flex-1 flex-row items-center rounded-2xl border p-4 ${
+                          className={`min-h-20 flex-row items-center rounded-2xl border p-4 sm:w-[48%] lg:w-[31%] ${
                             selected ? 'border-brand-500 bg-brand-50' : 'border-slate-200 bg-white'
                           } ${incoming && !preset.trackInventory ? 'opacity-40' : ''}`}
                         >
@@ -1029,55 +1185,18 @@ function ProductFormContent() {
                   </View>
                 </View>
 
-                <Controller
-                  control={form.control}
-                  name="inventoryRole"
-                  render={({ field }) => (
-                    <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
-                      <Text className="font-semibold text-slate-950">
-                        Where will this product be used?
-                      </Text>
-                      <Text className="mb-4 mt-1 text-sm leading-5 text-slate-500">
-                        This keeps cashier products separate from raw recipe inventory.
-                      </Text>
-                      <View className="gap-3 md:flex-row">
-                        {INVENTORY_ROLE_OPTIONS.map((option) => {
-                          const selected = field.value === option.id;
-                          return (
-                            <Pressable
-                              key={option.id}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected }}
-                              onPress={() => field.onChange(option.id)}
-                              className={`min-h-24 flex-1 flex-row items-center rounded-2xl border p-4 ${
-                                selected
-                                  ? 'border-brand-500 bg-brand-50'
-                                  : 'border-slate-200 bg-white'
-                              }`}
-                            >
-                              <View className="h-11 w-11 items-center justify-center rounded-xl bg-white">
-                                <Feather
-                                  name={option.icon}
-                                  size={18}
-                                  color={selected ? '#1A593B' : '#64748B'}
-                                />
-                              </View>
-                              <View className="ml-3 flex-1">
-                                <Text className="font-medium text-slate-900">{option.title}</Text>
-                                <Text className="mt-1 text-xs leading-4 text-slate-500">
-                                  {option.description}
-                                </Text>
-                              </View>
-                              {selected ? (
-                                <Feather name="check-circle" size={20} color="#1A593B" />
-                              ) : null}
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-                />
+                <View className="mb-7 flex-row items-center rounded-2xl border border-brand-100 bg-brand-50 p-4">
+                  <Feather
+                    name={inventoryRole === 'ingredient' ? 'archive' : 'shopping-cart'}
+                    size={17}
+                    color="#1A593B"
+                  />
+                  <Text className="ml-3 flex-1 text-sm leading-5 text-brand-900">
+                    {inventoryRole === 'ingredient'
+                      ? 'Raw ingredient: tracked in inventory and hidden from the POS.'
+                      : 'Sellable product: visible in the POS when it is active.'}
+                  </Text>
+                </View>
 
                 <SectionLabel>Basic information</SectionLabel>
                 <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
@@ -1091,12 +1210,14 @@ function ProductFormContent() {
                       autoCapitalize: 'words',
                     })}
                     <View className="gap-5 md:flex-row">
-                      <View className="flex-1">
-                        {renderTextField('sku', 'SKU', 'Example: COKE-ML-330', {
-                          autoCapitalize: 'characters',
-                          helper: 'Your internal product code.',
-                        })}
-                      </View>
+                      {showAdditionalDetails ? (
+                        <View className="flex-1">
+                          {renderTextField('sku', 'SKU', 'Generated automatically', {
+                            autoCapitalize: 'characters',
+                            helper: 'Optional. Leave blank and Ximo will create one.',
+                          })}
+                        </View>
+                      ) : null}
                       <View className="flex-1">
                         <Controller
                           control={form.control}
@@ -1151,90 +1272,111 @@ function ProductFormContent() {
                         />
                       </View>
                     </View>
-                    {renderTextField(
-                      'description',
-                      'Description',
-                      'Optional notes about this product',
-                      {
-                        multiline: true,
-                      },
-                    )}
+                    {showAdditionalDetails
+                      ? renderTextField(
+                          'description',
+                          'Description',
+                          'Optional notes about this product',
+                          {
+                            multiline: true,
+                          },
+                        )
+                      : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: showAdditionalDetails }}
+                      onPress={() => setShowAdditionalDetails((visible) => !visible)}
+                      className="min-h-11 flex-row items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 active:bg-slate-100"
+                    >
+                      <Feather
+                        name={showAdditionalDetails ? 'chevron-up' : 'sliders'}
+                        size={15}
+                        color="#475569"
+                      />
+                      <Text className="ml-2 text-sm font-medium text-slate-700">
+                        {showAdditionalDetails
+                          ? 'Hide extra details'
+                          : 'Add category, brand, SKU or notes'}
+                      </Text>
+                    </Pressable>
                   </View>
 
-                  <View className="border-t border-slate-100 p-5">
-                    <View className="mb-4 flex-row items-center justify-between">
-                      <View>
-                        <Text className="font-medium text-slate-900">Classification</Text>
-                        <Text className="mt-1 text-xs text-slate-500">
-                          Helps organize the POS and reports.
-                        </Text>
+                  {showAdditionalDetails ? (
+                    <View className="border-t border-slate-100 p-5">
+                      <View className="mb-4 flex-row items-center justify-between">
+                        <View>
+                          <Text className="font-medium text-slate-900">Classification</Text>
+                          <Text className="mt-1 text-xs text-slate-500">
+                            Helps organize the POS and reports.
+                          </Text>
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => router.push('/catalogue')}
+                          className="min-h-10 flex-row items-center justify-center rounded-xl bg-brand-50 px-3"
+                        >
+                          <Feather name="settings" size={14} color="#1A593B" />
+                          <Text className="ml-2 text-xs font-medium text-brand-700">Manage</Text>
+                        </Pressable>
                       </View>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => router.push('/catalogue')}
-                        className="min-h-10 flex-row items-center justify-center rounded-xl bg-brand-50 px-3"
-                      >
-                        <Feather name="settings" size={14} color="#1A593B" />
-                        <Text className="ml-2 text-xs font-medium text-brand-700">Manage</Text>
-                      </Pressable>
-                    </View>
-                    <View className="gap-5 md:flex-row">
-                      <Controller
-                        control={form.control}
-                        name="categoryId"
-                        render={({ field }) => (
-                          <View className="flex-1">
-                            <Text className="mb-2 text-sm font-medium text-slate-700">
-                              Category
-                            </Text>
-                            <View className="flex-row flex-wrap gap-2">
-                              <ChoiceChip
-                                label="None"
-                                selected={!field.value}
-                                onPress={() => field.onChange(null)}
-                              />
-                              {categories.data
-                                ?.filter((item) => item.isActive)
-                                .map((item) => (
-                                  <ChoiceChip
-                                    key={item.id}
-                                    label={item.name}
-                                    selected={field.value === item.id}
-                                    onPress={() => field.onChange(item.id)}
-                                  />
-                                ))}
+                      <View className="gap-5 md:flex-row">
+                        <Controller
+                          control={form.control}
+                          name="categoryId"
+                          render={({ field }) => (
+                            <View className="flex-1">
+                              <Text className="mb-2 text-sm font-medium text-slate-700">
+                                Category
+                              </Text>
+                              <View className="flex-row flex-wrap gap-2">
+                                <ChoiceChip
+                                  label="None"
+                                  selected={!field.value}
+                                  onPress={() => field.onChange(null)}
+                                />
+                                {categories.data
+                                  ?.filter((item) => item.isActive)
+                                  .map((item) => (
+                                    <ChoiceChip
+                                      key={item.id}
+                                      label={item.name}
+                                      selected={field.value === item.id}
+                                      onPress={() => field.onChange(item.id)}
+                                    />
+                                  ))}
+                              </View>
                             </View>
-                          </View>
-                        )}
-                      />
-                      <Controller
-                        control={form.control}
-                        name="brandId"
-                        render={({ field }) => (
-                          <View className="flex-1">
-                            <Text className="mb-2 text-sm font-medium text-slate-700">Brand</Text>
-                            <View className="flex-row flex-wrap gap-2">
-                              <ChoiceChip
-                                label="None"
-                                selected={!field.value}
-                                onPress={() => field.onChange(null)}
-                              />
-                              {brands.data
-                                ?.filter((item) => item.isActive)
-                                .map((item) => (
-                                  <ChoiceChip
-                                    key={item.id}
-                                    label={item.name}
-                                    selected={field.value === item.id}
-                                    onPress={() => field.onChange(item.id)}
-                                  />
-                                ))}
+                          )}
+                        />
+                        <Controller
+                          control={form.control}
+                          name="brandId"
+                          render={({ field }) => (
+                            <View className="flex-1">
+                              <Text className="mb-2 text-sm font-medium text-slate-700">Brand</Text>
+                              <View className="flex-row flex-wrap gap-2">
+                                <ChoiceChip
+                                  label="None"
+                                  selected={!field.value}
+                                  onPress={() => field.onChange(null)}
+                                />
+                                {brands.data
+                                  ?.filter((item) => item.isActive)
+                                  .map((item) => (
+                                    <ChoiceChip
+                                      key={item.id}
+                                      label={item.name}
+                                      selected={field.value === item.id}
+                                      onPress={() => field.onChange(item.id)}
+                                    />
+                                  ))}
+                              </View>
                             </View>
-                          </View>
-                        )}
-                      />
+                          )}
+                        />
+                      </View>
                     </View>
-                  </View>
+                  ) : null}
                 </View>
               </View>
             ) : null}
@@ -1255,14 +1397,15 @@ function ProductFormContent() {
                     <View className="border-b border-emerald-100 bg-emerald-50 p-4 sm:flex-row sm:items-center">
                       <View className="flex-1">
                         <Text className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
-                          Calculated BOM cost
+                          {isRepackedProduct ? 'Calculated production cost' : 'Calculated BOM cost'}
                         </Text>
                         <Text className="mt-1 text-lg font-semibold text-emerald-950">
                           {formatMoney(bomCost.toFixed(2))}
                         </Text>
                         <Text className="mt-1 text-xs leading-4 text-emerald-800">
-                          This is filled automatically from the recipe. You may adjust the cost
-                          below for labor, packaging, utilities, or other preparation expenses.
+                          {isRepackedProduct
+                            ? 'This is filled automatically from the source materials in the repacking BOM. You may adjust it for labor, packaging, utilities, or other production expenses.'
+                            : 'This is filled automatically from the recipe. You may adjust the cost below for labor, packaging, utilities, or other preparation expenses.'}
                         </Text>
                       </View>
                       <Pressable
@@ -1274,6 +1417,128 @@ function ProductFormContent() {
                       >
                         <Text className="text-xs font-semibold text-emerald-800">Use BOM cost</Text>
                       </Pressable>
+                    </View>
+                  ) : null}
+                  {showPortionCostCalculator ? (
+                    <View className="border-b border-brand-100 bg-brand-50 p-5">
+                      <View className="sm:flex-row sm:items-start">
+                        <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-white">
+                          <Feather name="dollar-sign" size={18} color="#1A593B" />
+                        </View>
+                        <View className="mt-3 flex-1 sm:mt-0">
+                          <Text className="font-semibold text-brand-950">
+                            Let Ximo calculate the cost per portion
+                          </Text>
+                          <Text className="mt-1 text-sm leading-5 text-brand-800">
+                            {stockSaleMode === 'whole_and_portions'
+                              ? `Enter what you paid for one ${alternateUnit}. One ${alternateUnit} contains ${packageSize || '0'} ${packageMeasureUnit}.`
+                              : `Enter how much ${portionCostUnit} you bought and the total amount you paid.`}
+                          </Text>
+
+                          <View className="mt-4 gap-3 sm:flex-row sm:items-end">
+                            {stockSaleMode !== 'whole_and_portions' ? (
+                              <View className="flex-1">
+                                <Text className="mb-2 text-sm font-medium text-slate-700">
+                                  Quantity purchased ({portionCostUnit})
+                                </Text>
+                                <TextInput
+                                  value={loosePurchaseQuantity}
+                                  onChangeText={setLoosePurchaseQuantity}
+                                  keyboardType="decimal-pad"
+                                  placeholder="Example: 10"
+                                  placeholderTextColor="#A8A099"
+                                  selectionColor="#1A593B"
+                                  className="min-h-12 rounded-xl border border-brand-200 bg-white px-4 text-base text-slate-900 focus:border-brand-700"
+                                />
+                              </View>
+                            ) : null}
+                            <View className="flex-1">
+                              <Text className="mb-2 text-sm font-medium text-slate-700">
+                                {stockSaleMode === 'whole_and_portions'
+                                  ? `Total cost of one ${alternateUnit}`
+                                  : 'Total amount paid'}
+                              </Text>
+                              <TextInput
+                                value={packagePurchaseCost}
+                                onChangeText={setPackagePurchaseCost}
+                                keyboardType="decimal-pad"
+                                placeholder={'\u20B10.00'}
+                                placeholderTextColor="#A8A099"
+                                selectionColor="#1A593B"
+                                className="min-h-12 rounded-xl border border-brand-200 bg-white px-4 text-base text-slate-900 focus:border-brand-700"
+                              />
+                            </View>
+                            {bulkCostSuggestion ? (
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityState={{ disabled: bulkCostApplied }}
+                                disabled={bulkCostApplied}
+                                onPress={applyBulkCostSuggestion}
+                                className={`min-h-12 items-center justify-center rounded-xl px-5 active:opacity-80 ${
+                                  bulkCostApplied ? 'bg-brand-600' : 'bg-brand-800'
+                                }`}
+                              >
+                                <View className="flex-row items-center">
+                                  {bulkCostApplied ? (
+                                    <Feather name="check" size={15} color="#FFFFFF" />
+                                  ) : null}
+                                  <Text
+                                    className={`font-semibold text-white ${
+                                      bulkCostApplied ? 'ml-2' : ''
+                                    }`}
+                                  >
+                                    {bulkCostApplied ? 'Cost applied' : 'Use suggested cost'}
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            ) : null}
+                          </View>
+
+                          {bulkCostSuggestion ? (
+                            <View className="mt-4 rounded-2xl border border-brand-200 bg-white p-4">
+                              <Text className="text-xs font-semibold uppercase tracking-wider text-brand-700">
+                                Suggested inventory cost
+                              </Text>
+                              <View className="mt-3 gap-3 sm:flex-row">
+                                <View className="flex-1 rounded-xl bg-slate-50 p-3">
+                                  <Text className="text-xs text-slate-500">
+                                    Cost per {bulkCostSuggestion.primaryUnit}
+                                  </Text>
+                                  <Text className="mt-1 text-lg font-semibold text-slate-950">
+                                    {formatCalculatedUnitCost(bulkCostSuggestion.primaryUnitCost)}
+                                  </Text>
+                                </View>
+                                <View className="flex-1 rounded-xl bg-slate-50 p-3">
+                                  <Text className="text-xs text-slate-500">
+                                    Cost per {bulkCostSuggestion.secondaryUnit}
+                                  </Text>
+                                  <Text className="mt-1 text-lg font-semibold text-slate-950">
+                                    {formatCalculatedUnitCost(bulkCostSuggestion.secondaryUnitCost)}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text className="hidden">
+                                {formatMoney(packagePurchaseCost)} {'÷'} {portionCostQuantity}{' '}
+                                {portionCostUnit} ={' '}
+                                {formatCalculatedUnitCost(bulkCostSuggestion.primaryUnitCost)}/
+                                {bulkCostSuggestion.primaryUnit}
+                              </Text>
+                              <Text className="mt-3 text-xs leading-4 text-slate-500">
+                                {formatMoney(packagePurchaseCost)} {String.fromCharCode(247)}{' '}
+                                {portionCostQuantity} {portionCostUnit} ={' '}
+                                {formatCalculatedUnitCost(bulkCostSuggestion.primaryUnitCost)}/
+                                {bulkCostSuggestion.primaryUnit}
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text className="mt-3 text-xs leading-4 text-brand-700">
+                              {stockSaleMode === 'whole_and_portions'
+                                ? 'Enter the total supplier cost above. If the package size is wrong, go back to Inventory & Units and update it first.'
+                                : `Example: enter 10 ${portionCostUnit} and the complete amount paid for those 10 ${portionCostUnit}.`}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
                     </View>
                   ) : null}
                   <View className="gap-5 p-5 md:flex-row">
@@ -1376,7 +1641,36 @@ function ProductFormContent() {
                             : 'Choose the closest setup. Ximo will configure the inventory units for you.'
                         }
                       />
-                      {!isEditing ? (
+                      <View className="flex-row items-center border-b border-slate-100 bg-slate-50/70 p-4">
+                        <View className="flex-1 pr-3">
+                          <Text className="text-sm font-medium text-slate-900">
+                            {stockSaleMode === 'single_unit'
+                              ? 'Simple stock tracking'
+                              : stockSaleMode === 'portions_only'
+                                ? 'Measured stock'
+                                : 'Whole packages and portions'}
+                          </Text>
+                          <Text className="mt-1 text-xs leading-4 text-slate-500">
+                            {stockSaleMode === 'single_unit'
+                              ? 'Recommended for most products.'
+                              : stockSaleMode === 'portions_only'
+                                ? 'Inventory is tracked by weight or volume.'
+                                : 'Sealed packages and opened stock are tracked separately.'}
+                          </Text>
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: showAdvancedInventory }}
+                          onPress={() => setShowAdvancedInventory((visible) => !visible)}
+                          className="min-h-10 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"
+                        >
+                          <Feather name="sliders" size={14} color="#1A593B" />
+                          <Text className="ml-2 text-xs font-semibold text-brand-800">
+                            {showAdvancedInventory ? 'Done' : 'Advanced'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                      {!isEditing && showAdvancedInventory ? (
                         <View className="border-b border-slate-100 p-5">
                           <View className="gap-3 md:flex-row">
                             {[
@@ -1480,7 +1774,9 @@ function ProductFormContent() {
                               ? activeUnits.filter((unit) =>
                                   ['g', 'kg', 'ml', 'l'].includes(unit.code),
                                 )
-                              : activeUnits;
+                              : !isEditing && stockSaleMode === 'single_unit'
+                                ? activeUnits.filter((unit) => unit.kind === 'discrete')
+                                : activeUnits;
                           return (
                             <View className="border-b border-slate-100 p-5">
                               <Text className="mb-1 font-medium text-slate-900">
@@ -1507,38 +1803,41 @@ function ProductFormContent() {
                           );
                         }}
                       />
-                      <Controller
-                        control={form.control}
-                        name="trackInventory"
-                        render={({ field }) => (
-                          <View className="min-h-20 flex-row items-center border-b border-slate-100 px-5 py-3">
-                            <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
-                              <Feather name="layers" size={17} color="#64748B" />
-                            </View>
-                            <View className="flex-1 pr-3">
-                              <Text className="font-medium text-slate-900">Track inventory</Text>
-                              <Text className="mt-1 text-xs leading-4 text-slate-500">
-                                Turn off for cooked-to-order items or services without fixed stock.
-                              </Text>
-                            </View>
-                            {!isEditing && stockSaleMode === 'whole_and_portions' ? (
-                              <View className="rounded-full bg-brand-50 px-3 py-1.5">
-                                <Text className="text-xs font-semibold text-brand-700">On</Text>
+                      {showAdvancedInventory ? (
+                        <Controller
+                          control={form.control}
+                          name="trackInventory"
+                          render={({ field }) => (
+                            <View className="min-h-20 flex-row items-center border-b border-slate-100 px-5 py-3">
+                              <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+                                <Feather name="layers" size={17} color="#64748B" />
                               </View>
-                            ) : (
-                              <Switch
-                                value={field.value}
-                                onValueChange={(value) => {
-                                  field.onChange(value);
-                                  if (!value) setOpeningQuantity('0');
-                                }}
-                                trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
-                                thumbColor={field.value ? '#1A593B' : '#FFFFFF'}
-                              />
-                            )}
-                          </View>
-                        )}
-                      />
+                              <View className="flex-1 pr-3">
+                                <Text className="font-medium text-slate-900">Track inventory</Text>
+                                <Text className="mt-1 text-xs leading-4 text-slate-500">
+                                  Turn off for cooked-to-order items or services without fixed
+                                  stock.
+                                </Text>
+                              </View>
+                              {!isEditing && stockSaleMode === 'whole_and_portions' ? (
+                                <View className="rounded-full bg-brand-50 px-3 py-1.5">
+                                  <Text className="text-xs font-semibold text-brand-700">On</Text>
+                                </View>
+                              ) : (
+                                <Switch
+                                  value={field.value}
+                                  onValueChange={(value) => {
+                                    field.onChange(value);
+                                    if (!value) setOpeningQuantity('0');
+                                  }}
+                                  trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
+                                  thumbColor={field.value ? '#1A593B' : '#FFFFFF'}
+                                />
+                              )}
+                            </View>
+                          )}
+                        />
+                      ) : null}
                       {trackInventory ? (
                         isEditing ? (
                           <View className="flex-row items-center p-5">
@@ -1903,12 +2202,22 @@ function ProductFormContent() {
 
                 {recipeEnabled ? (
                   <View>
-                    <SectionLabel>Recipe & Ingredients (BOM)</SectionLabel>
+                    <SectionLabel>
+                      {isRepackedProduct
+                        ? 'Repacking & Source Materials (BOM)'
+                        : 'Recipe & Ingredients (BOM)'}
+                    </SectionLabel>
                     <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
                       <CardHeader
-                        icon="coffee"
-                        title="Prepared food recipe"
-                        description="Add everything required to make one serving. Ingredient inventory is deducted automatically at checkout."
+                        icon={isRepackedProduct ? 'layers' : 'coffee'}
+                        title={
+                          isRepackedProduct ? 'Production / repacking BOM' : 'Prepared food recipe'
+                        }
+                        description={
+                          isRepackedProduct
+                            ? `Add the raw stock and packaging required to produce one ${recipeOutputLabel}. These materials are consumed when you record a production or repacking batch—not at checkout.`
+                            : 'Add everything required to make one serving. Ingredient inventory is deducted automatically at checkout.'
+                        }
                         action={
                           <View className="rounded-full bg-brand-50 px-3 py-1.5">
                             <Text className="text-xs font-semibold text-brand-800">Required</Text>
@@ -1916,29 +2225,44 @@ function ProductFormContent() {
                         }
                       />
                       <View className="border-t border-slate-100 p-5">
+                        {isRepackedProduct ? (
+                          <View className="mb-4 flex-row rounded-xl bg-brand-50 p-3">
+                            <Feather name="info" size={15} color="#1A593B" />
+                            <Text className="ml-2 flex-1 text-xs leading-5 text-brand-900">
+                              Choose the bulk or raw stock being divided. The finished packs you are
+                              creating should not also be selected as their own source.
+                            </Text>
+                          </View>
+                        ) : null}
                         <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          1. Select Raw Ingredient Item
+                          {isRepackedProduct
+                            ? '1. Select Raw or Packaging Material'
+                            : '1. Select Raw Ingredient Item'}
                         </Text>
-                        {availableIngredients.length === 0 ? (
+                        {rawIngredientSources.length === 0 ? (
                           <View className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                             <Text className="text-xs font-medium text-amber-900">
-                              No other products in inventory yet
+                              {isRepackedProduct
+                                ? 'No source materials in inventory yet'
+                                : 'No other products in inventory yet'}
                             </Text>
                             <Text className="mt-1 text-xs leading-4 text-amber-800">
-                              Create raw inventory items first (e.g., Coffee Beans, Fresh Milk,
-                              Cups) in Products, then you can select and link them here as
-                              ingredients.
+                              {isRepackedProduct
+                                ? 'Create raw inventory items first (for example, bulk sugar or empty packaging), then select them here as source materials.'
+                                : 'Create raw inventory items first (e.g., Coffee Beans, Fresh Milk, Cups) in Products, then you can select and link them here as ingredients.'}
                             </Text>
                           </View>
                         ) : (
                           <View className="mb-4">
                             <View className="mb-2 flex-row items-center justify-between">
                               <Text className="text-xs font-medium text-slate-600">
-                                Tap a product to add as ingredient:
+                                {isRepackedProduct
+                                  ? `Tap an item to add for one ${recipeOutputLabel}:`
+                                  : 'Tap a product to add as ingredient:'}
                               </Text>
-                              {availableIngredients.length > 5 ? (
+                              {rawIngredientSources.length > 5 ? (
                                 <Text className="text-[11px] font-medium text-slate-400">
-                                  {filteredAvailableIngredients.length} item(s) found
+                                  {filteredRawIngredientSources.length} item(s) found
                                 </Text>
                               ) : null}
                             </View>
@@ -1949,7 +2273,11 @@ function ProductFormContent() {
                                 <TextInput
                                   value={recipeSearchQuery}
                                   onChangeText={setRecipeSearchQuery}
-                                  placeholder="Filter raw ingredients..."
+                                  placeholder={
+                                    isRepackedProduct
+                                      ? 'Filter raw materials...'
+                                      : 'Filter raw ingredients...'
+                                  }
                                   placeholderTextColor="#94A3B8"
                                   className="ml-2 flex-1 text-xs font-medium text-slate-900"
                                 />
@@ -1962,8 +2290,14 @@ function ProductFormContent() {
                             ) : null}
 
                             <View className="flex-row flex-wrap gap-2">
-                              {filteredAvailableIngredients.map((ing: IngredientOption) => {
+                              {visibleRawIngredientSources.map((ing: IngredientOption) => {
                                 const selected = recipeSelectedIngredientId === ing.id;
+                                const roleLabel =
+                                  ing.inventoryRole === 'ingredient'
+                                    ? 'Raw inventory'
+                                    : ing.inventoryRole === 'both'
+                                      ? 'Sell + ingredient'
+                                      : 'Sellable stock';
                                 return (
                                   <Pressable
                                     key={ing.id}
@@ -1994,21 +2328,137 @@ function ProductFormContent() {
                                         selected ? 'text-brand-100' : 'text-slate-400'
                                       }`}
                                     >
-                                      ({formatMoney(ing.cost || '0.00')}/{ing.unit || 'pc'})
+                                      ({formatMoney(ing.cost || '0.00')}/{ing.unit || 'pc'} ·{' '}
+                                      {roleLabel})
                                     </Text>
                                   </Pressable>
                                 );
                               })}
                             </View>
+                            {filteredRawIngredientSources.length >
+                            visibleRawIngredientSources.length ? (
+                              <Text className="mt-3 text-xs leading-4 text-slate-500">
+                                Showing the first {visibleRawIngredientSources.length} items. Search
+                                by product name or SKU to find another raw item.
+                              </Text>
+                            ) : null}
                           </View>
                         )}
 
+                        {sellableOnlySources.length > 0 ? (
+                          <View className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityState={{ expanded: showSellableBomSources }}
+                              onPress={() => {
+                                const nextValue = !showSellableBomSources;
+                                setShowSellableBomSources(nextValue);
+                                if (
+                                  !nextValue &&
+                                  selectedRecipeIngredient &&
+                                  (!selectedRecipeIngredient.inventoryRole ||
+                                    selectedRecipeIngredient.inventoryRole === 'sellable')
+                                ) {
+                                  setRecipeSelectedIngredientId('');
+                                }
+                              }}
+                              className="flex-row items-center p-4 active:bg-slate-50"
+                            >
+                              <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
+                                <Feather name="shopping-bag" size={15} color="#64748B" />
+                              </View>
+                              <View className="ml-3 flex-1">
+                                <Text className="text-sm font-semibold text-slate-900">
+                                  Use an existing sellable item
+                                </Text>
+                                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                                  Optional—only when the complete piece or package is consumed.
+                                </Text>
+                              </View>
+                              <View className="mr-3 rounded-full bg-slate-100 px-2.5 py-1">
+                                <Text className="text-[11px] font-semibold text-slate-600">
+                                  {sellableOnlySources.length}
+                                </Text>
+                              </View>
+                              <Feather
+                                name={showSellableBomSources ? 'chevron-up' : 'chevron-down'}
+                                size={17}
+                                color="#64748B"
+                              />
+                            </Pressable>
+
+                            {showSellableBomSources ? (
+                              <View className="border-t border-amber-200 bg-amber-50 p-4">
+                                <View className="mb-3 flex-row">
+                                  <Feather name="alert-circle" size={15} color="#B45309" />
+                                  <Text className="ml-2 flex-1 text-xs leading-5 text-amber-900">
+                                    Selecting one of these deducts a whole sellable item. Ximo will
+                                    not divide it into grams or milliliters unless that product is
+                                    configured as measured raw stock.
+                                  </Text>
+                                </View>
+                                <View className="flex-row flex-wrap gap-2">
+                                  {visibleSellableOnlySources.map((ingredient) => {
+                                    const selected = recipeSelectedIngredientId === ingredient.id;
+                                    return (
+                                      <Pressable
+                                        key={ingredient.id}
+                                        onPress={() => {
+                                          setRecipeSelectedIngredientId(ingredient.id);
+                                          setRecipeUnitInput(
+                                            recipeUnitOptions(ingredient.unit)[0]!.code,
+                                          );
+                                        }}
+                                        className={`flex-row items-center rounded-xl border px-3 py-2.5 ${
+                                          selected
+                                            ? 'border-brand-700 bg-brand-700'
+                                            : 'border-amber-200 bg-white active:bg-amber-100'
+                                        }`}
+                                      >
+                                        <Feather
+                                          name={selected ? 'check-circle' : 'shopping-bag'}
+                                          size={14}
+                                          color={selected ? '#FFFFFF' : '#B45309'}
+                                        />
+                                        <Text
+                                          className={`ml-2 text-xs font-semibold ${
+                                            selected ? 'text-white' : 'text-slate-800'
+                                          }`}
+                                        >
+                                          {ingredient.name}
+                                        </Text>
+                                        <Text
+                                          className={`ml-1.5 text-[11px] ${
+                                            selected ? 'text-brand-100' : 'text-slate-400'
+                                          }`}
+                                        >
+                                          ({formatMoney(ingredient.cost || '0.00')}/
+                                          {ingredient.unit || 'pc'})
+                                        </Text>
+                                      </Pressable>
+                                    );
+                                  })}
+                                </View>
+                                {filteredSellableOnlySources.length >
+                                visibleSellableOnlySources.length ? (
+                                  <Text className="mt-3 text-xs leading-4 text-amber-800">
+                                    Showing the first {visibleSellableOnlySources.length} items. Use
+                                    the material search above to find another sellable item.
+                                  </Text>
+                                ) : null}
+                              </View>
+                            ) : null}
+                          </View>
+                        ) : null}
+
                         <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          2. Quantity Used per Serving
+                          {isRepackedProduct
+                            ? `2. Quantity Used per ${recipeOutputLabel}`
+                            : '2. Quantity Used per Serving'}
                         </Text>
                         <View className="mb-3">
                           <Text className="mb-1 text-xs font-medium text-slate-700">
-                            Select Unit
+                            Deduct source stock in
                           </Text>
                           {!selectedRecipeIngredient ? (
                             <Text className="mb-2 text-xs text-slate-500">
@@ -2016,37 +2466,65 @@ function ProductFormContent() {
                               units.
                             </Text>
                           ) : null}
-                          <View className="flex-row flex-wrap gap-1.5">
-                            {compatibleRecipeUnits.map((u) => {
-                              const selected = recipeUnitInput === u.code;
-                              return (
-                                <Pressable
-                                  key={u.code}
-                                  disabled={!selectedRecipeIngredient}
-                                  onPress={() => setRecipeUnitInput(u.code)}
-                                  className={`rounded-lg border px-2.5 py-1.5 ${
-                                    selected
-                                      ? 'border-brand-700 bg-brand-700'
-                                      : 'border-slate-200 bg-white'
-                                  } ${!selectedRecipeIngredient ? 'opacity-40' : ''}`}
-                                >
-                                  <Text
-                                    className={`text-xs font-medium ${
-                                      selected ? 'text-white' : 'text-slate-700'
-                                    }`}
+                          {selectedRecipeIngredient && compatibleRecipeUnits.length === 1 ? (
+                            <View className="self-start rounded-lg bg-slate-100 px-3 py-2">
+                              <Text className="text-xs font-semibold text-slate-700">
+                                {compatibleRecipeUnits[0]?.label}
+                              </Text>
+                            </View>
+                          ) : (
+                            <View className="flex-row flex-wrap gap-1.5">
+                              {compatibleRecipeUnits.map((u) => {
+                                const selected = recipeUnitInput === u.code;
+                                return (
+                                  <Pressable
+                                    key={u.code}
+                                    disabled={!selectedRecipeIngredient}
+                                    onPress={() => setRecipeUnitInput(u.code)}
+                                    className={`rounded-lg border px-2.5 py-1.5 ${
+                                      selected
+                                        ? 'border-brand-700 bg-brand-700'
+                                        : 'border-slate-200 bg-white'
+                                    } ${!selectedRecipeIngredient ? 'opacity-40' : ''}`}
                                   >
-                                    {u.label}
-                                  </Text>
-                                </Pressable>
-                              );
-                            })}
-                          </View>
+                                    <Text
+                                      className={`text-xs font-medium ${
+                                        selected ? 'text-white' : 'text-slate-700'
+                                      }`}
+                                    >
+                                      {u.label}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+                          )}
+                          {selectedRecipeIngredient && selectedSourceIsPackaged ? (
+                            <View className="mt-3 flex-row rounded-xl border border-amber-200 bg-amber-50 p-3">
+                              <Feather name="alert-circle" size={15} color="#B45309" />
+                              <View className="ml-2 flex-1">
+                                <Text className="text-xs font-semibold text-amber-900">
+                                  {selectedRecipeIngredient.name} is tracked per{' '}
+                                  {selectedRecipeIngredient.unit}
+                                </Text>
+                                <Text className="mt-1 text-xs leading-5 text-amber-800">
+                                  Ximo cannot offer grams or kilograms because the amount inside one{' '}
+                                  {selectedRecipeIngredient.unit} is unknown. Continue only if the
+                                  whole {selectedRecipeIngredient.unit} is consumed. To make 100 g
+                                  portions, select or create a Raw Ingredient version of{' '}
+                                  {selectedRecipeIngredient.name} tracked in g or kg.
+                                </Text>
+                              </View>
+                            </View>
+                          ) : null}
                         </View>
 
                         <View className="flex-row items-center gap-3">
                           <View className="flex-1">
                             <Text className="mb-1 text-xs font-medium text-slate-700">
-                              Qty per Serving
+                              {isRepackedProduct
+                                ? `Qty per ${recipeOutputLabel}`
+                                : 'Qty per Serving'}
                             </Text>
                             <TextInput
                               value={recipeQtyInput}
@@ -2093,7 +2571,7 @@ function ProductFormContent() {
                                 recipeSelectedIngredientId ? 'text-white' : 'text-slate-400'
                               }`}
                             >
-                              Add Ingredient
+                              {isRepackedProduct ? 'Add Material' : 'Add Ingredient'}
                             </Text>
                           </Pressable>
                         </View>
@@ -2101,7 +2579,8 @@ function ProductFormContent() {
                         {recipeItems.length > 0 ? (
                           <View className="mt-4 gap-2">
                             <Text className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                              Added Ingredients ({recipeItems.length})
+                              {isRepackedProduct ? 'Added Materials' : 'Added Ingredients'} (
+                              {recipeItems.length})
                             </Text>
                             {recipeItems.map((item) => {
                               const effQty = convertRecipeQuantity(
@@ -2122,8 +2601,8 @@ function ProductFormContent() {
                                       {item.ingredientName}
                                     </Text>
                                     <Text className="text-xs text-emerald-700">
-                                      {item.quantityRequired} {item.unit} per serving (Est.{' '}
-                                      {formatMoney(lineEstCost)})
+                                      {item.quantityRequired} {item.unit} per {recipeOutputLabel}{' '}
+                                      (Est. {formatMoney(lineEstCost)})
                                     </Text>
                                   </View>
                                   <Pressable
@@ -2230,7 +2709,7 @@ function ProductFormContent() {
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => setCurrentStep((s) => (s - 1) as any)}
-                    className="min-h-14 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-36 active:bg-slate-50"
+                    className="min-h-14 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-32 active:bg-slate-50"
                   >
                     <Feather name="chevron-left" size={18} color="#334155" />
                     <Text className="ml-1 font-semibold text-slate-700">Back</Text>
@@ -2240,7 +2719,7 @@ function ProductFormContent() {
                     accessibilityRole="button"
                     disabled={mutation.isPending}
                     onPress={() => router.back()}
-                    className="min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-36 active:bg-slate-50"
+                    className="min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-32 active:bg-slate-50"
                   >
                     <Text className="font-semibold text-slate-700">Cancel</Text>
                   </Pressable>
@@ -2250,34 +2729,34 @@ function ProductFormContent() {
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => void goToNextStep()}
-                    className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:opacity-80"
+                    className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl border border-brand-700 bg-brand-50 px-4 active:opacity-80"
                   >
-                    <Text className="mr-2 text-base font-semibold text-white">
+                    <Text className="mr-1 text-sm font-semibold text-brand-900">
                       Next: {wizardSteps[currentStep]?.label}
                     </Text>
-                    <Feather name="chevron-right" size={18} color="#FFFFFF" />
+                    <Feather name="chevron-right" size={16} color="#1A593B" />
                   </Pressable>
-                ) : (
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={mutation.isPending}
-                    onPress={submitProduct}
-                    className={`min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 ${
-                      mutation.isPending ? 'opacity-50' : 'active:opacity-80'
-                    }`}
-                  >
-                    <Feather name="check" size={18} color="#FFFFFF" />
-                    <Text className="ml-2 text-base font-semibold text-white">
-                      {mutation.isPending
-                        ? 'Saving…'
-                        : isEditing
-                          ? 'Save changes'
-                          : addToCart
-                            ? 'Save & Add'
-                            : 'Save product'}
-                    </Text>
-                  </Pressable>
-                )}
+                ) : null}
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={mutation.isPending}
+                  onPress={submitProduct}
+                  className={`min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 ${
+                    mutation.isPending ? 'opacity-50' : 'active:opacity-80'
+                  }`}
+                >
+                  <Feather name="check" size={18} color="#FFFFFF" />
+                  <Text className="ml-2 text-base font-semibold text-white">
+                    {mutation.isPending
+                      ? 'Saving…'
+                      : isEditing
+                        ? 'Save changes'
+                        : addToCart
+                          ? 'Save & Add'
+                          : 'Save product'}
+                  </Text>
+                </Pressable>
               </View>
             </View>
           </View>

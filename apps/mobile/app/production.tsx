@@ -2,11 +2,12 @@ import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { convertRecipeQuantity } from '@ximo/shared';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
+import { confirmAction } from '@/lib/confirm';
 import { formatMoney } from '@/lib/format';
 import { liveDataQueryOptions } from '@/lib/live-data';
 import { useBranchStore } from '@/store/branch';
@@ -123,17 +124,43 @@ function ProductionContent() {
         queryClient.invalidateQueries({ queryKey: ['production-products', branch?.id] }),
         queryClient.invalidateQueries({ queryKey: ['pos-products'] }),
       ]);
-      Alert.alert(
-        'Finished stock added',
-        `${quantity(result.quantityProduced)} ${result.unit} of ${result.productName} added.\nBatch ${result.batchNumber}\nMaterial cost: ${formatMoney(result.totalCost)}`,
-        [{ text: 'Done', onPress: () => router.replace('/(tabs)/inventory') }],
-      );
+      const message = `${quantity(result.quantityProduced)} ${result.unit} of ${result.productName} added.\nBatch ${result.batchNumber}\nMaterial cost: ${formatMoney(result.totalCost)}`;
+      if (Platform.OS === 'web') {
+        Alert.alert('Finished stock added', message);
+        router.replace('/(tabs)/inventory');
+        return;
+      }
+      Alert.alert('Finished stock added', message, [
+        { text: 'Done', onPress: () => router.replace('/(tabs)/inventory') },
+      ]);
     },
     onError: (error) => Alert.alert('Production was not recorded', error.message),
   });
 
-  const confirmProduction = () => {
-    if (!selected || !canProduce) return;
+  const confirmProduction = async () => {
+    if (!selected) return;
+    if (!validOutput) {
+      Alert.alert(
+        'Enter quantity produced',
+        selected.unitKind === 'discrete'
+          ? `Enter a whole number of completed ${selected.unit}s.`
+          : `Enter a ${selected.unit} quantity greater than zero.`,
+      );
+      return;
+    }
+    const shortages = preview.filter((item) => !item.enough);
+    if (shortages.length > 0) {
+      Alert.alert(
+        'Not enough raw material',
+        shortages
+          .map(
+            (item) =>
+              `${item.name}: need ${quantity(item.required)} ${item.baseUnit}, available ${quantity(item.usable)} ${item.baseUnit}`,
+          )
+          .join('\n'),
+      );
+      return;
+    }
     const opened = preview.filter((item) => item.containersToOpen > 0);
     const openingMessage = opened.length
       ? `\n\nXimo will automatically open ${opened
@@ -143,14 +170,12 @@ function ProductionContent() {
           )
           .join(', ')}.`
       : '';
-    Alert.alert(
+    const confirmed = await confirmAction(
       'Record finished production?',
       `Create ${quantity(numericOutput)} ${selected.unit} of ${selected.name}.${openingMessage}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Record production', onPress: () => mutation.mutate() },
-      ],
+      'Record production',
     );
+    if (confirmed) mutation.mutate();
   };
 
   return (
@@ -234,11 +259,11 @@ function ProductionContent() {
                   No production product yet
                 </Text>
                 <Text className="mt-1 max-w-sm text-center text-xs leading-5 text-slate-500">
-                  Add a product using “Prepared / repacked”, mark it Sell at POS, and add its BOM.
+                  Add a Repacked product, keep it available for sale, and define its BOM.
                 </Text>
                 <View className="mt-4">
                   <Button
-                    title="Add prepared / repacked product"
+                    title="Add repacked product"
                     onPress={() => router.push('/product-form')}
                   />
                 </View>
@@ -320,10 +345,19 @@ function ProductionContent() {
               ) : null}
 
               <View className="rounded-2xl border border-slate-200 bg-white p-4">
+                {!validOutput ? (
+                  <Text className="mb-3 text-xs leading-5 text-amber-700">
+                    Enter the completed quantity before recording production.
+                  </Text>
+                ) : !canProduce ? (
+                  <Text className="mb-3 text-xs leading-5 text-red-700">
+                    Raw material stock is insufficient. Review the items marked “Not enough” above.
+                  </Text>
+                ) : null}
                 <Button
                   title={mutation.isPending ? 'Recording production…' : 'Record production'}
-                  disabled={!canProduce || mutation.isPending}
-                  onPress={confirmProduction}
+                  disabled={mutation.isPending}
+                  onPress={() => void confirmProduction()}
                 />
               </View>
             </>

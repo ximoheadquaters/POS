@@ -116,6 +116,7 @@ class ProvisioningDatabase implements Database {
         name: values?.[1],
         currency: values?.[3],
         timezone: values?.[4],
+        businessProfile: values?.[5] ?? 'retail',
       };
       this.organizations.set(String(values?.[0]), organization);
       return result([organization as unknown as T]);

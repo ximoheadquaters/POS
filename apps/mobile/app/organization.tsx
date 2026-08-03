@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Feather from '@expo/vector-icons/Feather';
+import type { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   organizationProfileSchema,
@@ -92,12 +93,13 @@ function OrganizationContent() {
     queryFn: () => api<OrganizationUserSummary[]>('/users'),
     enabled: currentUser?.permissions?.includes('users:read') ?? false,
   });
-  const form = useForm<OrganizationProfileInput>({
+  const form = useForm<z.input<typeof organizationProfileSchema>, unknown, OrganizationProfileInput>({
     resolver: zodResolver(organizationProfileSchema),
     defaultValues: {
       name: '',
       currency: 'PHP',
       timezone: 'Asia/Manila',
+      businessProfile: 'retail',
       logoPath: null,
     },
   });
@@ -107,6 +109,7 @@ function OrganizationContent() {
       name: query.data.name ?? '',
       currency: query.data.currency ?? 'PHP',
       timezone: query.data.timezone ?? 'Asia/Manila',
+      businessProfile: (query.data as any).businessProfile ?? 'retail',
       logoPath: query.data.logoPath ?? null,
     });
   }, [form, query.data]);
@@ -213,9 +216,19 @@ function OrganizationContent() {
         queryClient.invalidateQueries({ queryKey: ['settings'] }),
         refreshUser(),
       ]);
-      Alert.alert('Organization updated', 'The business identity is now updated for every branch.');
+      if (Platform.OS === 'web') {
+        window.alert('Organization updated successfully! Your navigation and session have been refreshed.');
+      } else {
+        Alert.alert('Organization updated', 'The business identity is now updated for every branch.');
+      }
     },
-    onError: (error) => Alert.alert('Could not update organization', error.message),
+    onError: (error) => {
+      if (Platform.OS === 'web') {
+        window.alert(`Could not update organization: ${error.message}`);
+      } else {
+        Alert.alert('Could not update organization', error.message);
+      }
+    },
   });
   const enabledModules = Array.isArray(query.data?.enabledModules)
     ? query.data.enabledModules
@@ -364,6 +377,45 @@ function OrganizationContent() {
                     />
                   </View>
                 </View>
+
+                <View className="mt-2 gap-2">
+                  <Text className="text-xs font-medium uppercase tracking-wider text-slate-700">
+                    Business Profile / Type
+                  </Text>
+                  <Controller
+                    control={form.control}
+                    name="businessProfile"
+                    render={({ field }) => (
+                      <View className="flex-row flex-wrap gap-3">
+                        {[
+                          { key: 'retail', label: 'Retail', desc: 'Stores, Boutiques, Outlets' },
+                          { key: 'food_service', label: 'Food Service', desc: 'Restaurants, Cafes, Bakeries' },
+                          { key: 'hybrid', label: 'Retail + Food Service', desc: 'Hybrid Operations' },
+                        ].map((profile) => {
+                          const selected = field.value === profile.key;
+                          return (
+                            <Pressable
+                              key={profile.key}
+                              disabled={!editable}
+                              onPress={() => field.onChange(profile.key)}
+                              className={`flex-1 min-w-[200px] p-4 rounded-2xl border ${
+                                selected ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-slate-50'
+                              }`}
+                            >
+                              <View className="flex-row items-center justify-between">
+                                <Text className={`font-semibold ${selected ? 'text-brand-950' : 'text-slate-800'}`}>
+                                  {profile.label}
+                                </Text>
+                                {selected && <Feather name="check-circle" size={18} color="#1A593B" />}
+                              </View>
+                              <Text className="mt-1 text-xs text-slate-500">{profile.desc}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                  />
+                </View>
                 <View>
                   <Text className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-700">
                     Organization logo
@@ -428,7 +480,41 @@ function OrganizationContent() {
                   <Button
                     title={save.isPending ? 'Saving…' : 'Save organization'}
                     disabled={save.isPending || pickingLogo}
-                    onPress={form.handleSubmit((value) => save.mutate(value))}
+                    onPress={form.handleSubmit(
+                      (value) => {
+                        const isChangingProfile =
+                          query.data?.businessProfile &&
+                          (query.data as any).businessProfile !== value.businessProfile;
+                        if (isChangingProfile) {
+                          const targetLabel =
+                            value.businessProfile === 'food_service'
+                              ? 'Food Service'
+                              : value.businessProfile === 'hybrid'
+                                ? 'Retail + Food Service'
+                                : 'Retail';
+                          const confirmMsg = `Are you sure you want to change your Business Profile to ${targetLabel}?\n\nThis will update your sidebar navigation tabs to show ${targetLabel} features. All existing products and sales will remain 100% safe.`;
+                          if (Platform.OS === 'web') {
+                            if (!window.confirm(confirmMsg)) return;
+                            save.mutate(value);
+                          } else {
+                            Alert.alert('Change Business Profile?', confirmMsg, [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Confirm & Save', onPress: () => save.mutate(value) },
+                            ]);
+                          }
+                        } else {
+                          save.mutate(value);
+                        }
+                      },
+                      (errors) => {
+                        console.error('Organization validation errors:', errors);
+                        if (Platform.OS === 'web') {
+                          const firstErrKey = Object.keys(errors)[0];
+                          const firstErrMsg = firstErrKey ? (errors as any)[firstErrKey]?.message : 'Please check required fields';
+                          window.alert(`Validation error: ${firstErrMsg}`);
+                        }
+                      },
+                    )}
                   />
                 ) : (
                   <Text className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">

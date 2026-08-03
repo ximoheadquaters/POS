@@ -18,6 +18,7 @@ interface ProductRow {
   tax_rate: string;
   is_tax_inclusive: boolean;
   track_inventory: boolean;
+  preparation_behavior: 'standard' | 'cook_to_order' | 'preproduced';
   units_per_base: number;
   selling_unit: string;
   unit_kind: 'discrete' | 'decimal';
@@ -140,6 +141,7 @@ export class CheckoutService {
               else coalesce(v.cost, p.cost * coalesce(v.units_per_base,1))
             end)::text as unit_cost,
             p.tax_rate::text, p.is_tax_inclusive, p.track_inventory,
+            coalesce(p.preparation_behavior, 'standard') as preparation_behavior,
             coalesce(v.units_per_base,1)::float8 as units_per_base,
             coalesce(v.unit,p.unit) as selling_unit,
             pu.kind as unit_kind,
@@ -419,12 +421,10 @@ export class CheckoutService {
           }
         }
 
-        // Cooked-to-order products consume their BOM at checkout. Inventory-tracked
-        // finished products consumed their BOM when they were produced, so checkout
-        // must only deduct the finished item here.
-        const recipeRes = item.product.track_inventory
-          ? { rows: [] }
-          : await transaction.query<{
+        // Cooked-to-order products consume their BOM at checkout. Preproduced and standard
+        // products do not consume BOM at checkout.
+        const recipeRes = item.product.preparation_behavior === 'cook_to_order'
+          ? await transaction.query<{
               ingredient_product_id: string;
               ingredient_variant_id: string | null;
               quantity_required: number;
@@ -441,7 +441,8 @@ export class CheckoutService {
              and portioning.product_id=p.id and portioning.is_portioning_container
            where pr.organization_id = $1 and pr.parent_product_id = $2`,
               [actor.organizationId, item.product.product_id],
-            );
+            )
+          : { rows: [] };
 
         for (const ingredient of recipeRes.rows) {
           const effectiveQty = convertRecipeQuantity(

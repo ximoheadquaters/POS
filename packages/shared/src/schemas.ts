@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import {
+  BUSINESS_PROFILES,
   EMPLOYEE_ROLE_CODES,
   MODULE_CODES,
   PAYMENT_METHODS,
   PERMISSIONS,
+  PREPARATION_BEHAVIORS,
   ROLE_CODES,
 } from './constants.js';
 import { moneyStringSchema } from './money.js';
@@ -85,6 +87,8 @@ export const productUnitSchema = z.object({
 });
 
 export const productInventoryRoleSchema = z.enum(['sellable', 'ingredient', 'both']);
+export const preparationBehaviorSchema = z.enum(PREPARATION_BEHAVIORS);
+export const businessProfileSchema = z.enum(BUSINESS_PROFILES);
 
 export const productSchema = z.object({
   categoryId: uuidSchema.nullable().optional(),
@@ -94,6 +98,7 @@ export const productSchema = z.object({
   barcode: optionalBarcodeSchema,
   unit: productUnitCodeSchema.default('piece'),
   inventoryRole: productInventoryRoleSchema.default('sellable'),
+  preparationBehavior: preparationBehaviorSchema.default('standard'),
   trackInventory: z.boolean().default(true),
   description: z.string().trim().max(2000).optional(),
   cost: moneyStringSchema,
@@ -128,6 +133,7 @@ export const updateProductSchema = z.object({
   barcode: optionalBarcodeSchema.nullable().optional(),
   unit: productUnitCodeSchema.optional(),
   inventoryRole: productInventoryRoleSchema.optional(),
+  preparationBehavior: preparationBehaviorSchema.optional(),
   trackInventory: z.boolean().optional(),
   description: z.string().trim().max(2000).optional(),
   cost: moneyStringSchema.optional(),
@@ -460,6 +466,7 @@ export const organizationProfileSchema = z.object({
   name: z.string().trim().min(2).max(180),
   currency: z.string().trim().length(3).toUpperCase(),
   timezone: z.string().trim().min(3).max(80),
+  businessProfile: businessProfileSchema.default('retail'),
   logoPath: z.string().trim().max(500).nullable(),
 });
 

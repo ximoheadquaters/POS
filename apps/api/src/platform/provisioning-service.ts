@@ -14,6 +14,7 @@ export const provisionOrganizationRequestSchema = z.object({
   timezone: z.string(),
   planCode: z.string(),
   subscriptionStatus: z.string(),
+  businessProfile: z.enum(['retail', 'food_service', 'hybrid']).default('retail'),
   ownerEmail: z.string(),
   ownerName: z.string().optional(),
 });
@@ -35,10 +36,11 @@ export interface ProvisionedOrganization {
   name: string;
   currency: string;
   timezone: string;
+  businessProfile: 'retail' | 'food_service' | 'hybrid';
   planCode: string;
   planName: string;
   subscriptionStatus: string;
-  enabledModules: Array<{ code: string; name: string; source: 'plan' }>;
+  enabledModules: Array<{ code: string; name: string; source: 'plan' | 'profile' }>;
   owner: {
     email: string;
     displayName: string;
@@ -70,6 +72,7 @@ function normalize(input: ProvisionOrganizationRequest): ProvisionOrganizationRe
     timezone: input.timezone.trim(),
     planCode: input.planCode.trim().toLowerCase(),
     subscriptionStatus: input.subscriptionStatus.trim().toLowerCase(),
+    businessProfile: input.businessProfile ?? 'retail',
     ownerEmail,
     ownerName: input.ownerName?.trim() || fallbackOwnerName,
   };
@@ -244,16 +247,18 @@ export class PlatformProvisioningService {
           name: string;
           currency: string;
           timezone: string;
+          businessProfile: 'retail' | 'food_service' | 'hybrid';
         }>(
-          `insert into organizations (id,name,slug,currency,timezone)
-           values ($1,$2,$3,$4,$5)
-           returning id,name,currency,timezone`,
+          `insert into organizations (id,name,slug,currency,timezone,business_profile)
+           values ($1,$2,$3,$4,$5,$6)
+           returning id,name,currency,timezone,business_profile as "businessProfile"`,
           [
             organizationId,
             input.name,
             slugFor(input.name, organizationId),
             input.currency,
             input.timezone,
+            input.businessProfile,
           ],
         );
         await transaction.query(

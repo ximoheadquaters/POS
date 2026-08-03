@@ -1,4 +1,4 @@
-import type { ModuleCode, Permission, RoleCode } from './constants.js';
+import type { BusinessProfile, ModuleCode, Permission, RoleCode } from './constants.js';
 
 export interface ApiSuccess<T> {
   success: true;
@@ -32,6 +32,7 @@ export interface CurrentUser {
     name: string;
     currency: string;
     timezone: string;
+    businessProfile: BusinessProfile;
     subscriptionStatus: string;
   };
   role: RoleCode;

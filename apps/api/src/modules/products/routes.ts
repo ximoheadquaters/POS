@@ -46,13 +46,31 @@ async function validateProductMasters(
 }
 
 function recipeUnitFamily(unit: string): 'mass' | 'volume' | 'piece' | null {
-  const normalized = unit.trim().toLowerCase();
+  const normalized = normalizeRecipeUnit(unit);
   if (['g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms'].includes(normalized)) return 'mass';
   if (['ml', 'milliliter', 'milliliters', 'l', 'liter', 'liters'].includes(normalized)) {
     return 'volume';
   }
-  if (['piece', 'pieces', 'pc', 'pcs'].includes(normalized)) return 'piece';
+  if (['piece', 'serving', 'pack', 'box', 'sack', 'bottle', 'can'].includes(normalized)) {
+    return 'piece';
+  }
   return null;
+}
+
+function normalizeRecipeUnit(unit: string): string {
+  const normalized = unit.trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    pieces: 'piece',
+    pc: 'piece',
+    pcs: 'piece',
+    servings: 'serving',
+    packs: 'pack',
+    boxes: 'box',
+    sacks: 'sack',
+    bottles: 'bottle',
+    cans: 'can',
+  };
+  return aliases[normalized] ?? normalized;
 }
 
 export function productsRouter(database: Database): Router {
@@ -117,7 +135,7 @@ export function productsRouter(database: Database): Router {
          where p.organization_id=$1 and ($3::uuid is null or p.status='active')
            and ($4::text is null
              or ($4='pos' and p.inventory_role in ('sellable','both'))
-             or ($4='bom' and p.inventory_role in ('ingredient','both')))
+             or ($4='bom' and p.track_inventory))
            and (
            p.sku=$2 or exists (
              select 1 from product_variants sv
@@ -149,7 +167,40 @@ export function productsRouter(database: Database): Router {
           .optional()
           .transform((value) => value === 'true'),
         usage: z.enum(['pos', 'bom']).optional(),
-        inventoryRole: z.enum(['sellable', 'ingredient', 'both']).optional(),
+        inventoryRole: z
+          .string()
+          .optional()
+          .transform((val, ctx) => {
+            if (!val) return undefined;
+            const parts = val.split(',').map((s) => s.trim()).filter(Boolean);
+            const valid = ['sellable', 'ingredient', 'both'];
+            for (const p of parts) {
+              if (!valid.includes(p)) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid inventoryRole filter value: ${p}` });
+                return z.NEVER;
+              }
+            }
+            return parts;
+          }),
+        preparationBehavior: z
+          .string()
+          .optional()
+          .transform((val, ctx) => {
+            if (!val) return undefined;
+            const parts = val.split(',').map((s) => s.trim()).filter(Boolean);
+            const valid = ['standard', 'cook_to_order', 'preproduced'];
+            for (const p of parts) {
+              if (!valid.includes(p)) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid preparationBehavior filter value: ${p}` });
+                return z.NEVER;
+              }
+            }
+            return parts;
+          }),
+        hasRecipe: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((v) => (v ? v === 'true' : undefined)),
       }),
     ),
     async (request, response) => {
@@ -162,17 +213,20 @@ export function productsRouter(database: Database): Router {
         includeInactive,
         usage,
         inventoryRole,
-      } =
-        request.query as unknown as {
-          page: number;
-          pageSize: number;
-          search?: string;
-          branchId?: string;
-          includeIncoming: boolean;
-          includeInactive: boolean;
-          usage?: 'pos' | 'bom';
-          inventoryRole?: 'sellable' | 'ingredient' | 'both';
-        };
+        preparationBehavior,
+        hasRecipe,
+      } = request.query as unknown as {
+        page: number;
+        pageSize: number;
+        search?: string;
+        branchId?: string;
+        includeIncoming: boolean;
+        includeInactive: boolean;
+        usage?: 'pos' | 'bom';
+        inventoryRole?: string[];
+        preparationBehavior?: string[];
+        hasRecipe?: boolean;
+      };
       if (
         branchId &&
         !request.authUser!.branches.some((assignedBranch) => assignedBranch.id === branchId)
@@ -182,7 +236,10 @@ export function productsRouter(database: Database): Router {
       const offset = (page - 1) * pageSize;
       const organizationId = request.authUser!.organization.id;
       const result = await database.query(
-        `select p.id,p.name,p.sku,p.unit,p.inventory_role as "inventoryRole",pu.kind as "unitKind",
+        `select p.id,p.name,p.sku,p.unit,p.inventory_role as "inventoryRole",
+          coalesce(p.preparation_behavior, 'standard') as "preparationBehavior",
+          exists(select 1 from product_recipes pr where pr.parent_product_id=p.id and pr.organization_id=p.organization_id) as "hasRecipe",
+          pu.kind as "unitKind",
           pu.default_step::float8 as "defaultStep",p.category_id as "categoryId",
           p.brand_id as "brandId",p.track_inventory as "trackInventory",
           p.cost::text,p.selling_price::text as "sellingPrice",
@@ -254,11 +311,18 @@ export function productsRouter(database: Database): Router {
             ))
           ) and ($8::text is null
             or ($8='pos' and p.inventory_role in ('sellable','both'))
-            or ($8='bom' and p.inventory_role in ('ingredient','both')))
+            or ($8='bom' and p.track_inventory))
           and ($2::text is null or
            p.name ilike '%'||$2||'%' or p.sku ilike '%'||$2||'%' or exists (
              select 1 from product_barcodes pb where pb.product_id=p.id and pb.barcode=$2
-           )) and ($9::text is null or p.inventory_role=$9)
+           ))
+          and ($9::text[] is null or p.inventory_role = any($9::text[]))
+          and ($10::text[] is null or coalesce(p.preparation_behavior, 'standard') = any($10::text[]))
+          and ($11::boolean is null or (
+            ($11 = true and exists(select 1 from product_recipes pr where pr.parent_product_id=p.id and pr.organization_id=p.organization_id))
+            or
+            ($11 = false and not exists(select 1 from product_recipes pr where pr.parent_product_id=p.id and pr.organization_id=p.organization_id))
+          ))
          order by p.name limit $3 offset $4`,
         [
           organizationId,
@@ -270,6 +334,8 @@ export function productsRouter(database: Database): Router {
           includeInactive,
           usage ?? null,
           inventoryRole ?? null,
+          preparationBehavior ?? null,
+          hasRecipe ?? null,
         ],
       );
       const total = (result.rows[0] as { total?: number } | undefined)?.total ?? 0;
@@ -304,15 +370,48 @@ export function productsRouter(database: Database): Router {
     requireBranchAccess('body'),
     validateBody(createProductSchema),
     async (request, response) => {
+      const { branchId, openingQuantity, openingContainerQuantity, sellingUnits, ...input } =
+        request.body;
+      const organizationId = request.authUser!.organization.id;
+
+      if (input.inventoryRole === 'ingredient' || input.inventoryRole === 'both') {
+        if (!request.authUser!.modules.includes('ingredients')) {
+          throw forbidden(
+            'MODULE_DISABLED',
+            'The Ingredients module is required for ingredient products.',
+          );
+        }
+      }
+      if (input.preparationBehavior === 'cook_to_order') {
+        if (!request.authUser!.modules.includes('recipes')) {
+          throw forbidden(
+            'MODULE_DISABLED',
+            'The Recipes module is required for cook-to-order products.',
+          );
+        }
+        if (!request.authUser!.modules.includes('prepared_food')) {
+          throw forbidden(
+            'MODULE_DISABLED',
+            'The Prepared Food module is required for cook-to-order products.',
+          );
+        }
+      }
+      if (input.preparationBehavior === 'preproduced') {
+        if (!request.authUser!.modules.includes('recipes')) {
+          throw forbidden(
+            'MODULE_DISABLED',
+            'The Recipes module is required for preproduced products.',
+          );
+        }
+        if (!request.authUser!.modules.includes('production')) {
+          throw forbidden(
+            'MODULE_DISABLED',
+            'The Production module is required for preproduced products.',
+          );
+        }
+      }
+
       const product = await database.transaction(async (tx) => {
-        const {
-          branchId,
-          openingQuantity,
-          openingContainerQuantity,
-          sellingUnits,
-          ...input
-        } = request.body;
-        const organizationId = request.authUser!.organization.id;
         await validateProductMasters(tx, organizationId, input);
         const created = await tx.query<{
           id: string;
@@ -320,6 +419,7 @@ export function productsRouter(database: Database): Router {
           sku: string;
           unit: string;
           inventoryRole: string;
+          preparationBehavior: string;
           trackInventory: boolean;
           sellingPrice: string;
           taxRate: string;
@@ -327,10 +427,11 @@ export function productsRouter(database: Database): Router {
           status: string;
         }>(
           `insert into products (
-            organization_id,category_id,brand_id,name,sku,unit,inventory_role,track_inventory,
-            description,cost,selling_price,tax_rate,is_tax_inclusive,status,image_path
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-           returning id,name,sku,unit,inventory_role as "inventoryRole",track_inventory as "trackInventory",
+            organization_id,category_id,brand_id,name,sku,unit,inventory_role,preparation_behavior,
+            track_inventory,description,cost,selling_price,tax_rate,is_tax_inclusive,status,image_path
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+           returning id,name,sku,unit,inventory_role as "inventoryRole",
+             preparation_behavior as "preparationBehavior",track_inventory as "trackInventory",
              selling_price::text as "sellingPrice",tax_rate::text as "taxRate",
              is_tax_inclusive as "isTaxInclusive",status`,
           [
@@ -341,6 +442,7 @@ export function productsRouter(database: Database): Router {
             input.sku,
             input.unit,
             input.inventoryRole,
+            input.preparationBehavior ?? 'standard',
             input.trackInventory,
             input.description ?? null,
             input.cost,
@@ -619,6 +721,12 @@ export function productsRouter(database: Database): Router {
     requirePermission('products:manage'),
     validateBody(saveRecipeSchema),
     async (request, response) => {
+      if (!request.authUser!.modules.includes('recipes')) {
+        throw forbidden(
+          'MODULE_DISABLED',
+          'The Recipes module is required to save recipe templates.',
+        );
+      }
       const parentProductId = uuidSchema.parse(request.params.id);
       const organizationId = request.authUser!.organization.id;
       const input = request.body;
@@ -632,22 +740,39 @@ export function productsRouter(database: Database): Router {
 
         // Insert new recipe items
         for (const item of input.items) {
-          const ingredient = await tx.query<{ unit: string; inventoryRole: string }>(
-            `select unit,inventory_role as "inventoryRole"
+          const ingredient = await tx.query<{
+            unit: string;
+            inventoryRole: string;
+            trackInventory: boolean;
+          }>(
+            `select unit,inventory_role as "inventoryRole",track_inventory as "trackInventory"
              from products where id=$1 and organization_id=$2`,
             [item.ingredientProductId, organizationId],
           );
           const ingredientProduct = ingredient.rows[0];
-          if (!ingredientProduct) throw badRequest('INVALID_INGREDIENT', 'Ingredient was not found');
-          if (!['ingredient', 'both'].includes(ingredientProduct.inventoryRole)) {
+          if (!ingredientProduct)
+            throw badRequest('INVALID_INGREDIENT', 'Ingredient was not found');
+          if (
+            ingredientProduct.inventoryRole !== 'ingredient' &&
+            ingredientProduct.inventoryRole !== 'both'
+          ) {
+            throw badRequest(
+              'INVALID_RECIPE_INGREDIENT',
+              'Referenced product is not enabled as an ingredient.',
+            );
+          }
+          if (!ingredientProduct.trackInventory) {
             throw badRequest(
               'PRODUCT_NOT_AN_INGREDIENT',
-              'Only products marked Raw ingredient or Sellable + ingredient can be used in a BOM',
+              'Only inventory-tracked products can be used in a BOM',
             );
           }
           const baseFamily = recipeUnitFamily(ingredientProduct.unit);
           const recipeFamily = recipeUnitFamily(item.unit);
-          if (!baseFamily || baseFamily !== recipeFamily) {
+          const discreteUnitsMatch =
+            baseFamily !== 'piece' ||
+            normalizeRecipeUnit(ingredientProduct.unit) === normalizeRecipeUnit(item.unit);
+          if (!baseFamily || baseFamily !== recipeFamily || !discreteUnitsMatch) {
             throw badRequest(
               'INCOMPATIBLE_RECIPE_UNIT',
               `Use a compatible measured unit for this ingredient. ${ingredientProduct.unit} inventory cannot be consumed as ${item.unit}.`,
