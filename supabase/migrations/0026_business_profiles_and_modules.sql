@@ -81,7 +81,7 @@ from public.modules m
 where m.code in (
   'dashboard', 'pos', 'products', 'inventory', 'customers', 'returns',
   'registers', 'reports', 'suppliers', 'purchasing', 'stock_transfers',
-  'audit', 'offline', 'barcode_scanner', 'receipt_printer', 'cash_drawer'
+  'audit', 'offline', 'barcode_scanner', 'receipt_printer', 'cash_drawer', 'production'
 )
 on conflict (business_profile, module_id) do update set enabled_by_default = true;
 

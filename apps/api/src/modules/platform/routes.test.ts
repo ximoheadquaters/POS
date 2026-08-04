@@ -49,10 +49,35 @@ class PlatformDatabase implements Database {
         values?.[0] === ORGANIZATION_ID ? [{ id: ORGANIZATION_ID } as unknown as T] : [],
       );
     }
-    if (text === 'select id from organizations where id=$1 for update') {
+    if (text.includes('from organizations where id=$1 for update')) {
       return result(
-        values?.[0] === ORGANIZATION_ID ? [{ id: ORGANIZATION_ID } as unknown as T] : [],
+        values?.[0] === ORGANIZATION_ID
+          ? [
+              {
+                id: ORGANIZATION_ID,
+                name: 'Main Store',
+                slug: 'main-store',
+                currency: 'PHP',
+                timezone: 'Asia/Manila',
+                logoPath: null,
+                businessProfile: 'retail',
+              } as unknown as T,
+            ]
+          : [],
       );
+    }
+    if (text.includes('update organizations set business_profile=$2')) {
+      return result([
+        {
+          id: ORGANIZATION_ID,
+          name: 'Main Store',
+          slug: 'main-store',
+          currency: 'PHP',
+          timezone: 'Asia/Manila',
+          logoPath: null,
+          businessProfile: values?.[1] as string,
+        } as unknown as T,
+      ]);
     }
     if (text === 'select id from plans where code=$1 and is_active') {
       return result(
@@ -250,6 +275,29 @@ describe('Platform API', () => {
       overrideEnabled: null,
       effectiveEnabled: true,
     });
+  });
+
+  it('allows a platform super-admin to update an organization business profile and audit the change', async () => {
+    const generated = createPlatformToken();
+    const database = new PlatformDatabase(generated.tokenHash, ['platform:read', 'platform:write']);
+    const app = platformApp(database);
+
+    const response = await request(app)
+      .patch(`/api/v1/platform/organizations/${ORGANIZATION_ID}/profile`)
+      .set('authorization', `Bearer ${generated.token}`)
+      .set('x-platform-actor-id', 'super-admin-123')
+      .send({ businessProfile: 'food_service' })
+      .expect(200);
+
+    expect(response.body.data).toMatchObject({
+      id: ORGANIZATION_ID,
+      businessProfile: 'food_service',
+    });
+
+    const auditCall = database.calls.find((call) =>
+      call.text.includes("'organization.business_profile.updated'"),
+    );
+    expect(auditCall).toBeDefined();
   });
 
   it('enables an optional hardware module that is not included in the plan', async () => {

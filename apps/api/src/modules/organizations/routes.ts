@@ -5,7 +5,7 @@ import type { Database } from '../../database/types.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { validateBody } from '../../middleware/validation.js';
 import { EntitlementService } from '../../services/entitlement-service.js';
-import { badRequest, notFound, serviceUnavailable } from '../../shared/errors.js';
+import { badRequest, forbidden, notFound, serviceUnavailable } from '../../shared/errors.js';
 import { sendData } from '../../shared/http.js';
 import type { AssetStorage } from '../../storage/assets.js';
 
@@ -88,6 +88,14 @@ export function organizationsRouter(database: Database, assetStorage?: AssetStor
     async (request, response) => {
       const organizationId = request.authUser!.organization.id;
       const input = request.body;
+
+      if (input.businessProfile !== undefined) {
+        throw forbidden(
+          'FORBIDDEN',
+          'Only Ximo platform administrators can change the business profile.',
+        );
+      }
+
       const updated = await database.transaction(async (transaction) => {
         const before = await transaction.query(
           `select id,name,slug,currency,timezone,logo_path as "logoPath",
@@ -97,10 +105,10 @@ export function organizationsRouter(database: Database, assetStorage?: AssetStor
         );
         if (!before.rows[0]) throw notFound('Organization');
         const result = await transaction.query(
-          `update organizations set name=$2,currency=$3,timezone=$4,logo_path=$5,business_profile=$6
+          `update organizations set name=$2,currency=$3,timezone=$4,logo_path=$5
            where id=$1
            returning id,name,slug,currency,timezone,logo_path as "logoPath",business_profile as "businessProfile"`,
-          [organizationId, input.name, input.currency, input.timezone, input.logoPath, input.businessProfile],
+          [organizationId, input.name, input.currency, input.timezone, input.logoPath],
         );
         await transaction.query(
           `update organization_settings set business_name=$2,updated_at=now()

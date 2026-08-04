@@ -132,6 +132,7 @@ export function inventoryRouter(database: Database): Router {
   );
   router.get(
     '/production-products',
+    requireModule('production'),
     requirePermission('inventory:read'),
     requireBranchAccess('query'),
     validateQuery(z.object({ branchId: stockAdjustmentSchema.shape.branchId })),
@@ -231,7 +232,31 @@ export function inventoryRouter(database: Database): Router {
     },
   );
   router.post(
+    '/production/preview',
+    requireModule('production'),
+    requirePermission('inventory:read'),
+    requireBranchAccess('body'),
+    validateBody(
+      z.object({
+        branchId: z.string().uuid(),
+        productId: z.string().uuid(),
+        quantity: z.number().positive(),
+      }),
+    ),
+    async (request, response) => {
+      const result = await new ProductionService(database).preview(
+        {
+          userId: request.authUser!.id,
+          organizationId: request.authUser!.organization.id,
+        },
+        request.body as { branchId: string; productId: string; quantity: number },
+      );
+      sendData(response, result);
+    },
+  );
+  router.post(
     '/production',
+    requireModule('production'),
     requirePermission('inventory:adjust'),
     requireBranchAccess('body'),
     validateBody(productionBatchSchema),

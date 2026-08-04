@@ -8,6 +8,7 @@ import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/compo
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import type { Supplier } from '@/lib/purchasing';
+import { formatReceivingConversionExplanation } from '@/lib/unit-preview-helpers';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 
@@ -342,10 +343,27 @@ function PurchaseOrderFormContent() {
                         onPress={() =>
                           setLines((current) => current.filter((item) => item.key !== line.key))
                         }
-                        className="h-10 w-10 items-center justify-center rounded-xl bg-red-50"
+                        className="min-h-11 items-center justify-center px-2"
                       >
-                        <Feather name="trash-2" size={16} color="#B42318" />
+                        <Feather name="trash-2" size={16} color="#DC2626" />
                       </Pressable>
+                      {line.unitsPerBase > 1 && Number(line.quantity) > 0 ? (
+                        <View className="w-full rounded-lg bg-brand-50 p-2">
+                          <Text className="text-xs font-medium text-brand-800">
+                            {formatReceivingConversionExplanation(
+                              line.unit,
+                              line.unitsPerBase,
+                              'base unit',
+                              Number(line.quantity),
+                            )}
+                            {Number(line.unitCost) > 0
+                              ? ` • Converted cost: ₱${(
+                                  Number(line.unitCost) / line.unitsPerBase
+                                ).toFixed(2)} / base unit`
+                              : ''}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                   ))}
                 </View>

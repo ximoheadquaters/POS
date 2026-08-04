@@ -22,6 +22,30 @@ import { normalizeBarcode } from '@/lib/product-scan';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 import { useCartStore, type CartProduct } from '@/store/cart';
+import {
+  getModeTransitionWarning,
+  getRetailModeCreationDefaults,
+  inferRetailMode,
+  isMeasurementUnit,
+  type MeasurementDimension,
+  type RetailProductMode,
+} from '@/lib/retail-product-mode';
+import {
+  getAlternateUnitsSummary,
+  getInventorySummary,
+  getRepackingRecipeSummary,
+  getRetailLabel,
+  getSupplierPackageSummary,
+  getTaxDetailsSummary,
+} from '@/lib/retail-terminology';
+import {
+  formatReceivingConversionExplanation,
+  formatStockPreview,
+  formatUnitDeductionExplanation,
+  getCompatibleUnitsForDimension,
+  pluralizeUnit,
+} from '@/lib/unit-preview-helpers';
+import { validateUnitConversion } from '@ximo/shared';
 
 const UNIT_OPTIONS = [
   'piece',
@@ -319,6 +343,11 @@ function ProductFormContent() {
   const queryClient = useQueryClient();
 
   const [productSetup, setProductSetup] = useState<ProductSetup>('retail');
+  const [retailMode, setRetailMode] = useState<RetailProductMode>('simple');
+  const [measurementDimension, setMeasurementDimension] = useState<MeasurementDimension>('weight');
+  const [pendingRetailMode, setPendingRetailMode] = useState<RetailProductMode | null>(null);
+  const [showModeConfirmModal, setShowModeConfirmModal] = useState(false);
+  const [alsoSellBulkDirectly, setAlsoSellBulkDirectly] = useState(false);
   const [showAdditionalDetails, setShowAdditionalDetails] = useState(false);
   const [showAdvancedInventory, setShowAdvancedInventory] = useState(false);
   const [recipeEnabled, setRecipeEnabled] = useState(false);
@@ -565,6 +594,18 @@ function ProductFormContent() {
       setProductSetup('retail');
       setRecipeEnabled(false);
     }
+
+    const inferredMode = inferRetailMode({
+      preparationBehavior: product.preparationBehavior,
+      inventoryRole: product.inventoryRole,
+      unit: product.unit,
+      recipeItemsCount: existingRecipeQuery.data?.length ?? 0,
+      hasPortioningContainer: Boolean(product.portioningEnabled),
+      hasAlternateSellingUnits: alternateEnabled,
+      alternateEnabled,
+    });
+    setRetailMode(inferredMode);
+    setAlsoSellBulkDirectly(product.inventoryRole === 'both');
   }, [existingRecipeQuery.data, form, productDetails.data]);
 
   const trackInventory = form.watch('trackInventory');
@@ -597,6 +638,17 @@ function ProductFormContent() {
       ),
     [packagePurchaseCost, portionCostQuantity, portionCostUnit],
   );
+
+  useEffect(() => {
+    if (bulkCostSuggestion && bulkCostSuggestion.primaryUnitCost > 0) {
+      form.setValue('cost', bulkCostSuggestion.primaryUnitCost.toFixed(2), {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+    }
+  }, [bulkCostSuggestion, form]);
+
   const bulkCostApplied = Boolean(
     bulkCostSuggestion &&
     Math.abs(Number(productCost) - Number(bulkCostSuggestion.primaryUnitCost.toFixed(2))) < 0.001,
@@ -946,7 +998,11 @@ function ProductFormContent() {
             } ${fieldState.error ? 'border-red-400' : 'border-slate-200'}`}
           />
           {fieldState.error?.message ? (
-            <Text className="mt-1 text-xs text-red-600">{fieldState.error.message}</Text>
+            <Text className="mt-1 text-xs text-red-600">
+              {name === 'name' && (fieldState.error.message.includes('1') || fieldState.error.message.includes('>=1'))
+                ? 'Enter a product name.'
+                : fieldState.error.message}
+            </Text>
           ) : options.helper ? (
             <Text className="mt-1 text-xs leading-4 text-slate-500">{options.helper}</Text>
           ) : null}
@@ -2639,6 +2695,53 @@ function ProductFormContent() {
 
             {currentStep === 4 ? (
               <View>
+                <SectionLabel>Summary and review</SectionLabel>
+                <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 gap-3">
+                  <Text className="text-base font-bold text-slate-900">Product Summary</Text>
+
+                  <View className="rounded-2xl bg-slate-50 p-4 gap-2.5">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold text-slate-500">Product Name</Text>
+                      <Text className="text-sm font-bold text-slate-900">{form.getValues('name') || 'Unnamed'}</Text>
+                    </View>
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold text-slate-500">Stocking Method</Text>
+                      <Text className="text-sm font-semibold text-brand-800">
+                        {stockSaleMode === 'single_unit'
+                          ? 'Whole items'
+                          : stockSaleMode === 'whole_and_portions'
+                            ? 'Packages and loose amounts'
+                            : 'Loose measured stock'}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold text-slate-500">Base Stock Unit</Text>
+                      <Text className="text-sm font-semibold text-slate-800">{(baseUnit ?? 'piece').toUpperCase()}</Text>
+                    </View>
+                    {alternateEnabled ? (
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-semibold text-slate-500">Supplier Package</Text>
+                        <Text className="text-sm font-semibold text-slate-800">
+                          1 {alternateUnit} contains {packageSize} {packageMeasureUnit}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold text-slate-500">Opening Stock</Text>
+                      <Text className="text-sm font-semibold text-slate-800">
+                        {alternateEnabled ? `${openingContainerQuantity} sealed ${alternateUnit}s and ` : ''}
+                        {openingQuantity} opened {baseUnit}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold text-slate-500">Cashier Availability</Text>
+                      <Text className="text-sm font-semibold text-slate-800">
+                        {inventoryRole === 'ingredient' ? 'Not sold directly at the cashier' : 'Available at cashier'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
                 <SectionLabel>Other settings</SectionLabel>
                 <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
                   <CardHeader
@@ -2709,7 +2812,7 @@ function ProductFormContent() {
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => setCurrentStep((s) => (s - 1) as any)}
-                    className="min-h-14 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-32 active:bg-slate-50"
+                    className="min-h-14 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-36 active:bg-slate-50"
                   >
                     <Feather name="chevron-left" size={18} color="#334155" />
                     <Text className="ml-1 font-semibold text-slate-700">Back</Text>
@@ -2719,7 +2822,7 @@ function ProductFormContent() {
                     accessibilityRole="button"
                     disabled={mutation.isPending}
                     onPress={() => router.back()}
-                    className="min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-32 active:bg-slate-50"
+                    className="min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 sm:w-36 active:bg-slate-50"
                   >
                     <Text className="font-semibold text-slate-700">Cancel</Text>
                   </Pressable>
@@ -2729,34 +2832,34 @@ function ProductFormContent() {
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => void goToNextStep()}
-                    className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl border border-brand-700 bg-brand-50 px-4 active:opacity-80"
+                    className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:opacity-80"
                   >
-                    <Text className="mr-1 text-sm font-semibold text-brand-900">
+                    <Text className="mr-2 text-base font-semibold text-white">
                       Next: {wizardSteps[currentStep]?.label}
                     </Text>
-                    <Feather name="chevron-right" size={16} color="#1A593B" />
+                    <Feather name="chevron-right" size={18} color="#FFFFFF" />
                   </Pressable>
-                ) : null}
-
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={mutation.isPending}
-                  onPress={submitProduct}
-                  className={`min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 ${
-                    mutation.isPending ? 'opacity-50' : 'active:opacity-80'
-                  }`}
-                >
-                  <Feather name="check" size={18} color="#FFFFFF" />
-                  <Text className="ml-2 text-base font-semibold text-white">
-                    {mutation.isPending
-                      ? 'Saving…'
-                      : isEditing
-                        ? 'Save changes'
-                        : addToCart
-                          ? 'Save & Add'
-                          : 'Save product'}
-                  </Text>
-                </Pressable>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={mutation.isPending}
+                    onPress={submitProduct}
+                    className={`min-h-14 flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 ${
+                      mutation.isPending ? 'opacity-50' : 'active:opacity-80'
+                    }`}
+                  >
+                    <Feather name="check" size={18} color="#FFFFFF" />
+                    <Text className="ml-2 text-base font-semibold text-white">
+                      {mutation.isPending
+                        ? 'Saving…'
+                        : isEditing
+                          ? 'Save changes'
+                          : addToCart
+                            ? 'Save & Add'
+                            : 'Save product'}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           </View>

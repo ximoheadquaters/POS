@@ -336,8 +336,8 @@ export class CheckoutService {
         await transaction.query(
           `insert into sale_items (
             organization_id, sale_id, product_id, variant_id, product_name, sku, quantity,
-            unit_price, unit_cost, discount_total, tax_total, line_total
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            unit_price, unit_cost, discount_total, tax_total, line_total, units_per_base
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
           [
             actor.organizationId,
             saleId,
@@ -351,6 +351,7 @@ export class CheckoutService {
             minorToMoney(allocatedDiscount),
             minorToMoney(item.line.tax),
             minorToMoney(item.line.total - allocatedDiscount),
+            item.product.units_per_base,
           ],
         );
         if (item.product.track_inventory) {

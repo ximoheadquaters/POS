@@ -81,16 +81,17 @@ export class ProductionService {
           ingredient.name as "ingredientName",
           pr.ingredient_variant_id as "ingredientVariantId",
           pr.quantity_required::float8 as "quantityRequired",pr.unit as "recipeUnit",
-          ingredient.unit as "baseUnit",bi.quantity::float8 as quantity,
-          bi.average_cost::float8 as "averageCost",
-          bi.sealed_quantity::float8 as "sealedQuantity",
-          bi.opened_quantity::float8 as "openedQuantity",
+          ingredient.unit as "baseUnit",
+          coalesce(bi.quantity, 0)::float8 as quantity,
+          coalesce(bi.average_cost, ingredient.cost, 0)::float8 as "averageCost",
+          coalesce(bi.sealed_quantity, 0)::float8 as "sealedQuantity",
+          coalesce(bi.opened_quantity, 0)::float8 as "openedQuantity",
           container.id as "portioningVariantId",container.name as "containerName",
           container.unit as "containerUnit",container.units_per_base::float8 as "unitsPerBase"
          from product_recipes pr
          join products ingredient on ingredient.organization_id=pr.organization_id
            and ingredient.id=pr.ingredient_product_id
-         join branch_inventory bi on bi.organization_id=pr.organization_id
+         left join branch_inventory bi on bi.organization_id=pr.organization_id
            and bi.branch_id=$2 and bi.product_id=pr.ingredient_product_id
            and bi.variant_id is not distinct from pr.ingredient_variant_id
          left join product_variants container on container.organization_id=ingredient.organization_id
@@ -387,5 +388,88 @@ export class ProductionService {
         ingredients: ingredientSummary,
       };
     });
+  }
+
+  async preview(actor: ProductionActor, input: { branchId: string; productId: string; quantity: number }) {
+    const outputResult = await this.database.query<OutputProductRow>(
+      `select p.id,p.name,p.sku,p.unit,pu.kind as "unitKind",bi.quantity::float8 as quantity
+       from products p
+       join product_units pu on pu.organization_id=p.organization_id and pu.code=p.unit
+       join branch_inventory bi on bi.organization_id=p.organization_id
+         and bi.branch_id=$2 and bi.product_id=p.id and bi.variant_id is null
+       where p.organization_id=$1 and p.id=$3 and p.status='active'
+         and p.track_inventory and p.inventory_role in ('sellable','both')
+         and coalesce(p.preparation_behavior, 'preproduced') = 'preproduced'`,
+      [actor.organizationId, input.branchId, input.productId],
+    );
+    const output = outputResult.rows[0];
+    if (!output) {
+      throw notFound('Active inventory-tracked finished product');
+    }
+
+    const ingredientsResult = await this.database.query<IngredientRow>(
+      `select pr.ingredient_product_id as "ingredientProductId",
+        ingredient.name as "ingredientName",
+        pr.ingredient_variant_id as "ingredientVariantId",
+        pr.quantity_required::float8 as "quantityRequired",pr.unit as "recipeUnit",
+        ingredient.unit as "baseUnit",
+        coalesce(bi.quantity, 0)::float8 as quantity,
+        coalesce(bi.average_cost, ingredient.cost, 0)::float8 as "averageCost",
+        coalesce(bi.sealed_quantity, 0)::float8 as "sealedQuantity",
+        coalesce(bi.opened_quantity, 0)::float8 as "openedQuantity",
+        container.id as "portioningVariantId",container.name as "containerName",
+        container.unit as "containerUnit",container.units_per_base::float8 as "unitsPerBase"
+       from product_recipes pr
+       join products ingredient on ingredient.organization_id=pr.organization_id
+         and ingredient.id=pr.ingredient_product_id
+       left join branch_inventory bi on bi.organization_id=pr.organization_id
+         and bi.branch_id=$2 and bi.product_id=pr.ingredient_product_id
+         and bi.variant_id is not distinct from pr.ingredient_variant_id
+       left join product_variants container on container.organization_id=ingredient.organization_id
+         and container.product_id=ingredient.id and container.is_portioning_container
+         and container.is_active
+       where pr.organization_id=$1 and pr.parent_product_id=$3
+       order by ingredient.name`,
+      [actor.organizationId, input.branchId, input.productId],
+    );
+
+    if (ingredientsResult.rows.length === 0) {
+      throw badRequest(
+        'MISSING_RECIPE',
+        'Add a BOM recipe to this finished product before recording production',
+      );
+    }
+
+    let totalCost = 0;
+    let canProduce = true;
+    const requirements = ingredientsResult.rows.map((row) => {
+      const requiredQtyPerUnit = convertRecipeQuantity(row.quantityRequired, row.recipeUnit, row.baseUnit);
+      const totalRequired = moneyQuantity(requiredQtyPerUnit * input.quantity);
+      const ingredientCost = moneyQuantity(totalRequired * row.averageCost);
+      totalCost += ingredientCost;
+      const sufficient = row.quantity >= totalRequired;
+      if (!sufficient) canProduce = false;
+      return {
+        productId: row.ingredientProductId,
+        name: row.ingredientName,
+        requiredQuantity: totalRequired,
+        unit: row.baseUnit,
+        availableQuantity: row.quantity,
+        sufficient,
+        estimatedCost: ingredientCost.toFixed(2),
+      };
+    });
+
+    const unitCost = input.quantity > 0 ? moneyQuantity(totalCost / input.quantity) : 0;
+
+    return {
+      productId: output.id,
+      productName: output.name,
+      quantity: input.quantity,
+      requirements,
+      estimatedTotalCost: totalCost.toFixed(2),
+      estimatedUnitCost: unitCost.toFixed(2),
+      canProduce,
+    };
   }
 }

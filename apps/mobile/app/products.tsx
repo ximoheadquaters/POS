@@ -10,6 +10,12 @@ import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import {
+  formatCatalogUnitPrice,
+  getRetailProductTypeBadges,
+  getStockStatus,
+  hasLegacyInvalidConversion,
+} from '@/lib/product-list-badges';
 
 interface Product {
   id: string;
@@ -18,6 +24,7 @@ interface Product {
   unit?: string;
   inventoryRole?: 'sellable' | 'ingredient' | 'both';
   preparationBehavior?: 'standard' | 'cook_to_order' | 'preproduced';
+  hasRecipe?: boolean;
   sellingPrice: string;
   cost: string;
   averageCost: string;
@@ -28,6 +35,7 @@ interface Product {
   isLowMargin: boolean;
   status: string;
   trackInventory: boolean;
+  availableQuantity?: number | null;
   sellingUnits?: Array<{ variantId: string; name: string; unit: string; unitsPerBase: number }>;
   categoryName?: string;
   brandName?: string;
@@ -562,169 +570,228 @@ function ProductsContent() {
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center py-36">
               <Feather name="box" size={42} color="#C7C0B8" />
-              <Text className="mt-4 text-base font-medium text-slate-700">
-                {productFilter === 'all' ? 'No products yet' : 'No products in this group'}
+              <Text className="mt-4 text-base font-bold text-slate-800">
+                {productFilter === 'all' ? 'No products yet.' : 'No products in this group.'}
               </Text>
-              <Text className="mt-2 text-sm text-slate-400">
-                Add your first product to get started
+              <Text className="mt-2 text-center text-sm text-slate-500 max-w-xs">
+                Add something you sell, such as a snack, drink, card pack, or bulk item.
               </Text>
               {currentUser?.permissions.includes('products:manage') ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Add first product"
+                  accessibilityLabel="Add First Product"
                   onPress={() => router.push('/product-form')}
-                  className="mt-5 min-h-10 flex-row items-center px-3"
+                  className="mt-5 min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:bg-brand-800"
                 >
-                  <Feather name="plus" size={15} color="#1A593B" />
-                  <Text className="ml-1 font-medium text-brand-700">Add Product</Text>
+                  <Feather name="plus" size={16} color="#FFFFFF" />
+                  <Text className="ml-2 font-semibold text-white">Add First Product</Text>
                 </Pressable>
               ) : null}
             </View>
           }
-          renderItem={({ item }) => (
-            <View
-              className={`flex-row items-center rounded-2xl border bg-white p-4 ${
-                item.status === 'active' ? 'border-slate-100' : 'border-slate-200 opacity-70'
-              }`}
-            >
-              <View className="flex-1">
-                <Text className="font-medium text-slate-900">{item.name}</Text>
-                <Text className="mt-1 text-xs text-slate-500">
-                  {item.sku} · {(item.unit ?? 'piece').toUpperCase()} ·{' '}
-                  {item.categoryName ?? 'Uncategorized'}
-                  {item.brandName ? ` · ${item.brandName}` : ''}
-                </Text>
-                <Text className="mt-1 text-xs text-slate-400">
-                  {item.trackInventory ? 'Inventory tracked' : 'Stock not tracked'}
-                  {isFoodService
-                    ? ` · ${
-                        item.inventoryRole === 'ingredient'
-                          ? 'Raw ingredient'
-                          : item.inventoryRole === 'both'
-                            ? 'POS + ingredient'
-                            : 'POS product'
-                      }`
-                    : ''}
-                  {item.sellingUnits?.length
-                    ? ` · Also sold by ${item.sellingUnits.map((unit) => unit.unit).join(', ')}`
-                    : ''}
-                </Text>
-                <View className="mt-2 flex-row flex-wrap items-center gap-2">
-                  <Text className="text-xs text-slate-500">
-                    Average cost {formatMoney(item.averageCost)}
-                  </Text>
-                  <Text
-                    className={`rounded-full px-2 py-1 text-xs font-medium ${
-                      item.isLowMargin ? 'bg-red-50 text-red-700' : 'bg-brand-50 text-brand-700'
+          renderItem={({ item }) => {
+            const retailBadges = getRetailProductTypeBadges(item);
+            const stockInfo = getStockStatus(item.availableQuantity);
+            const legacyCheck = hasLegacyInvalidConversion(item);
+            return (
+              <View
+                className={`mb-3 rounded-2xl border bg-white p-4 shadow-xs md:p-5 ${
+                  item.status === 'active' ? 'border-slate-200' : 'border-slate-300 opacity-75'
+                }`}
+              >
+                {/* Header Row */}
+                <View className="flex-row flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    <Text className="text-base font-bold text-slate-900">{item.name}</Text>
+                    <View className="rounded-md bg-slate-100 px-2 py-0.5">
+                      <Text className="text-[11px] font-mono font-medium text-slate-600">
+                        {item.sku}
+                      </Text>
+                    </View>
+                    <View className="rounded-md bg-brand-50 px-2 py-0.5">
+                      <Text className="text-[11px] font-semibold text-brand-800">
+                        {item.categoryName ?? 'Uncategorized'}
+                        {item.brandName ? ` · ${item.brandName}` : ''}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View className="flex-row items-center gap-2">
+                    <Text className="text-lg font-extrabold text-brand-700">
+                      {formatCatalogUnitPrice(item.sellingPrice, item.unit)}
+                    </Text>
+                    {item.status === 'active' ? (
+                      <View className="rounded-full bg-emerald-50 px-2.5 py-1">
+                        <Text className="text-xs font-semibold text-emerald-700">Enabled</Text>
+                      </View>
+                    ) : (
+                      <View className="rounded-full bg-slate-100 px-2.5 py-1">
+                        <Text className="text-xs font-semibold text-slate-600">Disabled</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Badges Bar */}
+                {retailBadges.length || legacyCheck.isInvalid ? (
+                  <View className="mt-3 flex-row flex-wrap items-center gap-1.5">
+                    {retailBadges.map((badge) => (
+                      <View
+                        key={badge.key}
+                        className="rounded-lg border border-brand-200 bg-brand-50/80 px-2.5 py-1"
+                      >
+                        <Text className="text-xs font-semibold text-brand-800">
+                          {badge.label}
+                        </Text>
+                      </View>
+                    ))}
+                    {legacyCheck.isInvalid ? (
+                      <View className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1">
+                        <Text className="text-xs font-semibold text-amber-800">
+                          {legacyCheck.warning}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {/* Spec Metrics Row */}
+                <View className="mt-3 flex-row flex-wrap items-center gap-3">
+                  <View className="flex-row items-center rounded-xl bg-slate-50 px-3 py-1.5">
+                    <Feather name="box" size={13} color="#64748B" />
+                    <Text className="ml-1.5 text-xs text-slate-600">
+                      {(item.unit ?? 'piece').toUpperCase()} · {stockInfo.label}
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center rounded-xl bg-slate-50 px-3 py-1.5">
+                    <Feather name="dollar-sign" size={13} color="#64748B" />
+                    <Text className="ml-1.5 text-xs text-slate-600">
+                      Avg cost {formatMoney(item.averageCost)}
+                    </Text>
+                  </View>
+                  <View
+                    className={`flex-row items-center rounded-xl px-3 py-1.5 ${
+                      item.isLowMargin ? 'bg-red-50' : 'bg-brand-50'
                     }`}
                   >
-                    Margin {item.grossMarginPercent ?? '0.00'}%
-                  </Text>
-                  {item.isLowMargin ? (
-                    <Text className="text-xs text-red-600">
-                      Below {item.lowMarginThresholdPercent}% warning level
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-              <View className="items-end">
-                <Text className="font-semibold text-brand-700">
-                  {formatMoney(item.sellingPrice)}
-                </Text>
-                {currentUser?.permissions.includes('products:manage') ? (
-                  <>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Edit ${item.name}`}
-                      onPress={() =>
-                        router.push({
-                          pathname: '/product-form',
-                          params: { id: item.id },
-                        })
-                      }
-                      className="mt-2 min-h-8 flex-row items-center justify-center rounded-full bg-brand-700 px-3"
+                    <Feather
+                      name={item.isLowMargin ? 'alert-circle' : 'pie-chart'}
+                      size={13}
+                      color={item.isLowMargin ? '#B91C1C' : '#1A593B'}
+                    />
+                    <Text
+                      className={`ml-1.5 text-xs font-medium ${
+                        item.isLowMargin ? 'text-red-700' : 'text-brand-800'
+                      }`}
                     >
-                      <Feather name="edit-2" size={12} color="#FFFFFF" />
-                      <Text className="ml-1 text-xs font-medium text-white">Edit</Text>
-                    </Pressable>
-                    {item.isLowMargin ? (
+                      Margin {item.grossMarginPercent ?? '0.00'}%
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Actions Footer */}
+                {currentUser?.permissions.includes('products:manage') ? (
+                  <View className="mt-4 flex-row flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                    <View className="flex-row flex-wrap items-center gap-2">
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`Review suggested price for ${item.name}`}
+                        accessibilityLabel={`Edit ${item.name}`}
                         onPress={() =>
                           router.push({
                             pathname: '/product-form',
+                            params: { id: item.id },
+                          })
+                        }
+                        className="min-h-9 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800"
+                      >
+                        <Feather name="edit-2" size={13} color="#FFFFFF" />
+                        <Text className="ml-1.5 text-xs font-semibold text-white">Edit</Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() =>
+                          router.push({
+                            pathname: '/product-variants',
                             params: {
-                              id: item.id,
-                              suggestedPrice: item.suggestedSellingPrice,
-                              targetMargin: item.targetMarginPercent,
+                              productId: item.id,
+                              name: item.name,
+                              baseUnit: item.unit ?? 'piece',
                             },
                           })
                         }
-                        className="mt-2 min-h-8 flex-row items-center justify-center rounded-full bg-amber-50 px-3"
+                        className="min-h-9 flex-row items-center justify-center rounded-xl bg-slate-100 px-3 active:bg-slate-200"
                       >
-                        <Feather name="trending-up" size={12} color="#B45309" />
-                        <Text className="ml-1 text-xs font-medium text-amber-700">
-                          Review {formatMoney(item.suggestedSellingPrice)}
-                        </Text>
+                        <Feather name="copy" size={13} color="#334155" />
+                        <Text className="ml-1.5 text-xs font-semibold text-slate-700">Units</Text>
                       </Pressable>
-                    ) : null}
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() =>
-                        router.push({
-                          pathname: '/product-variants',
-                          params: {
-                            productId: item.id,
-                            name: item.name,
-                            baseUnit: item.unit ?? 'piece',
-                          },
-                        })
-                      }
-                      className="mt-2 min-h-8 flex-row items-center justify-center rounded-full bg-brand-50 px-3"
-                    >
-                      <Feather name="copy" size={12} color="#1A593B" />
-                      <Text className="ml-1 text-xs font-medium text-brand-700">Units</Text>
-                    </Pressable>
-                    {isFoodService && item.inventoryRole !== 'ingredient' ? (
+
+                      {isFoodService && item.inventoryRole !== 'ingredient' ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setEditingRecipeProduct(item)}
+                          className="min-h-9 flex-row items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 active:bg-emerald-100"
+                        >
+                          <Feather name="coffee" size={13} color="#059669" />
+                          <Text className="ml-1.5 text-xs font-semibold text-emerald-700">
+                            Recipe (BOM)
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+
+                    <View className="flex-row items-center gap-2">
+                      {item.isLowMargin ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Review suggested price for ${item.name}`}
+                          onPress={() =>
+                            router.push({
+                              pathname: '/product-form',
+                              params: {
+                                id: item.id,
+                                suggestedPrice: item.suggestedSellingPrice,
+                                targetMargin: item.targetMarginPercent,
+                              },
+                            })
+                          }
+                          className="min-h-9 flex-row items-center justify-center rounded-xl bg-amber-50 px-3 active:bg-amber-100"
+                        >
+                          <Feather name="trending-up" size={13} color="#B45309" />
+                          <Text className="ml-1.5 text-xs font-semibold text-amber-800">
+                            Review {formatMoney(item.suggestedSellingPrice)}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+
                       <Pressable
-                        accessibilityRole="button"
-                        onPress={() => setEditingRecipeProduct(item)}
-                        className="mt-2 min-h-8 flex-row items-center justify-center rounded-full bg-emerald-50 border border-emerald-200 px-3"
-                      >
-                        <Feather name="coffee" size={12} color="#059669" />
-                        <Text className="ml-1 text-xs font-medium text-emerald-700">
-                          Recipe (BOM)
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                    <Pressable
-                      accessibilityRole="switch"
-                      accessibilityState={{ checked: item.status === 'active' }}
-                      disabled={statusMutation.isPending}
-                      onPress={() =>
-                        statusMutation.mutate({
-                          id: item.id,
-                          status: item.status === 'active' ? 'inactive' : 'active',
-                        })
-                      }
-                      className={`mt-2 min-h-8 justify-center rounded-full px-3 ${
-                        item.status === 'active' ? 'bg-brand-50' : 'bg-slate-100'
-                      }`}
-                    >
-                      <Text
-                        className={`text-xs font-medium ${
-                          item.status === 'active' ? 'text-brand-700' : 'text-slate-600'
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: item.status === 'active' }}
+                        disabled={statusMutation.isPending}
+                        onPress={() =>
+                          statusMutation.mutate({
+                            id: item.id,
+                            status: item.status === 'active' ? 'inactive' : 'active',
+                          })
+                        }
+                        className={`min-h-9 flex-row items-center justify-center rounded-xl px-3 ${
+                          item.status === 'active' ? 'bg-slate-100' : 'bg-brand-50'
                         }`}
                       >
-                        {item.status === 'active' ? 'Enabled' : 'Disabled'}
-                      </Text>
-                    </Pressable>
-                  </>
+                        <Text
+                          className={`text-xs font-semibold ${
+                            item.status === 'active' ? 'text-slate-700' : 'text-brand-800'
+                          }`}
+                        >
+                          {item.status === 'active' ? 'Disable' : 'Enable'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 ) : null}
               </View>
-            </View>
-          )}
+            );
+          }}
         />
       )}
 

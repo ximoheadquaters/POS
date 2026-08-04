@@ -11,6 +11,7 @@ import {
   saveRecipeSchema,
   updateProductSchema,
   uuidSchema,
+  validateUnitConversion,
 } from '@ximo/shared';
 import type { Database, Queryable } from '../../database/types.js';
 import { requireBranchAccess, requireModule, requirePermission } from '../../middleware/auth.js';
@@ -852,6 +853,18 @@ export function productsRouter(database: Database): Router {
       const productId = uuidSchema.parse(request.params.id);
       const input = request.body;
       const created = await database.transaction(async (tx) => {
+        const parentRes = await tx.query<{ unit: string }>(
+          `select unit from products where id=$1 and organization_id=$2`,
+          [productId, organizationId],
+        );
+        const parentUnit = parentRes.rows[0]?.unit;
+        if (!parentUnit) throw notFound('Product');
+
+        const conversionCheck = validateUnitConversion(parentUnit, input.unit, input.unitsPerBase);
+        if (!conversionCheck.valid) {
+          throw badRequest('INVALID_UNIT_CONVERSION', conversionCheck.reason || 'Invalid unit conversion');
+        }
+
         await validateProductMasters(tx, organizationId, { unit: input.unit });
         if (input.isPortioningContainer && input.unitsPerBase <= 1) {
           throw badRequest(
@@ -945,6 +958,18 @@ export function productsRouter(database: Database): Router {
         );
         if (!existing.rows[0]) throw notFound('Product variant');
         const input = { ...existing.rows[0], ...request.body };
+
+        const parentRes = await tx.query<{ unit: string }>(
+          `select unit from products where id=$1 and organization_id=$2`,
+          [productId, organizationId],
+        );
+        const parentUnit = parentRes.rows[0]?.unit;
+        if (parentUnit) {
+          const conversionCheck = validateUnitConversion(parentUnit, input.unit, input.unitsPerBase);
+          if (!conversionCheck.valid) {
+            throw badRequest('INVALID_UNIT_CONVERSION', conversionCheck.reason || 'Invalid unit conversion');
+          }
+        }
         await validateProductMasters(tx, organizationId, { unit: input.unit });
         const wasPortioningContainer = Boolean(existing.rows[0].isPortioningContainer);
         const willBePortioningContainer = Boolean(input.isPortioningContainer);

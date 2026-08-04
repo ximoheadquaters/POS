@@ -42,10 +42,10 @@ describe('pruneDisabledDependentModules', () => {
     expect(pruned).toEqual(modules);
   });
 
-  it('prunes production if inventory or recipes is missing', () => {
-    const modules: ModuleCode[] = ['dashboard', 'products', 'inventory', 'production'];
+  it('prunes production if inventory is missing', () => {
+    const modules: ModuleCode[] = ['dashboard', 'products', 'production'];
     const pruned = pruneDisabledDependentModules(modules);
-    expect(pruned).toEqual(['dashboard', 'products', 'inventory']);
+    expect(pruned).toEqual(['dashboard', 'products']);
   });
 
   it('prunes held_sales if pos is missing', () => {

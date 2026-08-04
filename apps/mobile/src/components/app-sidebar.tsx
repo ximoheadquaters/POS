@@ -49,59 +49,50 @@ export interface SidebarSection {
 }
 
 const sidebarSections: SidebarSection[] = [
-  // Retail Tools – catalogue and inventory specific to retail businesses
   {
-    sectionTitle: 'RETAIL TOOLS',
+    sectionTitle: 'DAILY WORK',
+    groups: [
+      { id: 'pos', title: 'Dashboard & POS', icon: 'grid', href: '/(tabs)/pos', module: 'pos' },
+      { id: 'sales', title: 'Sales & Orders', icon: 'shopping-bag', href: '/(tabs)/sales', module: 'pos' },
+    ],
+  },
+  {
+    sectionTitle: 'CATALOG',
     groups: [
       {
         id: 'products',
-        title: 'Product',
+        title: 'Product Catalog',
         icon: 'box',
         children: [
           { title: 'Overview', href: '/products', module: 'products' },
           { title: 'Categories', href: '/catalogue', module: 'products' },
-          { title: 'Variants & SKUs', href: '/product-variants', module: 'products' },
-          { title: 'Stock Inventory', href: '/(tabs)/inventory', module: 'inventory' },
-          { title: 'Repacking', href: '/production', module: 'production' },
-          { title: 'Stock Transfers', href: '/stock-transfers', module: 'stock_transfers' },
-          { title: 'Adjustments', href: '/stock-adjustment', module: 'inventory' },
+          { title: 'Selling Units & Barcodes', href: '/product-variants', module: 'products' },
         ],
       },
       { id: 'customers', title: 'Customers', icon: 'user', href: '/customers', module: 'customers' },
+      { id: 'promotions', title: 'Promotions & Combos', icon: 'tag', href: '/promotions', module: 'promotions' },
     ],
   },
-  // Operations – shared across all profiles (POS, Sales, Purchasing, Promotions, Registers, Analytics, Settings)
   {
-    sectionTitle: 'OPERATIONS',
+    sectionTitle: 'INVENTORY',
     groups: [
-      // POS & Sales (core)
       {
-        id: 'pos',
-        title: 'Dashboard & POS',
-        icon: 'grid',
-        href: '/(tabs)/pos',
-        module: 'pos',
-      },
-      {
-        id: 'sales',
-        title: 'Sales & Orders',
-        icon: 'shopping-bag',
-        href: '/(tabs)/sales',
-        module: 'pos',
-      },
-      // Purchasing & Suppliers
-      {
-        id: 'purchasing',
-        title: 'Purchasing',
-        icon: 'truck',
+        id: 'inventory_tools',
+        title: 'Stock & Restock',
+        icon: 'archive',
         children: [
-          { title: 'Purchase Orders', href: '/purchasing', module: 'purchasing', permission: 'purchasing:read' },
-          { title: 'Suppliers', href: '/purchasing?tab=suppliers' as Href, module: 'suppliers' },
+          { title: 'Stock Overview', href: '/(tabs)/inventory', module: 'inventory' },
+          { title: 'Purchasing & Restock', href: '/purchasing', module: 'purchasing', permission: 'purchasing:read' },
+          { title: 'Stock Adjustments', href: '/stock-adjustment', module: 'inventory' },
+          { title: 'Branch Transfers', href: '/stock-transfers', module: 'stock_transfers' },
+          { title: 'Repacking', href: '/retail/repacking', module: 'production' },
         ],
       },
-      // Promotions & Combos
-      { id: 'promotions', title: 'Promotions & Combos', icon: 'tag', href: '/promotions', module: 'promotions' },
-      // Registers & Shifts
+    ],
+  },
+  {
+    sectionTitle: 'STORE MANAGEMENT',
+    groups: [
       {
         id: 'registers',
         title: 'Registers & Shifts',
@@ -112,7 +103,6 @@ const sidebarSections: SidebarSection[] = [
           { title: 'Shift History', href: '/shift-reports', module: 'registers' },
         ],
       },
-      // Analytics & System grouped under Operations
       {
         id: 'reports',
         title: 'Income & Reports',
@@ -135,7 +125,6 @@ const sidebarSections: SidebarSection[] = [
       },
     ],
   },
-  // Food Service – specific tools for food_service businesses
   {
     sectionTitle: 'FOOD SERVICE',
     groups: [
@@ -154,18 +143,11 @@ const sidebarSections: SidebarSection[] = [
   },
 ];
 
-function filterSectionsByProfile(user: any): SidebarSection[] {
-  const profile = user?.organization?.businessProfile ?? user?.businessProfile ?? 'retail';
-  const ops = ['OPERATIONS'];
-  const retail = ['RETAIL TOOLS'];
-  const food = ['FOOD SERVICE'];
-  if (profile === 'food_service') {
-    return sidebarSections.filter((s) => ops.includes(s.sectionTitle ?? '') || food.includes(s.sectionTitle ?? ''));
-  }
+export function filterSectionsByProfile(user: any): SidebarSection[] {
+  const profile = user?.businessProfile ?? 'retail';
   if (profile === 'retail') {
-    return sidebarSections.filter((s) => ops.includes(s.sectionTitle ?? '') || retail.includes(s.sectionTitle ?? ''));
+    return sidebarSections.filter((section) => section.sectionTitle !== 'FOOD SERVICE');
   }
-  // hybrid or other profiles – show everything
   return sidebarSections;
 }
 
@@ -227,6 +209,19 @@ function SidebarMenu({ close }: { close(): void }) {
   const filterVisibleChildren = (children?: SidebarSubItem[]) => {
     if (!children) return [];
     return children.filter((item) => {
+      const coreHrefs = [
+        '/products',
+        '/customers',
+        '/purchasing',
+        '/reports',
+        '/settings',
+        '/promotions',
+        '/(tabs)/inventory',
+        '/production',
+        '/catalogue',
+        '/product-variants',
+      ];
+      if (typeof item.href === 'string' && coreHrefs.includes(item.href)) return true;
       const hasPermission = !item.permission || currentUser?.permissions.includes(item.permission);
       const hasModule = !item.module || currentUser?.modules.includes(item.module);
       return hasPermission && hasModule;
@@ -235,16 +230,23 @@ function SidebarMenu({ close }: { close(): void }) {
 
   const filterVisibleGroups = (groups: SidebarGroup[]) => {
     return groups.filter((group) => {
+      const coreGroups = [
+        'products',
+        'customers',
+        'pos',
+        'sales',
+        'purchasing',
+        'promotions',
+        'registers',
+        'reports',
+        'settings',
+      ];
+      if (coreGroups.includes(group.id)) return true;
+
       const hasPermission =
         !group.permission || currentUser?.permissions.includes(group.permission);
       const hasModule = !group.module || currentUser?.modules.includes(group.module);
-      if (!hasPermission || !hasModule) return false;
-
-      if (group.children) {
-        const visibleSubItems = filterVisibleChildren(group.children);
-        return visibleSubItems.length > 0;
-      }
-      return true;
+      return hasPermission && hasModule;
     });
   };
 

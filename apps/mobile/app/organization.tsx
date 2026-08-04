@@ -191,7 +191,9 @@ function OrganizationContent() {
       const profile = await api<OrganizationProfileInput>('/organizations/current', {
         method: 'PUT',
         body: JSON.stringify({
-          ...input,
+          name: input.name,
+          currency: input.currency,
+          timezone: input.timezone,
           logoPath,
         }),
       });
@@ -379,39 +381,45 @@ function OrganizationContent() {
                 </View>
 
                 <View className="mt-2 gap-2">
-                  <Text className="text-xs font-medium uppercase tracking-wider text-slate-700">
-                    Business Profile / Type
-                  </Text>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-medium uppercase tracking-wider text-slate-700">
+                      Business Type
+                    </Text>
+                    <Text className="text-xs font-medium text-slate-500">Managed by Ximo</Text>
+                  </View>
                   <Controller
                     control={form.control}
                     name="businessProfile"
                     render={({ field }) => (
-                      <View className="flex-row flex-wrap gap-3">
-                        {[
-                          { key: 'retail', label: 'Retail', desc: 'Stores, Boutiques, Outlets' },
-                          { key: 'food_service', label: 'Food Service', desc: 'Restaurants, Cafes, Bakeries' },
-                          { key: 'hybrid', label: 'Retail + Food Service', desc: 'Hybrid Operations' },
-                        ].map((profile) => {
-                          const selected = field.value === profile.key;
-                          return (
-                            <Pressable
-                              key={profile.key}
-                              disabled={!editable}
-                              onPress={() => field.onChange(profile.key)}
-                              className={`flex-1 min-w-[200px] p-4 rounded-2xl border ${
-                                selected ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-slate-50'
-                              }`}
-                            >
-                              <View className="flex-row items-center justify-between">
-                                <Text className={`font-semibold ${selected ? 'text-brand-950' : 'text-slate-800'}`}>
-                                  {profile.label}
-                                </Text>
-                                {selected && <Feather name="check-circle" size={18} color="#1A593B" />}
+                      <View className="gap-2">
+                        <View className="flex-row flex-wrap gap-3">
+                          {[
+                            { key: 'retail', label: 'Retail', desc: 'Stores, Boutiques, Outlets' },
+                            { key: 'food_service', label: 'Food Service', desc: 'Restaurants, Cafes, Bakeries' },
+                            { key: 'hybrid', label: 'Retail + Food Service', desc: 'Hybrid Operations' },
+                          ].map((profile) => {
+                            const selected = field.value === profile.key;
+                            return (
+                              <View
+                                key={profile.key}
+                                className={`flex-1 min-w-[200px] p-4 rounded-2xl border ${
+                                  selected ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-slate-50 opacity-60'
+                                }`}
+                              >
+                                <View className="flex-row items-center justify-between">
+                                  <Text className={`font-semibold ${selected ? 'text-brand-950' : 'text-slate-700'}`}>
+                                    {profile.label}
+                                  </Text>
+                                  {selected && <Feather name="check-circle" size={18} color="#1A593B" />}
+                                </View>
+                                <Text className="mt-1 text-xs text-slate-500">{profile.desc}</Text>
                               </View>
-                              <Text className="mt-1 text-xs text-slate-500">{profile.desc}</Text>
-                            </Pressable>
-                          );
-                        })}
+                            );
+                          })}
+                        </View>
+                        <Text className="text-xs text-slate-500">
+                          Contact Ximo support to change your business type.
+                        </Text>
                       </View>
                     )}
                   />

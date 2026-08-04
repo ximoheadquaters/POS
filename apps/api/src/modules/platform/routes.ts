@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { moduleCodeSchema, paginationSchema, uuidSchema } from '@ximo/shared';
+import { businessProfileSchema, moduleCodeSchema, paginationSchema, uuidSchema } from '@ximo/shared';
 import { z } from 'zod';
 import type { AuthActions } from '../../auth/types.js';
 import type { Database, Queryable } from '../../database/types.js';
@@ -16,6 +16,7 @@ import {
   provisionOrganizationRequestSchema,
 } from '../../platform/provisioning-service.js';
 import { OwnerInvitationService } from '../../platform/owner-invitation-service.js';
+import { EntitlementService } from '../../services/entitlement-service.js';
 import { badRequest, notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
 
@@ -99,6 +100,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
   const router = Router();
   const provisioning = new PlatformProvisioningService(database, authActions);
   const ownerInvitations = new OwnerInvitationService(database, authActions);
+  const entitlementService = new EntitlementService(database);
   router.use(
     rateLimit({
       windowMs: 60_000,
@@ -209,6 +211,66 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
       });
       if (result.replayed) response.setHeader('idempotent-replayed', 'true');
       sendData(response, result.data, result.replayed ? 200 : 201);
+    },
+  );
+
+const updateOrganizationProfileSchema = z.object({
+  businessProfile: businessProfileSchema,
+});
+
+  router.patch(
+    '/organizations/:organizationId/profile',
+    requirePlatformScope('platform:write'),
+    validateBody(updateOrganizationProfileSchema),
+    async (request, response) => {
+      const organizationId = uuidSchema.parse(request.params.organizationId);
+      const { businessProfile } = request.body as z.infer<typeof updateOrganizationProfileSchema>;
+      await ensureOrganization(database, organizationId);
+
+      const updated = await database.transaction(async (transaction) => {
+        const before = await transaction.query(
+          `select id,name,slug,currency,timezone,logo_path as "logoPath",
+            coalesce(business_profile, 'retail') as "businessProfile"
+           from organizations where id=$1 for update`,
+          [organizationId],
+        );
+
+        const result = await transaction.query(
+          `update organizations set business_profile=$2, updated_at=now()
+           where id=$1
+           returning id,name,slug,currency,timezone,logo_path as "logoPath",business_profile as "businessProfile"`,
+          [organizationId, businessProfile],
+        );
+
+        const client = platformClient(response);
+        await transaction.query(
+          `insert into platform_audit_logs (
+            platform_api_client_id, action, target_type, target_id, details
+           ) values ($1, 'organization.business_profile.updated', 'organization', $2, $3::jsonb)`,
+          [
+            client.id,
+            organizationId,
+            JSON.stringify({
+              before: before.rows[0],
+              after: result.rows[0],
+              metadata: auditMetadata(request, response),
+            }),
+          ],
+        );
+
+        const enabledModules = await entitlementService.getEffectiveModules(
+          organizationId,
+          businessProfile,
+          transaction,
+        );
+
+        return {
+          ...result.rows[0],
+          enabledModules,
+        };
+      });
+
+      sendData(response, updated);
     },
   );
 

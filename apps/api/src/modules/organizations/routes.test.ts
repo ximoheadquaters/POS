@@ -154,6 +154,29 @@ describe('organization self-service', () => {
     expect(database.calls.some((call) => call.text.includes("'organization.updated'"))).toBe(true);
   });
 
+  it('rejects tenant businessProfile update attempts with 403 FORBIDDEN even for organization owner', async () => {
+    const database = new OrganizationDatabase(
+      testUser({
+        role: 'owner',
+        permissions: ['organization:read', 'organization:update'],
+      }),
+    );
+    const response = await request(appFor(database))
+      .put('/api/v1/organizations/current')
+      .set('authorization', 'Bearer valid-token')
+      .send({
+        name: 'Updated Store Group',
+        currency: 'PHP',
+        timezone: 'Asia/Manila',
+        businessProfile: 'food_service',
+        logoPath: '/logos/store.png',
+      })
+      .expect(403);
+
+    expect(response.body.error.code).toBe('FORBIDDEN');
+    expect(response.body.error.message).toBe('Only Ximo platform administrators can change the business profile.');
+  });
+
   it('uploads an organization-scoped logo for an authorized owner', async () => {
     const database = new OrganizationDatabase(
       testUser({

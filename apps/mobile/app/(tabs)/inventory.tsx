@@ -184,14 +184,24 @@ export default function InventoryScreen() {
           keyExtractor={(item) => item.id}
           contentContainerClassName="p-4 gap-2"
           ListEmptyComponent={
-            <EmptyState
-              title={inventoryFilter === 'all' ? 'No inventory' : 'No stock in this group'}
-              message={
-                inventoryFilter === 'all'
-                  ? 'Create products and opening stock first.'
-                  : 'Choose another stock card or update the product usage.'
-              }
-            />
+            <View className="flex-1 items-center justify-center py-28">
+              <Feather name="archive" size={42} color="#C7C0B8" />
+              <Text className="mt-4 text-base font-bold text-slate-800">
+                {inventoryFilter === 'all' ? 'No stock has been received yet.' : 'No stock in this group.'}
+              </Text>
+              <Text className="mt-2 text-center text-sm text-slate-500 max-w-xs">
+                Receive deliveries or create products with opening stock.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Receive Stock"
+                onPress={() => router.push('/purchasing')}
+                className="mt-5 min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:bg-brand-800"
+              >
+                <Feather name="truck" size={16} color="#FFFFFF" />
+                <Text className="ml-2 font-semibold text-white">Receive Stock</Text>
+              </Pressable>
+            </View>
           }
           renderItem={({ item }) => {
             const breakdown = containerBreakdown(item);

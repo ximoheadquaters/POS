@@ -69,7 +69,7 @@ export class ReturnService {
           `select si.id, si.product_id, si.variant_id, si.quantity::float8 as quantity,
             si.returned_quantity::float8 as returned_quantity, si.line_total::text,
             si.unit_cost::text,
-            p.track_inventory,coalesce(v.units_per_base,1)::float8 as units_per_base,
+            p.track_inventory,coalesce(si.units_per_base, v.units_per_base, 1)::float8 as units_per_base,
             portioning.id as portioning_variant_id
            from sale_items si join products p
              on p.id=si.product_id and p.organization_id=si.organization_id

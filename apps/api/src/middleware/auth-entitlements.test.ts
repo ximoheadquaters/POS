@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pruneDisabledDependentModules } from './auth.js';
+import { pruneDisabledDependentModules, requireModule, requirePermission } from './auth.js';
 import type { ModuleCode } from '@ximo/shared';
 
 describe('pruneDisabledDependentModules', () => {
@@ -26,11 +26,11 @@ describe('pruneDisabledDependentModules', () => {
     expect(result).toEqual(modules);
   });
 
-  it('prunes production if inventory or recipes is missing', () => {
-    // production requires ['recipes', 'inventory']
-    const modules: ModuleCode[] = ['dashboard', 'products', 'inventory', 'production'];
+  it('prunes production if inventory is missing', () => {
+    // production requires ['inventory']
+    const modules: ModuleCode[] = ['dashboard', 'products', 'production'];
     const result = pruneDisabledDependentModules(modules);
-    expect(result).toEqual(['dashboard', 'products', 'inventory']);
+    expect(result).toEqual(['dashboard', 'products']);
   });
 
   it('prunes held_sales if pos is missing', () => {
@@ -38,5 +38,45 @@ describe('pruneDisabledDependentModules', () => {
     const modules: ModuleCode[] = ['dashboard', 'held_sales'];
     const result = pruneDisabledDependentModules(modules);
     expect(result).toEqual(['dashboard']);
+  });
+});
+
+describe('requireModule middleware', () => {
+  it('returns 403 MODULE_DISABLED when production module is disabled', () => {
+    const middleware = requireModule('production');
+    let capturedError: any = null;
+    const req: any = {
+      authUser: {
+        modules: ['inventory', 'products'],
+        permissions: ['inventory:adjust'],
+      },
+    };
+    const res: any = {};
+    const next = (err?: any) => {
+      capturedError = err;
+    };
+    middleware(req, res, next);
+    expect(capturedError).toBeDefined();
+    expect(capturedError?.status).toBe(403);
+    expect(capturedError?.code).toBe('MODULE_DISABLED');
+  });
+
+  it('returns permission error when permission is missing even if module is enabled', () => {
+    const middleware = requirePermission('inventory:adjust');
+    let capturedError: any = null;
+    const req: any = {
+      authUser: {
+        modules: ['inventory', 'products', 'production'],
+        permissions: ['inventory:read'],
+      },
+    };
+    const res: any = {};
+    const next = (err?: any) => {
+      capturedError = err;
+    };
+    middleware(req, res, next);
+    expect(capturedError).toBeDefined();
+    expect(capturedError?.status).toBe(403);
+    expect(capturedError?.code).toBe('PERMISSION_DENIED');
   });
 });

@@ -74,6 +74,51 @@ describe('createProductSchema', () => {
       createProductSchema.parse({ ...validProduct, inventoryRole: 'sack' }),
     ).toThrow();
   });
+
+  it('rejects duplicate unit definitions in sellingUnits', () => {
+    expect(() =>
+      createProductSchema.parse({
+        ...validProduct,
+        sellingUnits: [
+          {
+            name: 'Box 1',
+            sku: 'BOX-1',
+            unit: 'box',
+            unitsPerBase: 12,
+            sellingPrice: '120.00',
+            isPortioningContainer: false,
+          },
+          {
+            name: 'Box 2',
+            sku: 'BOX-2',
+            unit: 'box',
+            unitsPerBase: 24,
+            sellingPrice: '240.00',
+            isPortioningContainer: false,
+          },
+        ],
+      }),
+    ).toThrow(/Duplicate selling unit 'box' is not allowed/);
+  });
+
+  it('rejects incompatible dimensional conversion in createProductSchema', () => {
+    expect(() =>
+      createProductSchema.parse({
+        ...validProduct,
+        unit: 'kg',
+        sellingUnits: [
+          {
+            name: 'Liquid Liter',
+            sku: 'LITER-1',
+            unit: 'liter',
+            unitsPerBase: 1,
+            sellingPrice: '100.00',
+            isPortioningContainer: false,
+          },
+        ],
+      }),
+    ).toThrow(/Cannot convert between incompatible measurement dimensions/);
+  });
 });
 
 describe('productUnitSchema', () => {

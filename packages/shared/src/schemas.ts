@@ -9,6 +9,7 @@ import {
   ROLE_CODES,
 } from './constants.js';
 import { moneyStringSchema } from './money.js';
+import { validateUnitConversion } from './units.js';
 
 export const uuidSchema = z.uuid();
 export const dateTimeSchema = z.iso.datetime({ offset: true });
@@ -169,6 +170,28 @@ export const createProductSchema = productSchema
       .default([]),
   })
   .superRefine((input, context) => {
+    const unitCodes = new Set<string>();
+    for (const [index, unit] of input.sellingUnits.entries()) {
+      const normalizedCode = unit.unit.toLowerCase().trim();
+      if (unitCodes.has(normalizedCode)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['sellingUnits', index, 'unit'],
+          message: `Duplicate selling unit '${unit.unit}' is not allowed`,
+        });
+      }
+      unitCodes.add(normalizedCode);
+
+      const validation = validateUnitConversion(input.unit, unit.unit, unit.unitsPerBase);
+      if (!validation.valid) {
+        context.addIssue({
+          code: 'custom',
+          path: ['sellingUnits', index, 'unit'],
+          message: validation.reason || 'Invalid unit conversion configuration',
+        });
+      }
+    }
+
     const portioningUnits = input.sellingUnits.filter((unit) => unit.isPortioningContainer);
     if (portioningUnits.length > 1) {
       context.addIssue({
@@ -466,7 +489,7 @@ export const organizationProfileSchema = z.object({
   name: z.string().trim().min(2).max(180),
   currency: z.string().trim().length(3).toUpperCase(),
   timezone: z.string().trim().min(3).max(80),
-  businessProfile: businessProfileSchema.default('retail'),
+  businessProfile: businessProfileSchema.optional(),
   logoPath: z.string().trim().max(500).nullable(),
 });
 

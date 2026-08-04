@@ -77,7 +77,7 @@ export const MODULE_DEPENDENCIES: Partial<Record<ModuleCode, readonly ModuleCode
   ingredients: ['products', 'inventory'],
   recipes: ['ingredients', 'products', 'inventory'],
   prepared_food: ['recipes'],
-  production: ['recipes', 'inventory'],
+  production: ['inventory'],
   held_sales: ['pos'],
   purchasing: ['suppliers', 'inventory'],
   stock_transfers: ['inventory'],
