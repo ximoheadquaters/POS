@@ -136,33 +136,34 @@ export class CheckoutService {
           `select p.id as product_id, v.id as variant_id, p.name,
             coalesce(v.sku, p.sku) as sku,
             coalesce(v.selling_price, p.selling_price)::text as unit_price,
-            (case when p.track_inventory
-              then bi.average_cost * coalesce(v.units_per_base,1)
-              else coalesce(v.cost, p.cost * coalesce(v.units_per_base,1))
-            end)::text as unit_cost,
+            coalesce(
+              case when p.track_inventory
+                then coalesce(bi.average_cost, v.cost, p.cost, 0) * coalesce(v.units_per_base,1)
+                else coalesce(v.cost, p.cost, 0) * coalesce(v.units_per_base,1)
+              end, 0
+            )::text as unit_cost,
             p.tax_rate::text, p.is_tax_inclusive, p.track_inventory,
             coalesce(p.preparation_behavior, 'standard') as preparation_behavior,
             coalesce(v.units_per_base,1)::float8 as units_per_base,
             coalesce(v.unit,p.unit) as selling_unit,
             pu.kind as unit_kind,
-            bi.quantity::float8 as quantity,
+            coalesce(bi.quantity, 0)::float8 as quantity,
             portioning.id as portioning_variant_id,
-            bi.sealed_quantity::float8 as sealed_quantity,
-            bi.opened_quantity::float8 as opened_quantity
+            coalesce(bi.sealed_quantity, 0)::float8 as sealed_quantity,
+            coalesce(bi.opened_quantity, 0)::float8 as opened_quantity
            from products p
            left join product_variants v
              on v.product_id = p.id and v.organization_id = p.organization_id and v.id = $4
            join product_units pu
              on pu.organization_id=p.organization_id and pu.code=coalesce(v.unit,p.unit)
-           join branch_inventory bi
+           left join branch_inventory bi
              on bi.organization_id = p.organization_id and bi.branch_id = $2
              and bi.product_id = p.id and bi.variant_id is null
            left join product_variants portioning
              on portioning.organization_id=p.organization_id
              and portioning.product_id=p.id and portioning.is_portioning_container
            where p.organization_id = $1 and p.id = $3 and p.status = 'active'
-             and ($4::uuid is null or v.id is not null)
-           for update of bi`,
+             and ($4::uuid is null or v.id is not null)`,
           [actor.organizationId, input.branchId, item.productId, item.variantId],
         );
         const product = result.rows[0];
@@ -347,7 +348,7 @@ export class CheckoutService {
             item.product.sku,
             item.quantity,
             item.product.unit_price,
-            item.product.unit_cost,
+            item.product.unit_cost ?? '0.00',
             minorToMoney(allocatedDiscount),
             minorToMoney(item.line.tax),
             minorToMoney(item.line.total - allocatedDiscount),
@@ -382,6 +383,26 @@ export class CheckoutService {
               openedDeduction,
             ],
           );
+          let afterQty = inventory.rows[0]?.quantity;
+          if (afterQty === undefined) {
+            const upsertInv = await transaction.query<{ quantity: number }>(
+              `insert into branch_inventory (
+                 organization_id, branch_id, product_id, variant_id, quantity, average_cost, inventory_value
+               ) values ($1, $2, $3, null, -$4, $5, 0)
+               on conflict (organization_id, branch_id, product_id) where variant_id is null
+               do update set quantity = branch_inventory.quantity - $4, updated_at = now()
+               returning quantity::float8 as quantity`,
+              [
+                actor.organizationId,
+                input.branchId,
+                item.product.product_id,
+                item.inventoryQuantity,
+                item.product.unit_cost ?? '0.00',
+              ],
+            );
+            afterQty = upsertInv.rows[0]?.quantity ?? -item.inventoryQuantity;
+          }
+
           await transaction.query(
             `insert into inventory_movements (
               organization_id, branch_id, product_id, variant_id, movement_type,
@@ -393,7 +414,7 @@ export class CheckoutService {
               item.product.product_id,
               item.product.variant_id,
               -item.inventoryQuantity,
-              inventory.rows[0]!.quantity,
+              afterQty,
               saleId,
               actor.userId,
             ],
@@ -413,8 +434,8 @@ export class CheckoutService {
                 item.inventoryPool === 'sealed' ? 'whole_sale' : 'portion_sale',
                 -sealedDeduction,
                 -openedDeduction,
-                inventory.rows[0]!.sealedQuantity,
-                inventory.rows[0]!.openedQuantity,
+                inventory.rows[0]?.sealedQuantity ?? 0,
+                inventory.rows[0]?.openedQuantity ?? 0,
                 saleId,
                 actor.userId,
               ],
@@ -517,8 +538,8 @@ export class CheckoutService {
                 ingredient.ingredient_product_id,
                 ingredient.portioning_variant_id,
                 -totalDeduction,
-                ingredientInv.rows[0].sealedQuantity,
-                ingredientInv.rows[0].openedQuantity,
+                ingredientInv.rows[0]?.sealedQuantity ?? 0,
+                ingredientInv.rows[0]?.openedQuantity ?? 0,
                 `Recipe deduction for ${item.product.name}`,
                 saleId,
                 actor.userId,
@@ -546,9 +567,9 @@ export class CheckoutService {
         .filter((payment) => payment.method === 'cash')
         .reduce((sum, payment) => sum + moneyToMinor(payment.amount), 0n);
       await transaction.query(
-        `update register_shifts set cash_sales = cash_sales + $4, updated_at = now()
-         where id = $1 and organization_id = $2 and cashier_id = $3 and status = 'open'`,
-        [input.shiftId, actor.organizationId, actor.userId, minorToMoney(cashTotal)],
+        `update register_shifts set cash_sales = cash_sales + $3, updated_at = now()
+         where id = $1 and organization_id = $2 and status = 'open'`,
+        [input.shiftId, actor.organizationId, minorToMoney(cashTotal)],
       );
       await transaction.query(
         `insert into audit_logs (
@@ -588,9 +609,9 @@ export class CheckoutService {
        join register_shifts rs on rs.organization_id = r.organization_id and rs.register_id = r.id
        join organization_settings os on os.organization_id = b.organization_id
        where b.organization_id = $1 and b.id = $2 and b.is_active
-         and r.id = $3 and r.is_active and rs.id = $4 and rs.cashier_id = $5 and rs.status = 'open'
+         and r.id = $3 and r.is_active and rs.id = $4 and rs.status = 'open'
        for update of rs`,
-      [actor.organizationId, input.branchId, input.registerId, input.shiftId, actor.userId],
+      [actor.organizationId, input.branchId, input.registerId, input.shiftId],
     );
     if (!result.rows[0]) {
       throw forbidden('INVALID_CHECKOUT_CONTEXT', 'Branch, register, or active shift is invalid');

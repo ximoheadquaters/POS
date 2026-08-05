@@ -11,6 +11,7 @@ import { formatMoney } from '@/lib/format';
 import { liveDataQueryOptions } from '@/lib/live-data';
 import { useBranchStore } from '@/store/branch';
 import { useSession } from '@/providers/session';
+import { useIosAlert } from '@/providers/ios-alert';
 import { getRetailLabel } from '@/lib/retail-terminology';
 
 export interface RepackingIngredient {
@@ -65,6 +66,7 @@ export interface RepackingWorkflowProps {
 export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowProps) {
   const branch = useBranchStore((state) => state.activeBranch);
   const { currentUser } = useSession();
+  const { showAlert } = useIosAlert();
   const profile = currentUser?.organization?.businessProfile ?? (currentUser as any)?.businessProfile ?? 'retail';
   const isRetail = isRetailProfile && profile === 'retail';
   const queryClient = useQueryClient();
@@ -127,9 +129,19 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       setLastSubmittedBatch(data);
       setShowConfirmModal(false);
+      showAlert({
+        title: 'Repacking Completed',
+        message: `Successfully repacked ${data.quantityProduced} ${data.unit} of ${data.productName}.`,
+        type: 'success',
+      });
     },
     onError: (err: any) => {
-      Alert.alert('Repacking Failed', err?.message || 'Failed to record repacking batch');
+      setShowConfirmModal(false);
+      showAlert({
+        title: 'Repacking Failed',
+        message: err?.message || 'Failed to record repacking batch',
+        type: 'error',
+      });
     },
   });
 
@@ -200,10 +212,10 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
               </View>
               <View className="mt-4 flex-row justify-between border-t border-emerald-200/60 pt-3">
                 <Text className="text-xs text-emerald-800">
-                  Total Cost: ₱{formatMoney(lastSubmittedBatch.totalCost)}
+                  Total Cost: {formatMoney(lastSubmittedBatch.totalCost)}
                 </Text>
                 <Text className="text-xs text-emerald-800">
-                  Unit Cost: ₱{formatMoney(lastSubmittedBatch.unitCost)} / pack
+                  Unit Cost: {formatMoney(lastSubmittedBatch.unitCost)} / pack
                 </Text>
               </View>
               <Button
@@ -354,13 +366,13 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                   <View className="flex-row justify-between border-b border-slate-100 pb-2">
                     <Text className="text-sm text-slate-600">Estimated Total Cost</Text>
                     <Text className="text-sm font-semibold text-slate-900">
-                      ₱{formatMoney(preview.estimatedTotalCost)}
+                      {formatMoney(preview.estimatedTotalCost)}
                     </Text>
                   </View>
                   <View className="flex-row justify-between pb-2">
                     <Text className="text-sm text-slate-600">Estimated Cost per Pack</Text>
                     <Text className="text-sm font-bold text-brand-700">
-                      ₱{formatMoney(preview.estimatedUnitCost)}
+                      {formatMoney(preview.estimatedUnitCost)}
                     </Text>
                   </View>
 
@@ -389,6 +401,37 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
           ) : null}
         </ScrollView>
 
+        {/* Sticky Bottom Action Bar */}
+        {selectedProduct && (
+          <View className="border-t border-slate-200 bg-white p-4 shadow-xl flex-row items-center justify-between">
+            <View className="flex-1 mr-4">
+              <Text className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Ready to Repack
+              </Text>
+              <Text className="text-base font-bold text-slate-900" numberOfLines={1}>
+                {preview
+                  ? `${preview.quantity} ${preview.quantity === 1 ? 'pack' : 'packs'} • Total ${formatMoney(preview.estimatedTotalCost)}`
+                  : `${numOutputQuantity || 1} packs of ${selectedProduct.name}`}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!preview || recordMutation.isPending || !preview.canProduce}
+              onPress={() => setShowConfirmModal(true)}
+              className={`min-h-12 flex-row items-center justify-center rounded-xl bg-brand-700 px-6 ${
+                !preview || recordMutation.isPending || !preview.canProduce
+                  ? 'opacity-50'
+                  : 'active:opacity-80'
+              }`}
+            >
+              <Feather name="check-circle" size={18} color="#FFFFFF" />
+              <Text className="ml-2 text-base font-semibold text-white">
+                {recordMutation.isPending ? 'Recording Batch…' : 'Record Repacking Batch'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* Confirmation Modal */}
         <Modal visible={showConfirmModal} transparent animationType="fade">
           <View className="flex-1 items-center justify-center bg-black/50 p-4">
@@ -409,10 +452,10 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                     Output: {numOutputQuantity} {selectedProduct.unit}s
                   </Text>
                   <Text className="text-xs text-slate-600">
-                    Total Estimated Cost: ₱{formatMoney(preview.estimatedTotalCost)}
+                    Total Estimated Cost: {formatMoney(preview.estimatedTotalCost)}
                   </Text>
                   <Text className="text-xs text-slate-600">
-                    Cost per Unit: ₱{formatMoney(preview.estimatedUnitCost)}
+                    Cost per Unit: {formatMoney(preview.estimatedUnitCost)}
                   </Text>
                 </View>
               ) : null}

@@ -39,14 +39,20 @@ function CustomersContent() {
     <Screen>
       <Header title="Customers" showBack backLabel="More" fallbackHref="/(tabs)/more" />
       <View className="gap-3 border-b border-slate-200 bg-white p-4">
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search customers"
-          placeholderTextColor="#81776E"
-          selectionColor="#1A593B"
-          className="min-h-14 rounded-xl bg-slate-100 px-4"
-        />
+        <View className="flex-row items-center rounded-xl bg-slate-100 px-4 border border-slate-200 focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-200">
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search customers"
+            placeholderTextColor="#81776E"
+            selectionColor="#1A593B"
+            style={{ outline: 'none' }}
+            onSubmitEditing={(e: any) => {
+              if (e && e.preventDefault) e.preventDefault();
+            }}
+            className="flex-1 min-h-14 bg-transparent text-sm text-slate-900"
+          />
+        </View>
         <View className="flex-row gap-2">
           <TextInput
             value={name}
@@ -54,7 +60,12 @@ function CustomersContent() {
             placeholder="New customer name"
             placeholderTextColor="#81776E"
             selectionColor="#1A593B"
-            className="min-h-14 flex-1 rounded-xl border border-slate-200 px-4"
+            style={{ outline: 'none' }}
+            onSubmitEditing={(e: any) => {
+              if (e && e.preventDefault) e.preventDefault();
+              if (name.trim()) create.mutate();
+            }}
+            className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
           />
           <Button
             title="Add"

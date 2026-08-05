@@ -276,30 +276,35 @@ function UserDetailContent() {
             })}
           </View>
 
-          <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
-            Security PIN (Manager Authorization Override)
-          </Text>
-          <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
-            <Text className="font-semibold text-slate-950">Set or Update Security PIN</Text>
-            <Text className="mt-1 text-xs leading-4 text-slate-500">
-              Enter a 4 to 8 digit Security PIN used by this manager/staff member to authorize refunds and overrides.
-            </Text>
-            <View className="mt-3">
-              <TextInput
-                value={pin}
-                onChangeText={(val) => {
-                  setPin(val);
-                  setDirty(true);
-                }}
-                editable={canEditPin}
-                keyboardType="number-pad"
-                maxLength={8}
-                placeholder="Enter new 4-digit PIN (e.g. 1234)"
-                placeholderTextColor="#94A3B8"
-                className="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-base font-bold tracking-widest text-slate-900"
-              />
-            </View>
-          </View>
+          {selectedRole !== 'cashier' ? (
+            <>
+              <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                Security PIN (Manager Authorization Override)
+              </Text>
+              <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
+                <Text className="font-semibold text-slate-950">Set or Update Security PIN</Text>
+                <Text className="mt-1 text-xs leading-4 text-slate-500">
+                  Enter a 4 to 8 digit Security PIN used by this manager/staff member to authorize refunds and overrides.
+                </Text>
+                <View className="mt-3">
+                  <TextInput
+                    value={pin}
+                    onChangeText={(val) => {
+                      setPin(val);
+                      setDirty(true);
+                    }}
+                    editable={canEditPin}
+                    keyboardType="number-pad"
+                    maxLength={8}
+                    placeholder="Enter new 4-digit PIN (e.g. 1234)"
+                    placeholderTextColor="#94A3B8"
+                    style={{ outline: 'none' }}
+                    className="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-base font-bold tracking-widest text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
+                  />
+                </View>
+              </View>
+            </>
+          ) : null}
 
           <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
             Account status

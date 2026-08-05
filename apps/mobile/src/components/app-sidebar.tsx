@@ -170,7 +170,7 @@ function isPathActive(pathname: string, href: Href): boolean {
 
 function SidebarMenu({ close }: { close(): void }) {
   const pathname = usePathname();
-  const { currentUser, refreshUser } = useSession();
+  const { currentUser, refreshUser, signOut } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -221,8 +221,8 @@ function SidebarMenu({ close }: { close(): void }) {
         '/catalogue',
         '/product-variants',
       ];
-      if (typeof item.href === 'string' && coreHrefs.includes(item.href)) return true;
-      const hasPermission = !item.permission || currentUser?.permissions.includes(item.permission);
+      const isOwnerOrAdmin = currentUser?.role === 'owner' || currentUser?.role === 'administrator';
+      const hasPermission = !item.permission || isOwnerOrAdmin || currentUser?.permissions.includes(item.permission);
       const hasModule = !item.module || currentUser?.modules.includes(item.module);
       return hasPermission && hasModule;
     });
@@ -243,8 +243,9 @@ function SidebarMenu({ close }: { close(): void }) {
       ];
       if (coreGroups.includes(group.id)) return true;
 
+      const isOwnerOrAdmin = currentUser?.role === 'owner' || currentUser?.role === 'administrator';
       const hasPermission =
-        !group.permission || currentUser?.permissions.includes(group.permission);
+        !group.permission || isOwnerOrAdmin || currentUser?.permissions.includes(group.permission);
       const hasModule = !group.module || currentUser?.modules.includes(group.module);
       return hasPermission && hasModule;
     });
@@ -464,11 +465,12 @@ function SidebarMenu({ close }: { close(): void }) {
       </ScrollView>
 
       {/* User & Branch Footer */}
-      <View className="mt-auto border-t border-slate-200/80 pt-3">
+      <View className="mt-auto border-t border-slate-200/80 pt-3 gap-2">
         <View className="flex-row items-center justify-between rounded-2xl border border-slate-200/60 bg-white p-3 shadow-sm">
           <Pressable
             accessibilityRole="button"
             onPress={() => {
+              close();
               if (currentUser?.id) router.push(`/user/${currentUser.id}`);
             }}
             className="flex-1 flex-row items-center pr-2"
@@ -510,6 +512,20 @@ function SidebarMenu({ close }: { close(): void }) {
             <Feather name="refresh-cw" size={14} color={refreshing ? '#94A3B8' : '#475569'} />
           </Pressable>
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sign out of account"
+          onPress={async () => {
+            close();
+            await signOut();
+            router.replace('/(auth)/login');
+          }}
+          className="flex-row items-center justify-center rounded-xl border border-red-200/80 bg-red-50/80 py-2.5 px-3 active:bg-red-100"
+        >
+          <Feather name="log-out" size={15} color="#DC2626" />
+          <Text className="ml-2 text-sm font-bold text-red-700">Sign Out</Text>
+        </Pressable>
       </View>
     </View>
   );

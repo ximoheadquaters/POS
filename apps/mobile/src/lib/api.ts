@@ -4,7 +4,18 @@ import { appStorage } from './storage';
 import { useConnectivityStore } from '@/store/connectivity';
 import { offlineSnapshotFallback } from './offline-snapshot';
 
-const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? 'https://ximo-pos-api.onrender.com/api/v1';
+const getDefaultApiUrl = () => {
+  // When running locally on the web, always use the local API server
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ) {
+    return `http://localhost:${4000}/api/v1`;
+  }
+  return process.env.EXPO_PUBLIC_API_URL ?? 'https://ximo-pos-api.onrender.com/api/v1';
+};
+
+const baseUrl = getDefaultApiUrl();
 export const API_ORIGIN = baseUrl.replace(/\/api\/v1\/?$/, '');
 
 function cacheKey(path: string): string {

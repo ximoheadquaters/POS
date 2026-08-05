@@ -15,6 +15,9 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, Field, Header, Screen } from '@/components/ui';
 import { useSession } from '@/providers/session';
 
+import { ApiError } from '@/lib/api';
+import { useIosAlert } from '@/providers/ios-alert';
+
 const roleOptions: Array<{
   code: EmployeeRoleCode;
   label: string;
@@ -39,6 +42,7 @@ const roleOptions: Array<{
 
 function EmployeeFormContent() {
   const { currentUser } = useSession();
+  const { showAlert } = useIosAlert();
   const queryClient = useQueryClient();
   const branches = currentUser?.branches ?? [];
   const allowedRoles =
@@ -59,16 +63,39 @@ function EmployeeFormContent() {
   const selectedBranches = form.watch('branchIds');
   const mutation = useMutation({
     mutationFn: (input: CreateEmployeeInput) =>
-      api('/users', { method: 'POST', body: JSON.stringify(input) }),
+      api('/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...input,
+          pin: input.role === 'cashier' ? undefined : input.pin,
+        }),
+      }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['users'] });
       router.back();
-      Alert.alert(
-        'Employee created',
-        'The employee can now sign in with their email and initial password.',
-      );
+      showAlert({
+        title: 'Employee created',
+        message: 'The employee can now sign in with their email and initial password.',
+        type: 'success',
+      });
     },
-    onError: (error) => Alert.alert('Could not create employee', error.message),
+    onError: (error) => {
+      let message = error.message;
+      if (error instanceof ApiError && error.details) {
+        const details = error.details as { fieldErrors?: Record<string, string[]> };
+        if (details.fieldErrors) {
+          const fieldMsgs = Object.entries(details.fieldErrors)
+            .map(([field, errs]) => `${field}: ${errs.join(', ')}`)
+            .join('\n');
+          if (fieldMsgs) message = fieldMsgs;
+        }
+      }
+      showAlert({
+        title: 'Could not create employee',
+        message,
+        type: 'error',
+      });
+    },
   });
 
   const toggleBranch = (branchId: string) => {
@@ -138,22 +165,24 @@ function EmployeeFormContent() {
               />
             )}
           />
-          <Controller
-            control={form.control}
-            name="pin"
-            render={({ field, fieldState }) => (
-              <Field
-                label="Security PIN (for Manager Authorization Overrides)"
-                value={field.value ?? ''}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                keyboardType="number-pad"
-                maxLength={8}
-                placeholder="e.g. 1234 (4 to 8 digits)"
-                error={fieldState.error?.message}
-              />
-            )}
-          />
+          {selectedRole !== 'cashier' ? (
+            <Controller
+              control={form.control}
+              name="pin"
+              render={({ field, fieldState }) => (
+                <Field
+                  label="Security PIN (for Manager Authorization Overrides)"
+                  value={field.value ?? ''}
+                  onChangeText={field.onChange}
+                  onBlur={field.onBlur}
+                  keyboardType="number-pad"
+                  maxLength={8}
+                  placeholder="e.g. 1234 (4 to 8 digits)"
+                  error={fieldState.error?.message}
+                />
+              )}
+            />
+          ) : null}
           <View className="mb-6 rounded-2xl bg-brand-50 p-4">
             <Text className="font-bold text-brand-900">Share the password securely</Text>
             <Text className="mt-1 text-sm leading-5 text-slate-600">
@@ -237,7 +266,7 @@ function EmployeeFormContent() {
           </View>
           {form.formState.errors.branchIds ? (
             <Text className="mb-4 text-sm text-red-600">
-              {form.formState.errors.branchIds.message}
+              {String(form.formState.errors.branchIds.message)}
             </Text>
           ) : null}
 
@@ -245,7 +274,19 @@ function EmployeeFormContent() {
             <Button
               title={mutation.isPending ? 'Creating employee…' : 'Create employee'}
               disabled={mutation.isPending}
-              onPress={form.handleSubmit((input) => mutation.mutate(input))}
+              onPress={form.handleSubmit(
+                (input) => mutation.mutate(input),
+                (errors) => {
+                  const errorMsgs = Object.entries(errors)
+                    .map(([field, err]) => `${field}: ${(err as any)?.message ?? 'Invalid'}`)
+                    .join('\n');
+                  showAlert({
+                    title: 'Form Validation Error',
+                    message: errorMsgs || 'Please check all required fields.',
+                    type: 'error',
+                  });
+                },
+              )}
             />
           </View>
         </View>

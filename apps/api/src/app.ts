@@ -25,6 +25,7 @@ import {
   productsRouter,
   productUnitsRouter,
 } from './modules/products/routes.js';
+import { posRouter } from './modules/pos/routes.js';
 import { promotionsRouter } from './modules/promotions/routes.js';
 import { purchasingRouter, suppliersRouter } from './modules/purchasing/routes.js';
 import { registersRouter } from './modules/registers/routes.js';
@@ -121,6 +122,7 @@ export function createApp(dependencies: AppDependencies) {
   protectedApi.use('/brands', brandsRouter(dependencies.database));
   protectedApi.use('/product-units', productUnitsRouter(dependencies.database));
   protectedApi.use('/products', productsRouter(dependencies.database));
+  protectedApi.use('/pos', posRouter(dependencies.database));
   protectedApi.use('/promotions', promotionsRouter(dependencies.database));
   protectedApi.use('/inventory', inventoryRouter(dependencies.database));
   protectedApi.use('/stock-transfers', stockTransfersRouter(dependencies.database));

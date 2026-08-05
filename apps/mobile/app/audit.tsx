@@ -56,6 +56,7 @@ const ROLE_OPTIONS: Array<{ label: string; value: string }> = [
 function actionLabel(action: string): { label: string; bg: string; text: string; icon: string } {
   switch (action) {
     case 'sale.created':
+    case 'sale.completed':
       return { label: 'Sale Completed', bg: 'bg-emerald-100', text: 'text-emerald-800', icon: 'shopping-cart' };
     case 'return.created':
       return { label: 'Customer Refund', bg: 'bg-red-100', text: 'text-red-800', icon: 'rotate-ccw' };
@@ -66,6 +67,7 @@ function actionLabel(action: string): { label: string; bg: string; text: string;
     case 'cash.moved':
       return { label: 'Cash Drawer Movement', bg: 'bg-amber-100', text: 'text-amber-800', icon: 'dollar-sign' };
     case 'inventory.adjusted':
+    case 'inventory.opening_stock':
       return { label: 'Stock Adjusted', bg: 'bg-amber-100', text: 'text-amber-900', icon: 'sliders' };
     case 'user.created':
       return { label: 'Employee Added', bg: 'bg-teal-100', text: 'text-teal-800', icon: 'user-plus' };
@@ -74,12 +76,14 @@ function actionLabel(action: string): { label: string; bg: string; text: string;
     case 'user.pin_updated':
       return { label: 'Security PIN Changed', bg: 'bg-rose-100', text: 'text-rose-800', icon: 'key' };
     case 'product.created':
+    case 'product_variant.created':
       return { label: 'Product Created', bg: 'bg-emerald-50', text: 'text-emerald-700', icon: 'box' };
     case 'product.updated':
       return { label: 'Product Updated', bg: 'bg-slate-100', text: 'text-slate-700', icon: 'edit-2' };
     case 'product.deleted':
       return { label: 'Product Deleted', bg: 'bg-red-50', text: 'text-red-700', icon: 'trash-2' };
     case 'organization.settings_updated':
+    case 'organization.updated':
       return { label: 'Settings Updated', bg: 'bg-slate-200', text: 'text-slate-800', icon: 'settings' };
     default:
       if (action.startsWith('purchase_order')) {
@@ -89,30 +93,123 @@ function actionLabel(action: string): { label: string; bg: string; text: string;
   }
 }
 
+function formatKeyName(key: string): string {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/_/g, ' ')
+    .replace(/^\w/, (c) => c.toUpperCase())
+    .trim();
+}
+
+function formatValue(key: string, value: any): string {
+  if (value === null || value === undefined || value === '') return 'N/A';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (key.toLowerCase().includes('cost') || key.toLowerCase().includes('price') || key.toLowerCase().includes('amount')) {
+    return formatMoney(value);
+  }
+  return String(value);
+}
+
 function formatDetailSummary(log: AuditLogRecord): string {
-  if (log.action === 'sale.created' && log.after) {
-    return `Receipt #${log.after.receiptNumber || log.entityId.slice(0, 8)} · ${formatMoney(log.after.totalAmount || '0')}`;
+  const data = log.after || log.before || log.metadata || {};
+
+  // Sales
+  if (log.action === 'sale.created' || log.action === 'sale.completed') {
+    const rcpt = data.receiptNumber || data.receipt_number || log.entityId.slice(0, 8);
+    const amt = formatMoney(data.totalAmount || data.total_amount || '0');
+    return `Receipt #${rcpt} · Total: ${amt}`;
   }
-  if (log.action === 'return.created' && log.after) {
-    return `Refund ${formatMoney(log.after.refundAmount || '0')} (${log.after.reason || 'Customer Return'})`;
+
+  // Returns / Refunds
+  if (log.action === 'return.created') {
+    const amt = formatMoney(data.refundAmount || data.refund_amount || '0');
+    const reason = data.reason || 'Customer Return';
+    return `Refund: ${amt} (${reason})`;
   }
-  if (log.action === 'cash.moved' && log.after) {
-    const typeLabel = log.after.type === 'cash_in' ? 'Cash In' : 'Cash Out';
-    return `${typeLabel} ${formatMoney(log.after.amount || '0')} · ${log.after.reason || ''}`;
+
+  // Cash Movements
+  if (log.action === 'cash.moved') {
+    const typeLabel = data.type === 'cash_in' ? 'Cash In' : 'Cash Out';
+    const amt = formatMoney(data.amount || '0');
+    const reason = data.reason ? ` · ${data.reason}` : '';
+    return `${typeLabel}: ${amt}${reason}`;
   }
-  if (log.action === 'shift.opened' && log.after) {
-    return `Starting cash: ${formatMoney(log.after.startingCash || '0')}`;
+
+  // Register Shifts
+  if (log.action === 'shift.opened') {
+    return `Opened shift · Starting cash: ${formatMoney(data.startingCash || '0')}`;
   }
-  if (log.action === 'shift.closed' && log.after) {
-    return `Counted: ${formatMoney(log.after.actualCash || '0')} (Variance: ${formatMoney(log.after.variance || '0')})`;
+  if (log.action === 'shift.closed') {
+    const counted = formatMoney(data.actualCash || '0');
+    const variance = formatMoney(data.variance || '0');
+    return `Closed shift · Counted: ${counted} (Variance: ${variance})`;
   }
-  if (log.action === 'inventory.adjusted' && log.after) {
-    return `Product ID ${log.after.productId?.slice(0, 8)} · Adjustment: ${log.after.quantityDelta > 0 ? '+' : ''}${log.after.quantityDelta} · Reason: ${log.after.reason || 'Manual'}`;
+
+  // Stock Adjustments / Opening Stock
+  if (log.action === 'inventory.adjusted' || log.action === 'inventory.opening_stock') {
+    const prodName = data.productName || data.name || (data.productId ? `Product (${data.productId.slice(0, 8)})` : 'Stock item');
+    const delta = data.quantityDelta ?? data.quantity ?? data.openedQuantity ?? 0;
+    const deltaStr = delta > 0 ? `+${delta}` : `${delta}`;
+    const reason = data.reason || 'Manual Adjustment';
+    return `${prodName} · Quantity: ${deltaStr} · Reason: ${reason}`;
   }
-  if (log.after?.displayName || log.after?.role) {
-    return `${log.after.displayName || 'Employee'} (${roleLabel(log.after.role || 'cashier')})`;
+
+  // Products
+  if (log.action === 'product.created' || log.action === 'product_variant.created') {
+    const name = data.name || 'New Item';
+    const sku = data.sku ? ` · SKU: ${data.sku}` : '';
+    const unit = data.unit ? ` · Unit: ${data.unit}` : '';
+    return `Created product "${name}"${sku}${unit}`;
   }
-  return log.after ? JSON.stringify(log.after).slice(0, 80) : `Entity ID: ${log.entityId}`;
+  if (log.action === 'product.updated' || log.action === 'product_variant.updated') {
+    const name = data.name || log.before?.name || 'Product';
+    return `Updated product details for "${name}"`;
+  }
+  if (log.action === 'product.deleted') {
+    const name = data.name || log.before?.name || 'Product';
+    return `Removed product "${name}" from catalogue`;
+  }
+
+  // Store Settings & Organization
+  if (log.action === 'organization.settings_updated' || log.action === 'organization.updated') {
+    const orgName = data.name || 'Store';
+    return `Updated profile & store settings for "${orgName}"`;
+  }
+
+  // Employees & Access
+  if (log.action === 'user.created') {
+    const name = data.displayName || data.email || 'Employee';
+    const role = roleLabel(data.role || 'cashier');
+    return `Added staff member "${name}" (${role})`;
+  }
+  if (log.action === 'user.updated') {
+    const name = data.displayName || log.before?.displayName || 'Employee';
+    return `Updated employee profile for "${name}"`;
+  }
+  if (log.action === 'user.pin_updated') {
+    const name = data.displayName || log.before?.displayName || 'Employee';
+    return `Updated security PIN for "${name}"`;
+  }
+
+  // Generic Human-Friendly Summary (No Raw JSON)
+  if (typeof data === 'object' && data !== null) {
+    const parts: string[] = [];
+    if (data.name) parts.push(`Name: ${data.name}`);
+    if (data.sku) parts.push(`SKU: ${data.sku}`);
+    if (data.barcode) parts.push(`Barcode: ${data.barcode}`);
+    if (data.unit) parts.push(`Unit: ${data.unit}`);
+    if (data.cost) parts.push(`Cost: ${formatMoney(data.cost)}`);
+    if (data.price) parts.push(`Price: ${formatMoney(data.price)}`);
+    if (parts.length > 0) return parts.join(' · ');
+
+    const entries = Object.entries(data)
+      .filter(([k, v]) => typeof v !== 'object' && v !== null && k !== 'id')
+      .slice(0, 3)
+      .map(([k, v]) => `${formatKeyName(k)}: ${formatValue(k, v)}`);
+    if (entries.length > 0) return entries.join(' · ');
+  }
+
+  return `Activity logged for Record #${log.entityId.slice(0, 8)}`;
 }
 
 function AuditContent() {
@@ -126,6 +223,28 @@ function AuditContent() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const isModuleEnabled = currentUser?.modules.includes('audit');
+  const canViewAudit =
+    Boolean(isModuleEnabled) &&
+    (currentUser?.permissions.includes('audit:read') ||
+      ['owner', 'administrator', 'manager'].includes(currentUser?.role || ''));
+
+  // Combined search term for API backend search filter
+  const effectiveSearch = [
+    selectedCategory !== 'all' ? selectedCategory : '',
+    selectedRole !== 'all' ? selectedRole : '',
+    search.trim(),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const query = useQuery({
+    queryKey: ['audit-logs', page, effectiveSearch],
+    queryFn: () =>
+      api<AuditLogRecord[]>(
+        `/audit?page=${page}&pageSize=15${effectiveSearch ? `&search=${encodeURIComponent(effectiveSearch)}` : ''}`,
+      ),
+    enabled: canViewAudit,
+  });
 
   if (!isModuleEnabled) {
     return (
@@ -147,26 +266,6 @@ function AuditContent() {
     );
   }
 
-  const canViewAudit =
-    currentUser?.permissions.includes('audit:read') ||
-    ['owner', 'administrator', 'manager'].includes(currentUser?.role || '');
-
-  // Combined search term for API backend search filter
-  const effectiveSearch = [
-    selectedCategory !== 'all' ? selectedCategory : '',
-    selectedRole !== 'all' ? selectedRole : '',
-    search.trim(),
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const query = useQuery({
-    queryKey: ['audit-logs', page, effectiveSearch],
-    queryFn: () =>
-      api<PaginatedAuditLogs>(`/audit?page=${page}&pageSize=15${effectiveSearch ? `&search=${encodeURIComponent(effectiveSearch)}` : ''}`),
-    enabled: canViewAudit,
-  });
-
   if (!canViewAudit) {
     return (
       <Screen>
@@ -184,8 +283,10 @@ function AuditContent() {
     );
   }
 
-  const logs = query.data?.items ?? [];
-  const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / 15));
+  const logs = Array.isArray(query.data)
+    ? query.data
+    : ((query.data as any)?.items ?? (query.data as any)?.data ?? []);
+  const totalPages = Math.max(1, Math.ceil(logs.length / 15));
   const activeCategoryObj = CATEGORY_OPTIONS.find((c) => c.value === selectedCategory) ?? CATEGORY_OPTIONS[0]!;
   const activeRoleObj = ROLE_OPTIONS.find((r) => r.value === selectedRole) ?? ROLE_OPTIONS[0]!;
 
@@ -297,7 +398,7 @@ function AuditContent() {
             </View>
           ) : (
             <View className="gap-3">
-              {logs.map((log) => {
+              {logs.map((log: AuditLogRecord) => {
                 const actionMeta = actionLabel(log.action);
                 const isExpanded = expandedId === log.id;
 
@@ -346,27 +447,36 @@ function AuditContent() {
 
                     {isExpanded ? (
                       <View className="mt-3 border-t border-slate-100 pt-3">
-                        <Text className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-400">
-                          Audit Log Payload & Metadata
+                        <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Transaction & Record Details
                         </Text>
-                        <View className="rounded-xl bg-slate-950 p-3">
-                          <Text className="font-mono text-xs text-emerald-400">
-                            {JSON.stringify(
-                              {
-                                id: log.id,
-                                action: log.action,
-                                entityType: log.entityType,
-                                entityId: log.entityId,
-                                actor: log.actorName,
-                                role: log.actorRole,
-                                before: log.before,
-                                after: log.after,
-                                metadata: log.metadata,
-                              },
-                              null,
-                              2,
-                            )}
-                          </Text>
+                        <View className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 gap-2">
+                          <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
+                            <Text className="text-xs font-medium text-slate-500">Performed By</Text>
+                            <Text className="text-xs font-semibold text-slate-900">{log.actorName} ({roleLabel(log.actorRole || 'cashier')})</Text>
+                          </View>
+
+                          {log.branchName ? (
+                            <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
+                              <Text className="text-xs font-medium text-slate-500">Branch Location</Text>
+                              <Text className="text-xs font-semibold text-slate-900">{log.branchName}</Text>
+                            </View>
+                          ) : null}
+
+                          <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
+                            <Text className="text-xs font-medium text-slate-500">Log Reference ID</Text>
+                            <Text className="text-xs font-mono font-semibold text-slate-700">#{log.id.slice(0, 8)}</Text>
+                          </View>
+
+                          {Object.entries(log.after || log.before || log.metadata || {}).map(([key, val]) => {
+                            if (val === null || val === undefined || val === '' || typeof val === 'object' || key === 'id') return null;
+                            return (
+                              <View key={key} className="flex-row items-center justify-between border-b border-slate-200/40 pb-1.5 pt-0.5 last:border-b-0">
+                                <Text className="text-xs font-medium text-slate-500">{formatKeyName(key)}</Text>
+                                <Text className="text-xs font-semibold text-slate-900">{formatValue(key, val)}</Text>
+                              </View>
+                            );
+                          })}
                         </View>
                       </View>
                     ) : null}
@@ -377,7 +487,7 @@ function AuditContent() {
               {/* Pagination Bar */}
               <View className="mt-4 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white p-4">
                 <Text className="text-xs font-semibold text-slate-500">
-                  Page {page} of {totalPages} ({query.data?.total ?? 0} audit logs)
+                  Page {page} of {totalPages} ({logs.length} audit logs)
                 </Text>
 
                 <View className="flex-row gap-2">

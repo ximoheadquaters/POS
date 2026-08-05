@@ -48,6 +48,7 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
     });
     return;
   }
+  console.error('[INTERNAL_ERROR]', error);
   response.status(500).json({
     success: false,
     error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred', requestId },

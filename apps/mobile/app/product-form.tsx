@@ -19,6 +19,7 @@ import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { formatMoney } from '@/lib/format';
 import { calculateBulkCostSuggestion, formatCalculatedUnitCost } from '@/lib/bulk-cost';
 import { normalizeBarcode } from '@/lib/product-scan';
+import { useIosAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 import { useCartStore, type CartProduct } from '@/store/cart';
@@ -308,6 +309,7 @@ function ProductFormContent() {
     suggestedPrice?: string;
     targetMargin?: string;
   }>();
+  const { showAlert } = useIosAlert();
   const { currentUser } = useSession();
   const productId = typeof params.id === 'string' ? params.id : '';
   const isEditing = Boolean(productId);
@@ -709,7 +711,7 @@ function ProductFormContent() {
   const applySuggestedPrice = () => {
     const amount = Number(suggestedPrice);
     if (!Number.isFinite(amount) || amount < 0) {
-      Alert.alert('Invalid suggested price', 'Refresh the product list and try again.');
+      showAlert({ title: 'Invalid suggested price', message: 'Refresh the product list and try again.', type: 'warning' });
       return;
     }
     form.setValue('sellingPrice', amount.toFixed(2), {
@@ -737,10 +739,11 @@ function ProductFormContent() {
 
   const openScanner = async (target: 'barcode' | 'alternate') => {
     if (!scannerEnabled) {
-      Alert.alert(
-        'Barcode scanner is disabled',
-        'Enable the Barcode Scanner module in business settings to use the camera.',
-      );
+      showAlert({
+        title: 'Barcode scanner is disabled',
+        message: 'Enable the Barcode Scanner module in business settings to use the camera.',
+        type: 'warning',
+      });
       return;
     }
     let permission = cameraPermission;
@@ -748,10 +751,11 @@ function ProductFormContent() {
       permission = await requestCameraPermission();
     }
     if (!permission?.granted) {
-      Alert.alert(
-        'Camera access is needed',
-        'Allow camera access in your browser or device settings, then try again.',
-      );
+      showAlert({
+        title: 'Camera access is needed',
+        message: 'Allow camera access in your browser or device settings, then try again.',
+        type: 'warning',
+      });
       return;
     }
     setScanChecking(false);
@@ -762,7 +766,7 @@ function ProductFormContent() {
     if (scanChecking || !scannerTarget) return;
     const barcode = normalizeBarcode(result.data);
     if (barcode.length < 3) {
-      Alert.alert('Invalid barcode', 'The scanned barcode must contain at least 3 characters.');
+      showAlert({ title: 'Invalid barcode', message: 'The scanned barcode must contain at least 3 characters.', type: 'warning' });
       return;
     }
     setScanChecking(true);
@@ -771,7 +775,7 @@ function ProductFormContent() {
         `/products/lookup?code=${encodeURIComponent(barcode)}&branchId=${branch.id}`,
       );
       if (existing && existing.id !== productId) {
-        Alert.alert('Barcode already used', `${existing.name} already uses barcode ${barcode}.`);
+        showAlert({ title: 'Barcode already used', message: `${existing.name} already uses barcode ${barcode}.`, type: 'warning' });
         setScanChecking(false);
         return;
       }
@@ -786,10 +790,11 @@ function ProductFormContent() {
       setScannerTarget(null);
       setScanChecking(false);
     } catch (error) {
-      Alert.alert(
-        'Could not check barcode',
-        error instanceof Error ? error.message : 'Please try scanning again.',
-      );
+      showAlert({
+        title: 'Could not check barcode',
+        message: error instanceof Error ? error.message : 'Please try scanning again.',
+        type: 'error',
+      });
       setScanChecking(false);
     }
   };
@@ -820,13 +825,20 @@ function ProductFormContent() {
       ) {
         throw new Error('Units per pack or box must be greater than 1');
       }
+      let finalAlternatePrice = alternatePrice.trim();
       if (
         !isEditing &&
         alternateEnabled &&
         input.inventoryRole !== 'ingredient' &&
-        !alternatePrice.trim()
+        !finalAlternatePrice
       ) {
-        throw new Error('Enter the alternate unit selling price');
+        const basePriceNum = Number(input.sellingPrice);
+        if (Number.isFinite(basePriceNum) && basePriceNum > 0 && conversion > 0) {
+          finalAlternatePrice = (basePriceNum * conversion).toFixed(2);
+          setAlternatePrice(finalAlternatePrice);
+        } else {
+          throw new Error('Enter the alternate unit selling price');
+        }
       }
       const sealedOpeningQuantity = Number(openingContainerQuantity);
       if (
@@ -878,7 +890,7 @@ function ProductFormContent() {
                     barcode: alternateBarcode.trim() || undefined,
                     unit: alternateUnit,
                     unitsPerBase: conversion,
-                    sellingPrice: input.inventoryRole === 'ingredient' ? '0.00' : alternatePrice,
+                    sellingPrice: input.inventoryRole === 'ingredient' ? '0.00' : finalAlternatePrice,
                     isPortioningContainer: portioningEnabled,
                   },
                 ]
@@ -891,15 +903,14 @@ function ProductFormContent() {
         await api(`/products/${savedProduct.id}/recipe`, {
           method: 'PUT',
           body: JSON.stringify({
-            items: recipeItems.map((i) => ({
-              ingredientProductId: i.ingredientProductId,
-              quantityRequired: i.quantityRequired,
-              unit: i.unit,
+            items: recipeItems.map((item) => ({
+              ingredientProductId: item.ingredientProductId,
+              quantityRequired: item.quantityRequired,
+              unit: item.unit,
             })),
-            costOverride: input.cost,
           }),
         });
-      } else if (isEditing && !recipeEnabled) {
+      } else if (isEditing) {
         await api(`/products/${savedProduct.id}/recipe`, {
           method: 'PUT',
           body: JSON.stringify({ items: [] }),
@@ -925,14 +936,28 @@ function ProductFormContent() {
         router.back();
       }
     },
-    onError: (error) => Alert.alert('Could not save product', error.message),
+    onError: (error) => {
+      const msg = error.message.toLowerCase();
+      if (
+        msg.includes('alternate') ||
+        msg.includes('unit') ||
+        msg.includes('portion') ||
+        msg.includes('stock')
+      ) {
+        setCurrentStep(2);
+        setShowAdvancedInventory(true);
+      } else if (msg.includes('cost') || msg.includes('price') || msg.includes('tax')) {
+        setCurrentStep(3);
+      }
+      showAlert({ title: 'Could not save product', message: error.message, type: 'error' });
+    },
   });
 
   const submitProduct = () => {
     const nameVal = form.getValues('name')?.trim() || '';
     if (!nameVal) {
       setCurrentStep(1);
-      Alert.alert('Product name required', 'Please enter a product name before saving.');
+      showAlert({ title: 'Product name required', message: 'Please enter a product name before saving.', type: 'warning' });
       return;
     }
     if (!form.getValues('sku')?.trim()) {
@@ -955,11 +980,17 @@ function ProductFormContent() {
         });
       },
       (errors) => {
+        if (errors.name || errors.sku || errors.unit || errors.inventoryRole) {
+          setCurrentStep(1);
+        } else if (errors.cost || errors.sellingPrice || errors.taxRate) {
+          setCurrentStep(3);
+        }
         if (errors.sku) setShowAdditionalDetails(true);
-        Alert.alert(
-          'Product information is incomplete',
-          firstFormErrorMessage(errors) ?? 'Review the highlighted product fields and try again.',
-        );
+        showAlert({
+          title: 'Product information is incomplete',
+          message: firstFormErrorMessage(errors) ?? 'Review the highlighted product fields and try again.',
+          type: 'warning',
+        });
       },
     )();
   };
@@ -1024,12 +1055,13 @@ function ProductFormContent() {
     }
 
     if (recipeEnabled && currentStep === 2 && recipeItems.length === 0) {
-      Alert.alert(
-        isRepackedProduct ? 'Add source materials' : 'Add recipe ingredients',
-        isRepackedProduct
+      showAlert({
+        title: isRepackedProduct ? 'Add source materials' : 'Add recipe ingredients',
+        message: isRepackedProduct
           ? 'A prepared or repacked product needs at least one raw material in its bill of materials.'
           : 'Prepared food needs at least one ingredient in its bill of materials.',
-      );
+        type: 'warning',
+      });
       return;
     }
 

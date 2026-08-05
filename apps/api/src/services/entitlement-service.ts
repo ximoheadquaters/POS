@@ -46,7 +46,7 @@ export class EntitlementService {
          order by sub.created_at desc, sub.id desc
          limit 1
        ) current_sub on true
-       join plan_modules pm
+       left join plan_modules pm
          on pm.module_id = m.id
         and pm.plan_id = current_sub.plan_id
        join organizations o
@@ -59,7 +59,7 @@ export class EntitlementService {
        where (
          case
            when om.module_id is not null then om.enabled
-           else coalesce(bpm.enabled_by_default, false)
+           else (pm.module_id is not null and coalesce(bpm.enabled_by_default, false))
          end
        ) = true`,
       [organizationId, overrideProfile ?? null],

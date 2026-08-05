@@ -7,7 +7,8 @@ export const moneyStringSchema = z
     'Expected a positive decimal amount with at most 2 decimals',
   );
 
-export function moneyToMinor(value: string): bigint {
+export function moneyToMinor(value?: string | null): bigint {
+  if (!value || typeof value !== 'string') return 0n;
   const [whole = '0', fraction = ''] = value.split('.');
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
 }

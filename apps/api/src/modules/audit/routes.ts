@@ -14,7 +14,10 @@ export function auditRouter(database: Queryable): Router {
     validateQuery(paginationSchema),
     async (request, response) => {
       const query = request.query as any;
-      const search = query.search ? String(query.search).trim() : null;
+      const rawSearch = query.search ? String(query.search).trim() : null;
+      const search = rawSearch && rawSearch !== 'all' ? rawSearch : null;
+      const page = Number(query.page) || 1;
+      const pageSize = Number(query.pageSize) || 15;
       const result = await database.query(
         `select al.id,al.action,al.entity_type as "entityType",al.entity_id as "entityId",
           al.before_data as "before",al.after_data as "after",al.metadata,
@@ -27,8 +30,8 @@ export function auditRouter(database: Queryable): Router {
          left join branches b on b.id=al.branch_id
          where al.organization_id=$1
            and ($4::text is null or al.action ilike '%'||$4||'%' or al.entity_type ilike '%'||$4||'%' or coalesce(p.display_name, 'System User') ilike '%'||$4||'%' or coalesce(r.code, 'system') ilike '%'||$4||'%')
-         order by al.created_at desc limit $2 offset $3`,
-        [request.authUser!.organization.id, query.pageSize, (query.page - 1) * query.pageSize, search],
+         order by al.created_at desc limit $2::int offset $3::int`,
+        [request.authUser!.organization.id, pageSize, (page - 1) * pageSize, search],
       );
       const total = result.rows[0]?.total ?? 0;
       sendPage(

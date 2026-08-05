@@ -37,7 +37,11 @@ export const createEmployeeSchema = z.object({
   displayName: z.string().trim().min(2).max(120),
   email: z.email().transform((value) => value.trim().toLowerCase()),
   temporaryPassword: z.string().min(12).max(200),
-  pin: z.string().trim().min(4).max(8).optional(),
+  pin: z
+    .string()
+    .transform((val) => (val && val.trim() ? val.trim() : undefined))
+    .pipe(z.string().min(4).max(8).optional())
+    .optional(),
   role: z.enum(EMPLOYEE_ROLE_CODES),
   branchIds: z
     .array(uuidSchema)
@@ -582,5 +586,26 @@ export type CloseShiftInput = z.infer<typeof closeShiftSchema>;
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 export type ReturnInput = z.infer<typeof returnSchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;
+export const posBarcodeItemSchema = z.object({
+  productId: uuidSchema,
+  productName: z.string(),
+  sellingUnitId: uuidSchema.nullable(),
+  productVariantId: uuidSchema.nullable(),
+  sellingUnitCode: productUnitCodeSchema,
+  sellingUnitName: z.string(),
+  baseUnitsPerSellingUnit: z.number().positive(),
+  unitPrice: moneyStringSchema,
+  currency: z.string(),
+  barcode: z.string(),
+  currentStock: z.string(),
+  isInventoryTracked: z.boolean(),
+  taxRate: z.string().optional(),
+  isTaxInclusive: z.boolean().optional(),
+  isActive: z.boolean(),
+  isSellable: z.boolean(),
+});
+
+export type POSBarcodeItem = z.infer<typeof posBarcodeItemSchema>;
+
 export type OrganizationSettingsInput = z.infer<typeof organizationSettingsSchema>;
 export type OrganizationProfileInput = z.infer<typeof organizationProfileSchema>;

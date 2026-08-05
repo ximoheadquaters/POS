@@ -54,15 +54,13 @@ export class ProductionService {
       const allowNegative = settings.rows[0]?.allowNegativeInventory ?? false;
 
       const outputResult = await transaction.query<OutputProductRow>(
-        `select p.id,p.name,p.sku,p.unit,pu.kind as "unitKind",bi.quantity::float8 as quantity
+        `select p.id,p.name,p.sku,p.unit,coalesce(pu.kind, 'discrete') as "unitKind",coalesce(bi.quantity, 0)::float8 as quantity
          from products p
-         join product_units pu on pu.organization_id=p.organization_id and pu.code=p.unit
-         join branch_inventory bi on bi.organization_id=p.organization_id
+         left join product_units pu on (pu.organization_id=p.organization_id or pu.organization_id is null) and pu.code=p.unit
+         left join branch_inventory bi on bi.organization_id=p.organization_id
            and bi.branch_id=$2 and bi.product_id=p.id and bi.variant_id is null
          where p.organization_id=$1 and p.id=$3 and p.status='active'
-           and p.track_inventory and p.inventory_role in ('sellable','both')
-           and coalesce(p.preparation_behavior, 'preproduced') = 'preproduced'
-         for update of bi`,
+           and p.track_inventory and p.inventory_role in ('sellable','both')`,
         [actor.organizationId, input.branchId, input.productId],
       );
       const output = outputResult.rows[0];
@@ -98,8 +96,7 @@ export class ProductionService {
            and container.product_id=ingredient.id and container.is_portioning_container
            and container.is_active
          where pr.organization_id=$1 and pr.parent_product_id=$3
-         order by pr.ingredient_product_id
-         for update of bi`,
+         order by pr.ingredient_product_id`,
         [actor.organizationId, input.branchId, input.productId],
       );
       if (!ingredientsResult.rows.length) {
@@ -228,14 +225,14 @@ export class ProductionService {
           sealedQuantity: number;
           openedQuantity: number;
         }>(
-          `update branch_inventory set quantity=quantity-$4,
-             inventory_value=round(average_cost*(quantity-$4),4),
-             opened_quantity=opened_quantity-case when $6::uuid is null then 0 else $4 end,
+          `update branch_inventory set quantity=quantity-$4::numeric,
+             inventory_value=round(average_cost*(quantity-$4::numeric),4),
+             opened_quantity=opened_quantity-case when $6::uuid is null then 0 else $4::numeric end,
              updated_at=now()
            where organization_id=$1 and branch_id=$2 and product_id=$3
              and variant_id is not distinct from $5::uuid
-             and ($7::boolean or quantity >= $4)
-             and ($6::uuid is null or $7::boolean or opened_quantity >= $4)
+             and ($7::boolean or quantity >= $4::numeric)
+             and ($6::uuid is null or $7::boolean or opened_quantity >= $4::numeric)
            returning quantity::float8 as quantity,
              sealed_quantity::float8 as "sealedQuantity",
              opened_quantity::float8 as "openedQuantity"`,
@@ -330,12 +327,15 @@ export class ProductionService {
         averageCost: string;
         inventoryValue: string;
       }>(
-        `update branch_inventory set quantity=quantity+$4,
-           inventory_value=round(inventory_value+$5,4),
-           average_cost=case when quantity+$4=0 then 0
-             else round((inventory_value+$5)/(quantity+$4),4) end,
+        `insert into branch_inventory (
+           organization_id,branch_id,product_id,variant_id,quantity,average_cost,inventory_value
+         ) values ($1,$2,$3,null,$4::numeric,case when $4::numeric=0 then 0 else round($5::numeric/$4::numeric,4) end,$5::numeric)
+         on conflict (branch_id,product_id,variant_id)
+         do update set quantity=branch_inventory.quantity+$4::numeric,
+           inventory_value=round(branch_inventory.inventory_value+$5::numeric,4),
+           average_cost=case when branch_inventory.quantity+$4::numeric=0 then 0
+             else round((branch_inventory.inventory_value+$5::numeric)/(branch_inventory.quantity+$4::numeric),4) end,
            updated_at=now()
-         where organization_id=$1 and branch_id=$2 and product_id=$3 and variant_id is null
          returning quantity::float8 as quantity,average_cost::text as "averageCost",
            inventory_value::text as "inventoryValue"`,
         [actor.organizationId, input.branchId, output.id, input.quantityProduced, totalCost],
@@ -392,14 +392,13 @@ export class ProductionService {
 
   async preview(actor: ProductionActor, input: { branchId: string; productId: string; quantity: number }) {
     const outputResult = await this.database.query<OutputProductRow>(
-      `select p.id,p.name,p.sku,p.unit,pu.kind as "unitKind",bi.quantity::float8 as quantity
+      `select p.id,p.name,p.sku,p.unit,coalesce(pu.kind, 'discrete') as "unitKind",coalesce(bi.quantity, 0)::float8 as quantity
        from products p
-       join product_units pu on pu.organization_id=p.organization_id and pu.code=p.unit
-       join branch_inventory bi on bi.organization_id=p.organization_id
+       left join product_units pu on (pu.organization_id=p.organization_id or pu.organization_id is null) and pu.code=p.unit
+       left join branch_inventory bi on bi.organization_id=p.organization_id
          and bi.branch_id=$2 and bi.product_id=p.id and bi.variant_id is null
        where p.organization_id=$1 and p.id=$3 and p.status='active'
-         and p.track_inventory and p.inventory_role in ('sellable','both')
-         and coalesce(p.preparation_behavior, 'preproduced') = 'preproduced'`,
+         and p.track_inventory and p.inventory_role in ('sellable','both')`,
       [actor.organizationId, input.branchId, input.productId],
     );
     const output = outputResult.rows[0];

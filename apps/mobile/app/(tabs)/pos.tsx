@@ -14,12 +14,13 @@ import {
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
-import { minorToMoney, moneyToMinor } from '@ximo/shared';
+import { minorToMoney, moneyToMinor, type POSBarcodeItem } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useIosAlert } from '@/providers/ios-alert';
 import { liveDataQueryOptions } from '@/lib/live-data';
-import { findExactScannedProduct } from '@/lib/product-scan';
+import { findExactScannedProduct, normalizeBarcode } from '@/lib/product-scan';
+import { useBarcodeScanner } from '@/hooks/use-barcode-scanner';
 import { useAppSidebar } from '@/components/app-sidebar';
 import { Button, EmptyState, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { QuantityInput } from '@/components/quantity-input';
@@ -299,6 +300,81 @@ export default function PosScreen() {
   const scannerEnabled = currentUser?.modules.includes('barcode_scanner') ?? false;
   const customerDisplayEnabled = currentUser?.modules.includes('customer_display') ?? false;
 
+  async function handleBarcodeScan(scannedValue: string) {
+    const barcode = normalizeBarcode(scannedValue);
+    if (!barcode || !branch) return;
+
+    setScanPending(true);
+    try {
+      const item = await api<POSBarcodeItem>(
+        `/pos/barcodes/${encodeURIComponent(barcode)}?branchId=${branch.id}`,
+      );
+
+      const cartProduct: CartProduct = {
+        id: item.productId,
+        name: item.productName,
+        sku: item.barcode,
+        unit: item.sellingUnitCode,
+        sellingPrice: item.unitPrice,
+        taxRate: item.taxRate ?? '0.00',
+        isTaxInclusive: item.isTaxInclusive ?? true,
+        unitsPerBase: item.baseUnitsPerSellingUnit,
+        availableQuantity: item.currentStock ? parseFloat(item.currentStock) : undefined,
+        variantId: item.productVariantId ?? undefined,
+        sellingUnits: [],
+      };
+
+      const sellingUnit: SellingUnit | undefined = item.productVariantId
+        ? {
+            variantId: item.productVariantId,
+            name: item.sellingUnitName,
+            sku: item.barcode,
+            unit: item.sellingUnitCode,
+            unitsPerBase: item.baseUnitsPerSellingUnit,
+            sellingPrice: item.unitPrice,
+            barcodes: [item.barcode],
+          }
+        : undefined;
+
+      const cartItem = selectSellingUnit(cartProduct, sellingUnit);
+      add(cartItem);
+
+      showAlert({
+        title: 'Item Added',
+        message: `${item.productName} — 1 ${item.sellingUnitName} added to cart.`,
+        type: 'success',
+      });
+    } catch (error: any) {
+      const fallback = findExactScannedProduct(availableProducts, barcode);
+      if (fallback) {
+        add(fallback);
+        showAlert({
+          title: 'Item Added',
+          message: `${fallback.name} added to cart.`,
+          type: 'success',
+        });
+        return;
+      }
+
+      const msg = error?.message || 'No product is assigned to this barcode.';
+      showAlert({
+        title: 'Barcode Lookup',
+        message:
+          msg.includes('404') || msg.includes('NOT_FOUND')
+            ? `No product is assigned to barcode "${barcode}".`
+            : msg,
+        type: 'error',
+      });
+    } finally {
+      setScanPending(false);
+    }
+  }
+
+  useBarcodeScanner({
+    onScan: handleBarcodeScan,
+    enabled: true,
+  });
+
   useEffect(() => {
     syncProducts(availableProducts);
   }, [availableProducts, syncProducts]);
@@ -449,7 +525,7 @@ export default function PosScreen() {
               {activeShift ? activeShift.registerName : branch?.name}
             </Text>
           </View>
-          <View className="mx-4 max-w-xl flex-1 flex-row items-center rounded-xl bg-slate-100 px-4">
+          <View className="mx-4 max-w-xl flex-1 flex-row items-center rounded-xl bg-slate-100 px-4 border border-slate-200 focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-200">
             <Feather name="search" size={17} color="#81776E" />
             <TextInput
               ref={inputRef}
@@ -460,10 +536,14 @@ export default function PosScreen() {
               placeholderTextColor="#81776E"
               selectionColor="#1A593B"
               returnKeyType={scannerEnabled ? 'done' : 'search'}
-              onSubmitEditing={() => void submitBarcode()}
+              onSubmitEditing={(e: any) => {
+                if (e && e.preventDefault) e.preventDefault();
+                void submitBarcode();
+              }}
               blurOnSubmit={false}
               autoFocus
-              className="min-h-11 flex-1 text-sm text-slate-900"
+              style={{ outline: 'none' }}
+              className="ml-2 min-h-11 flex-1 text-sm text-slate-900 bg-transparent"
             />
           </View>
           {scannerEnabled ? (

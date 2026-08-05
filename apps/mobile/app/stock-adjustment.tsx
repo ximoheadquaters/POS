@@ -5,9 +5,10 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { liveDataQueryOptions } from '@/lib/live-data';
 import { useBranchStore } from '@/store/branch';
+import { useIosAlert } from '@/providers/ios-alert';
 
 interface InventoryProduct {
   id: string;
@@ -90,6 +91,7 @@ function StockAdjustmentContent() {
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
   const [containersToOpen, setContainersToOpen] = useState('1');
+  const { showAlert } = useIosAlert();
   const client = useQueryClient();
 
   const productsQuery = useQuery({
@@ -154,9 +156,20 @@ function StockAdjustmentContent() {
         client.invalidateQueries({ queryKey: ['inventory', branch?.id] }),
         client.invalidateQueries({ queryKey: ['inventory-adjustment-products', branch?.id] }),
       ]);
+      showAlert({
+        title: 'Stock adjusted',
+        message: `${selectedProduct?.name}: adjusted ${formatQuantity(Math.abs(quantityDelta))} ${displayUnit}`,
+        type: 'success',
+      });
       router.replace('/(tabs)/inventory');
     },
-    onError: (error) => Alert.alert('Adjustment failed', error.message),
+    onError: (error) => {
+      showAlert({
+        title: 'Adjustment failed',
+        message: error.message,
+        type: 'error',
+      });
+    },
   });
 
   const openContainers = useMutation({
@@ -192,8 +205,19 @@ function StockAdjustmentContent() {
         client.invalidateQueries({ queryKey: ['inventory', branch?.id] }),
         client.invalidateQueries({ queryKey: ['inventory-adjustment-products', branch?.id] }),
       ]);
+      showAlert({
+        title: 'Portion container opened',
+        message: `Transferred sealed container into open stock.`,
+        type: 'success',
+      });
     },
-    onError: (error) => Alert.alert('Could not open container', error.message),
+    onError: (error) => {
+      showAlert({
+        title: 'Could not open container',
+        message: error.message,
+        type: 'error',
+      });
+    },
   });
 
   const commonReasons = useMemo(
@@ -219,16 +243,7 @@ function StockAdjustmentContent() {
 
   const confirmAdjustment = () => {
     if (!selectedProduct || !hasValidQuantity) return;
-    const action = direction === 'deduct' ? 'Deduct' : 'Add';
-    const amount = `${formatQuantity(Math.abs(quantityDelta))} ${displayUnit}`;
-    Alert.alert(
-      `${action} stock?`,
-      `${selectedProduct.name}\n${action} ${amount.toLowerCase()}\nReason: ${reason.trim()}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: action, style: direction === 'deduct' ? 'destructive' : 'default', onPress: () => mutation.mutate() },
-      ],
-    );
+    mutation.mutate();
   };
 
   return (
@@ -393,14 +408,15 @@ function StockAdjustmentContent() {
                       Number(containersToOpen) > Number(selectedProduct.sealedQuantity ?? 0)
                     }
                     onPress={() =>
-                      Alert.alert(
-                        'Open sealed stock?',
-                        `Move ${containersToOpen} ${selectedProduct.containerUnit || 'container'} into opened ${selectedProduct.unit} stock?`,
-                        [
+                      showAlert({
+                        title: 'Open sealed stock?',
+                        message: `Move ${containersToOpen} ${selectedProduct.containerUnit || 'container'} into opened ${selectedProduct.unit} stock?`,
+                        type: 'warning',
+                        buttons: [
                           { text: 'Cancel', style: 'cancel' },
-                          { text: 'Open', onPress: () => openContainers.mutate() },
+                          { text: 'Open stock', style: 'default', onPress: () => openContainers.mutate() },
                         ],
-                      )
+                      })
                     }
                   />
                 </View>

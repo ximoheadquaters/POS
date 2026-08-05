@@ -9,6 +9,8 @@ import { confirmAction } from '@/lib/confirm';
 import { formatMoney } from '@/lib/format';
 import { Button, Field, Header, Screen } from '@/components/ui';
 import { getHardwareDriver } from '@/hardware/registry';
+import { ApiError } from '@/lib/api';
+import { useIosAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
 import { cartTotal, useCartStore } from '@/store/cart';
 import { useBranchStore } from '@/store/branch';
@@ -43,6 +45,7 @@ export default function PaymentScreen() {
   const isOnline = useConnectivityStore((state) => state.isOnline);
   const setPendingSales = useConnectivityStore((state) => state.setPendingSales);
   const setOfflineQueue = useConnectivityStore((state) => state.setOfflineQueue);
+  const { showAlert } = useIosAlert();
   const [discount, setDiscount] = useState('0.00');
   const [cash, setCash] = useState('');
   const [cashReceived, setCashReceived] = useState('');
@@ -126,13 +129,19 @@ export default function PaymentScreen() {
       }
 
       const registers = await api<RegisterStatus[]>(`/registers?branchId=${branch.id}`);
-      const activeRegister = registers.find(
+      let activeRegister = registers.find(
         (register) => register.activeShiftId && register.activeCashierId === currentUser.id,
       );
+      if (!activeRegister && shift?.id) {
+        activeRegister = registers.find((register) => register.activeShiftId === shift.id);
+      }
+      if (!activeRegister?.activeShiftId) {
+        activeRegister = registers.find((register) => Boolean(register.activeShiftId));
+      }
       if (!activeRegister?.activeShiftId) {
         await clearShift();
         throw new Error(
-          'You do not have an active shift for this branch. Open a register shift and try again.',
+          'You do not have an active register shift open. Open a register shift from the main menu and try again.',
         );
       }
       const verifiedShift = {
@@ -194,11 +203,29 @@ export default function PaymentScreen() {
       });
     },
     onError(error) {
-      Alert.alert('Checkout failed', error.message);
+      let message = error.message;
+      if (error instanceof ApiError && error.details) {
+        const details = error.details as { fieldErrors?: Record<string, string[]> };
+        if (details.fieldErrors) {
+          const fieldMsgs = Object.entries(details.fieldErrors)
+            .map(([field, errs]) => `${field}: ${errs.join(', ')}`)
+            .join('\n');
+          if (fieldMsgs) message = fieldMsgs;
+        }
+      }
+      showAlert({
+        title: 'Checkout Failed',
+        message,
+        type: 'error',
+      });
     },
   });
 
   const completeSale = async () => {
+    if (!cash && !card && !ewallet) {
+      setCash(total);
+      setCashReceived(total);
+    }
     const confirmed = await confirmAction(
       'Complete sale?',
       'Inventory and register totals will be updated.',

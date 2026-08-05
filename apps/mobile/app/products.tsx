@@ -507,57 +507,65 @@ function ProductsContent() {
           ) : null
         }
       />
-      {products.length ? (
-        <View className="border-b border-slate-100 bg-slate-50 p-4">
-          <View className="flex-row flex-wrap gap-3">
-            {productFilters.map((filter) => {
-              const selected = productFilter === filter.id;
-              return (
-                <Pressable
-                  key={filter.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  onPress={() => setProductFilter(filter.id)}
-                  className={`min-w-[145px] flex-1 rounded-2xl border p-4 active:opacity-80 ${
-                    selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <View className="flex-row items-start justify-between">
-                    <View
-                      className={`h-10 w-10 items-center justify-center rounded-xl ${
-                        selected ? 'bg-white/15' : 'bg-brand-50'
-                      }`}
-                    >
-                      <Feather name={filter.icon} size={17} color={selected ? '#FFFFFF' : '#1A593B'} />
-                    </View>
-                    <Text className={`text-xl font-semibold ${selected ? 'text-white' : 'text-slate-950'}`}>
-                      {displayedProductCounts[filter.id]}
-                    </Text>
+      <View className="border-b border-slate-100 bg-slate-50 p-4">
+        <View className="flex-row flex-wrap gap-3">
+          {productFilters.map((filter) => {
+            const selected = productFilter === filter.id;
+            return (
+              <Pressable
+                key={filter.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => setProductFilter(filter.id)}
+                className={`min-w-[145px] flex-1 rounded-2xl border p-4 active:opacity-80 ${
+                  selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <View className="flex-row items-start justify-between">
+                  <View
+                    className={`h-10 w-10 items-center justify-center rounded-xl ${
+                      selected ? 'bg-white/15' : 'bg-brand-50'
+                    }`}
+                  >
+                    <Feather name={filter.icon} size={17} color={selected ? '#FFFFFF' : '#1A593B'} />
                   </View>
-                  <Text className={`mt-3 text-sm font-semibold ${selected ? 'text-white' : 'text-slate-900'}`}>
-                    {filter.title}
+                  <Text className={`text-xl font-semibold ${selected ? 'text-white' : 'text-slate-950'}`}>
+                    {displayedProductCounts[filter.id]}
                   </Text>
-                  <Text className={`mt-1 text-xs ${selected ? 'text-brand-100' : 'text-slate-500'}`}>
-                    {filter.description}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                </View>
+                <Text className={`mt-3 text-sm font-semibold ${selected ? 'text-white' : 'text-slate-900'}`}>
+                  {filter.title}
+                </Text>
+                <Text className={`mt-1 text-xs ${selected ? 'text-brand-100' : 'text-slate-500'}`}>
+                  {filter.description}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      ) : null}
-      {products.length ? (
-        <View className="bg-white p-4">
+      </View>
+      <View className="bg-white p-4">
+        <View className="flex-row items-center rounded-xl bg-slate-100 px-4 border border-slate-200 focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-200">
+          <Feather name="search" size={18} color="#81776E" />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Search products by name or SKU"
             placeholderTextColor="#81776E"
             selectionColor="#1A593B"
-            className="min-h-14 rounded-xl bg-slate-100 px-4"
+            style={{ outline: 'none' }}
+            onSubmitEditing={(e: any) => {
+              if (e && e.preventDefault) e.preventDefault();
+            }}
+            className="ml-2 flex-1 min-h-14 bg-transparent text-sm text-slate-900"
           />
+          {search ? (
+            <Pressable onPress={() => setSearch('')}>
+              <Feather name="x" size={16} color="#81776E" />
+            </Pressable>
+          ) : null}
         </View>
-      ) : null}
+      </View>
       {query.isLoading ? (
         <LoadingState />
       ) : query.isError ? (
@@ -568,15 +576,31 @@ function ProductsContent() {
           keyExtractor={(item) => item.id}
           contentContainerClassName="p-4 gap-2"
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center py-36">
-              <Feather name="box" size={42} color="#C7C0B8" />
+            <View className="flex-1 items-center justify-center py-20">
+              <Feather name={search ? 'search' : 'box'} size={42} color="#C7C0B8" />
               <Text className="mt-4 text-base font-bold text-slate-800">
-                {productFilter === 'all' ? 'No products yet.' : 'No products in this group.'}
+                {search
+                  ? `No products matching "${search}"`
+                  : productFilter === 'all'
+                    ? 'No products yet.'
+                    : 'No products in this group.'}
               </Text>
               <Text className="mt-2 text-center text-sm text-slate-500 max-w-xs">
-                Add something you sell, such as a snack, drink, card pack, or bulk item.
+                {search
+                  ? 'Try searching for another product name or SKU, or clear your query.'
+                  : 'Add something you sell, such as a snack, drink, card pack, or bulk item.'}
               </Text>
-              {currentUser?.permissions.includes('products:manage') ? (
+              {search ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                  onPress={() => setSearch('')}
+                  className="mt-5 min-h-11 flex-row items-center justify-center rounded-xl bg-slate-200 px-5 active:bg-slate-300"
+                >
+                  <Feather name="x" size={16} color="#334155" />
+                  <Text className="ml-2 font-semibold text-slate-800">Clear search</Text>
+                </Pressable>
+              ) : currentUser?.permissions.includes('products:manage') ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Add First Product"

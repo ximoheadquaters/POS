@@ -159,26 +159,26 @@ export function inventoryRouter(database: Database): Router {
         portioningEnabled: boolean;
       }>(
         `select parent.id as "productId",parent.name as "productName",parent.sku,
-          parent.unit,parent_unit.kind as "unitKind",output_inventory.quantity::float8 as quantity,
+          parent.unit,coalesce(parent_unit.kind, 'discrete') as "unitKind",coalesce(output_inventory.quantity, 0)::float8 as quantity,
           ingredient.id as "ingredientProductId",ingredient.name as "ingredientName",
           pr.quantity_required::float8 as "quantityRequired",pr.unit as "recipeUnit",
-          ingredient.unit as "baseUnit",ingredient_inventory.quantity::float8 as "availableQuantity",
-          ingredient_inventory.sealed_quantity::float8 as "sealedQuantity",
-          ingredient_inventory.opened_quantity::float8 as "openedQuantity",
+          ingredient.unit as "baseUnit",coalesce(ingredient_inventory.quantity, 0)::float8 as "availableQuantity",
+          coalesce(ingredient_inventory.sealed_quantity, 0)::float8 as "sealedQuantity",
+          coalesce(ingredient_inventory.opened_quantity, 0)::float8 as "openedQuantity",
           container.name as "containerName",container.unit as "containerUnit",
           container.units_per_base::float8 as "unitsPerBase",
           (container.id is not null) as "portioningEnabled"
          from products parent
-         join product_units parent_unit on parent_unit.organization_id=parent.organization_id
+         left join product_units parent_unit on (parent_unit.organization_id=parent.organization_id or parent_unit.organization_id is null)
            and parent_unit.code=parent.unit
-         join branch_inventory output_inventory on output_inventory.organization_id=parent.organization_id
+         left join branch_inventory output_inventory on output_inventory.organization_id=parent.organization_id
            and output_inventory.branch_id=$2 and output_inventory.product_id=parent.id
            and output_inventory.variant_id is null
          join product_recipes pr on pr.organization_id=parent.organization_id
            and pr.parent_product_id=parent.id
          join products ingredient on ingredient.organization_id=pr.organization_id
            and ingredient.id=pr.ingredient_product_id
-         join branch_inventory ingredient_inventory on ingredient_inventory.organization_id=pr.organization_id
+         left join branch_inventory ingredient_inventory on ingredient_inventory.organization_id=pr.organization_id
            and ingredient_inventory.branch_id=$2
            and ingredient_inventory.product_id=pr.ingredient_product_id
            and ingredient_inventory.variant_id is not distinct from pr.ingredient_variant_id
@@ -286,10 +286,11 @@ export function inventoryRouter(database: Database): Router {
         );
         const config = await tx.query<{
           trackInventory: boolean;
+          name: string;
           portioningVariantId: string | null;
           unitsPerBase: number | null;
         }>(
-          `select p.track_inventory as "trackInventory",pv.id as "portioningVariantId",
+          `select p.track_inventory as "trackInventory",p.name,pv.id as "portioningVariantId",
             pv.units_per_base::float8 as "unitsPerBase"
            from products p
            left join product_variants pv
@@ -321,6 +322,16 @@ export function inventoryRouter(database: Database): Router {
             : input.quantityDelta;
         const sealedDelta = input.pool === 'sealed' ? input.quantityDelta : 0;
         const openedDelta = input.pool === 'opened' ? input.quantityDelta : 0;
+
+        await tx.query(
+          `insert into branch_inventory (organization_id, branch_id, product_id, quantity, sealed_quantity, opened_quantity, average_cost, inventory_value)
+           select $1, $2, $3, 0, 0, 0, 0, 0
+           where not exists (
+             select 1 from branch_inventory where organization_id=$1 and branch_id=$2 and product_id=$3 and variant_id is null
+           )`,
+          [organizationId, input.branchId, input.productId],
+        );
+
         const updated = await tx.query<{
           quantity: number;
           sealedQuantity: number;
@@ -408,7 +419,7 @@ export function inventoryRouter(database: Database): Router {
             input.branchId,
             request.authUser!.id,
             result.rows[0]!.id,
-            JSON.stringify(input),
+            JSON.stringify({ ...input, productName: product.name }),
           ],
         );
         return result.rows[0];

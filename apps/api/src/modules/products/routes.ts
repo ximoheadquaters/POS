@@ -753,15 +753,6 @@ export function productsRouter(database: Database): Router {
           const ingredientProduct = ingredient.rows[0];
           if (!ingredientProduct)
             throw badRequest('INVALID_INGREDIENT', 'Ingredient was not found');
-          if (
-            ingredientProduct.inventoryRole !== 'ingredient' &&
-            ingredientProduct.inventoryRole !== 'both'
-          ) {
-            throw badRequest(
-              'INVALID_RECIPE_INGREDIENT',
-              'Referenced product is not enabled as an ingredient.',
-            );
-          }
           if (!ingredientProduct.trackInventory) {
             throw badRequest(
               'PRODUCT_NOT_AN_INGREDIENT',
