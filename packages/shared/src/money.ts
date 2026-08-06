@@ -24,3 +24,10 @@ export function minorToMoney(value: bigint): string {
 export function sumMoney(values: string[]): string {
   return minorToMoney(values.reduce((total, value) => total + moneyToMinor(value), 0n));
 }
+
+export function formatMoney(value: string | number, currency: string = 'PHP'): string {
+  const num = typeof value === 'number' ? value : Number(value);
+  const symbol = currency === 'PHP' ? '₱' : '$';
+  return `${symbol}${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+

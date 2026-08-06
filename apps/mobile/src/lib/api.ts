@@ -4,19 +4,39 @@ import { appStorage } from './storage';
 import { useConnectivityStore } from '@/store/connectivity';
 import { offlineSnapshotFallback } from './offline-snapshot';
 
-const getDefaultApiUrl = () => {
-  // When running locally on the web, always use the local API server
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+
+function assertProductionApiUrl(): void {
+  if (configuredApiUrl) return;
+  // Expo web/production bundles must embed the public API URL. Vitest and local
+  // Metro can fall back to localhost for developer convenience.
+  if (process.env.NODE_ENV !== 'production') return;
+  throw new Error(
+    'EXPO_PUBLIC_API_URL is required for production builds. Set it before running build:web.',
+  );
+}
+
+assertProductionApiUrl();
+
+function resolveApiBaseUrl(): string {
+  if (configuredApiUrl) return configuredApiUrl.replace(/\/$/, '');
+
   if (
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ) {
-    return `http://localhost:${4000}/api/v1`;
+    return 'http://localhost:4000/api/v1';
   }
-  return process.env.EXPO_PUBLIC_API_URL ?? 'https://ximo-pos-api.onrender.com/api/v1';
-};
 
-const baseUrl = getDefaultApiUrl();
-export const API_ORIGIN = baseUrl.replace(/\/api\/v1\/?$/, '');
+  // Final defensive fallback for native/dev shells without env injection.
+  return 'http://localhost:4000/api/v1';
+}
+
+export function getApiBaseUrl(): string {
+  return resolveApiBaseUrl();
+}
+
+export const API_ORIGIN = resolveApiBaseUrl().replace(/\/api\/v1\/?$/, '');
 
 function cacheKey(path: string): string {
   let hash = 5381;
@@ -58,6 +78,7 @@ export async function api<T>(
   headers.set('content-type', 'application/json');
   if (token) headers.set('authorization', `Bearer ${token}`);
   if (idempotencyKey) headers.set('idempotency-key', idempotencyKey);
+  const baseUrl = resolveApiBaseUrl();
   let serverResponded = false;
   try {
     const response = await fetch(`${baseUrl}${path}`, {

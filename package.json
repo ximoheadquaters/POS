@@ -11,6 +11,7 @@
     "build": "npm run build -w @ximo/shared && npm run build -w @ximo/api && npm run build -w @ximo/mobile",
     "dev:api": "npm run dev -w @ximo/api",
     "dev:mobile": "npm run start -w @ximo/mobile",
+    "preview:web": "npx --yes serve apps/mobile/dist-web -s -l 4173",
     "lint": "eslint .",
     "typecheck": "npm run typecheck -w @ximo/shared && npm run build -w @ximo/shared && npm run typecheck -w @ximo/api && npm run typecheck -w @ximo/mobile",
     "test": "npm run build -w @ximo/shared && npm run test -w @ximo/shared && npm run test -w @ximo/api && npm run test -w @ximo/mobile",

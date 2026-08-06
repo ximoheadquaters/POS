@@ -32,7 +32,11 @@
       "favicon": "./assets/icon.png"
     },
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "asyncRoutes": {
+        "web": true,
+        "default": false
+      }
     },
     "extra": {
       "router": {},

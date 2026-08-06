@@ -23,9 +23,115 @@ const shiftReportFilter = paginationSchema.extend({
   status: z.enum(['open', 'closed']).optional(),
 });
 
+import { REPORT_CATALOG, reportQueryFilterSchema } from '@ximo/shared';
+import { resolveReportScope } from './report-permission-resolver.js';
+import { SalesSummaryReportService } from './services/sales-summary-service.js';
+import { OverviewReportService } from './services/overview-report-service.js';
+import { SalesReportService } from './services/sales-report-service.js';
+import { ProductPerformanceReportService } from './services/product-performance-report-service.js';
+import { TransactionDetailService } from './services/transaction-detail-service.js';
+import type { Database } from '../../database/types.js';
+
 export function reportsRouter(database: Queryable): Router {
   const router = Router();
+  const db = database as Database;
+  const salesSummaryService = new SalesSummaryReportService(db);
+  const overviewService = new OverviewReportService(db);
+  const salesReportService = new SalesReportService(db);
+  const productPerformanceService = new ProductPerformanceReportService(db);
+  const transactionDetailService = new TransactionDetailService(db);
+
   router.use(requireAnyModule('dashboard', 'reports'), requirePermission('reports:read'));
+
+  router.get('/catalog', (request, response) => {
+    const user = request.authUser!;
+    const effectiveModules = (user.modules || []) as string[];
+    const permissions = user.permissions || [];
+    const filteredCatalog = REPORT_CATALOG.filter((report) => {
+      const hasModules = report.requiredModules.every((m) => effectiveModules.includes(m));
+      const hasCaps = report.requiredCapabilities.every((c) => permissions.includes(c));
+      return hasModules && hasCaps;
+    });
+    sendData(response, { catalog: filteredCatalog });
+  });
+
+  router.get('/overview', async (request, response) => {
+    const fromStr = (request.query.from as string) || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const toStr = (request.query.to as string) || new Date().toISOString().slice(0, 10);
+    const branchIdStr = typeof request.query.branchId === 'string' && request.query.branchId ? request.query.branchId : undefined;
+    const filterInput: { from: string; to: string; branchId?: string } = { from: fromStr, to: toStr };
+    if (branchIdStr) filterInput.branchId = branchIdStr;
+    const scope = resolveReportScope(request.authUser!, filterInput);
+    const result = await overviewService.generate(scope, filterInput);
+    sendData(response, result);
+  });
+
+  router.get('/sales', async (request, response) => {
+    const fromStr = (request.query.from as string) || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const toStr = (request.query.to as string) || new Date().toISOString().slice(0, 10);
+    const branchIdStr = typeof request.query.branchId === 'string' && request.query.branchId ? request.query.branchId : undefined;
+    const searchStr = typeof request.query.search === 'string' && request.query.search ? request.query.search : undefined;
+    const pageNum = request.query.page ? parseInt(String(request.query.page), 10) : 1;
+    const pageSizeNum = request.query.pageSize ? parseInt(String(request.query.pageSize), 10) : 20;
+
+    const filterInput: { from: string; to: string; branchId?: string; search?: string; page?: number; pageSize?: number } = {
+      from: fromStr,
+      to: toStr,
+      page: pageNum,
+      pageSize: pageSizeNum,
+    };
+    if (branchIdStr) filterInput.branchId = branchIdStr;
+    if (searchStr) filterInput.search = searchStr;
+
+    const scope = resolveReportScope(request.authUser!, filterInput);
+    const result = await salesReportService.generate(scope, filterInput);
+    sendData(response, result);
+  });
+
+  router.get('/products', async (request, response) => {
+    const fromStr = (request.query.from as string) || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const toStr = (request.query.to as string) || new Date().toISOString().slice(0, 10);
+    const branchIdStr = typeof request.query.branchId === 'string' && request.query.branchId ? request.query.branchId : undefined;
+    const categoryIdStr = typeof request.query.categoryId === 'string' && request.query.categoryId ? request.query.categoryId : undefined;
+    const pageNum = request.query.page ? parseInt(String(request.query.page), 10) : 1;
+    const pageSizeNum = request.query.pageSize ? parseInt(String(request.query.pageSize), 10) : 20;
+
+    const filterInput: { from: string; to: string; branchId?: string; categoryId?: string; page?: number; pageSize?: number } = {
+      from: fromStr,
+      to: toStr,
+      page: pageNum,
+      pageSize: pageSizeNum,
+    };
+    if (branchIdStr) filterInput.branchId = branchIdStr;
+    if (categoryIdStr) filterInput.categoryId = categoryIdStr;
+
+    const scope = resolveReportScope(request.authUser!, filterInput);
+    const result = await productPerformanceService.generate(scope, filterInput);
+    sendData(response, result);
+  });
+
+  router.get('/transactions/:id', async (request, response) => {
+    const scope = resolveReportScope(request.authUser!, { from: '2000-01-01', to: '2099-12-31' });
+    const saleId = uuidSchema.parse(request.params.id);
+    const result = await transactionDetailService.getTransactionDetail(scope, saleId);
+    sendData(response, result);
+  });
+
+  router.get('/sales-summary', async (request, response) => {
+    const fromStr = (request.query.from as string) || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const toStr = (request.query.to as string) || new Date().toISOString().slice(0, 10);
+    const branchIdStr = typeof request.query.branchId === 'string' && request.query.branchId ? request.query.branchId : undefined;
+    const filterInput: { from: string; to: string; branchId?: string } = {
+      from: fromStr,
+      to: toStr,
+    };
+    if (branchIdStr) filterInput.branchId = branchIdStr;
+
+    const scope = resolveReportScope(request.authUser!, filterInput);
+    const result = await salesSummaryService.generate(scope, filterInput);
+    sendData(response, result);
+  });
+
   router.get('/workspace', validateQuery(workspaceReportFilter), async (request, response) => {
     const { from, to, branchId } = request.query as z.infer<typeof workspaceReportFilter>;
     const organizationId = request.authUser!.organization.id;
@@ -75,6 +181,10 @@ export function reportsRouter(database: Queryable): Router {
       topSuppliers,
       profitTrend,
       cashKpis,
+      payablesInvoices,
+      purchaseOrdersList,
+      salesReceipts,
+      shiftLogs,
     ] = await Promise.all([
       database.query(
         `with scoped_sales as (
@@ -335,39 +445,160 @@ export function reportsRouter(database: Queryable): Router {
            and ${branchScope('rs')}`,
         values,
       ),
+      database.query(
+        `select
+          si.id,
+          si.invoice_number as "invoiceNumber",
+          s.name as "supplierName",
+          po.order_number as "poNumber",
+          to_char(si.invoice_date, 'YYYY-MM-DD') as "invoiceDate",
+          to_char(si.due_date, 'YYYY-MM-DD') as "dueDate",
+          si.total::text,
+          si.paid_amount::text as "paidAmount",
+          (si.total - si.paid_amount)::text as "balance",
+          si.status,
+          b.name as "branchName"
+         from supplier_invoices si
+         join suppliers s on s.id = si.supplier_id
+         left join purchase_orders po on po.id = si.purchase_order_id
+         left join branches b on b.id = si.branch_id
+         where si.organization_id = $1
+           and si.status not in ('credited','void')
+           and (si.total - si.paid_amount) > 0
+           and ${inventoryBranchScope('si')}
+         order by si.due_date asc nulls last, si.created_at desc limit 50`,
+        inventoryValues,
+      ),
+      database.query(
+        `select
+          po.id,
+          po.order_number as "poNumber",
+          s.name as "supplierName",
+          to_char(po.created_at, 'YYYY-MM-DD') as "orderDate",
+          po.status,
+          po.subtotal::text as "total",
+          b.name as "branchName"
+         from purchase_orders po
+         join suppliers s on s.id = po.supplier_id
+         left join branches b on b.id = po.branch_id
+         where po.organization_id = $1 and po.created_at >= $2 and po.created_at < $3
+           and ${branchScope('po')}
+         order by po.created_at desc limit 50`,
+        values,
+      ),
+      database.query(
+        `select
+          s.id,
+          s.receipt_number as "receiptNumber",
+          s.status,
+          coalesce(
+            (select pay.method from payments pay
+              where pay.sale_id = s.id and pay.kind = 'payment'
+              order by pay.created_at asc limit 1),
+            'cash'
+          ) as "paymentMethod",
+          to_char(s.completed_at, 'YYYY-MM-DD HH24:MI') as "completedAt",
+          s.total::text as "total",
+          s.discount_total::text as "discount",
+          s.tax_total::text as "tax",
+          b.name as "branchName",
+          coalesce(p.display_name, 'Staff') as "cashierName"
+         from sales s
+         left join branches b on b.id = s.branch_id
+         left join profiles p on p.id = s.cashier_id
+         where s.organization_id = $1 and s.completed_at >= $2 and s.completed_at < $3
+           and s.status in ('completed','partially_refunded','refunded')
+           and ${branchScope('s')}
+         order by s.completed_at desc limit 50`,
+        values,
+      ),
+      database.query(
+        `select
+          rs.id,
+          coalesce(p.display_name, 'Staff') as "cashierName",
+          to_char(rs.opened_at, 'YYYY-MM-DD HH24:MI') as "openedAt",
+          to_char(rs.closed_at, 'YYYY-MM-DD HH24:MI') as "closedAt",
+          rs.status,
+          rs.starting_cash::text as "startingCash",
+          rs.cash_sales::text as "cashSales",
+          rs.expected_cash::text as "expectedCash",
+          rs.actual_cash::text as "countedCash",
+          rs.variance::text as "variance",
+          b.name as "branchName"
+         from register_shifts rs
+         left join profiles p on p.id = rs.cashier_id
+         left join branches b on b.id = rs.branch_id
+         where rs.organization_id = $1 and rs.opened_at >= $2 and rs.opened_at < $3
+           and ${branchScope('rs')}
+         order by rs.opened_at desc limit 50`,
+        values,
+      ),
     ]);
+
+    const permissions = request.authUser!.permissions || [];
+    const canViewCost = permissions.includes('reports:view_cost');
+    const canViewProfit = permissions.includes('reports:view_profit');
+    const kpis = { ...(salesKpis.rows[0] ?? {}) } as Record<string, unknown>;
+    const sanitizedTopProducts = topProducts.rows.map((row) => {
+      const product = { ...row } as Record<string, unknown>;
+      if (!canViewCost) {
+        product.cost = null;
+        product.unitCost = null;
+      }
+      if (!canViewProfit) {
+        product.profit = null;
+        product.margin = null;
+      }
+      return product;
+    });
+    const inventory = {
+      ...inventoryKpis.rows[0],
+      lowStock: lowStock.rows,
+      byCategory: inventoryByCategory.rows,
+      movements: inventoryMovements.rows,
+    } as Record<string, unknown>;
+    if (!canViewCost) {
+      kpis.netCost = null;
+      inventory.inventoryValue = null;
+      inventory.averageCost = null;
+    }
+    if (!canViewProfit) {
+      kpis.grossProfit = null;
+      kpis.grossMarginPercent = null;
+    }
 
     sendData(response, {
       range: { from, to, branchId: branchId ?? null },
-      kpis: salesKpis.rows[0],
+      kpis,
       sales: {
         paymentMethods: paymentMethods.rows,
-        topProducts: topProducts.rows,
+        topProducts: sanitizedTopProducts,
         topCategories: topCategories.rows,
         branches: salesByBranch.rows,
         trend: salesTrend.rows.reverse(),
+        salesReceipts: salesReceipts.rows,
       },
-      inventory: {
-        ...inventoryKpis.rows[0],
-        lowStock: lowStock.rows,
-        byCategory: inventoryByCategory.rows,
-        movements: inventoryMovements.rows,
-      },
+      inventory,
       purchasing: {
         ...purchasingKpis.rows[0],
         orderStatuses: purchaseOrderStatuses.rows,
         topSuppliers: topSuppliers.rows,
+        payablesInvoices: payablesInvoices.rows,
+        purchaseOrdersList: purchaseOrdersList.rows,
       },
       profit: {
-        grossSales: salesKpis.rows[0]?.grossSales ?? '0',
-        refunds: salesKpis.rows[0]?.customerRefunds ?? '0',
-        netSales: salesKpis.rows[0]?.netSales ?? '0',
-        netCost: salesKpis.rows[0]?.netCost ?? '0',
-        grossProfit: salesKpis.rows[0]?.grossProfit ?? '0',
-        grossMarginPercent: salesKpis.rows[0]?.grossMarginPercent ?? '0',
-        trend: profitTrend.rows.reverse(),
+        grossSales: kpis.grossSales ?? '0',
+        refunds: kpis.customerRefunds ?? '0',
+        netSales: kpis.netSales ?? '0',
+        netCost: canViewCost ? (kpis.netCost ?? '0') : null,
+        grossProfit: canViewProfit ? (kpis.grossProfit ?? '0') : null,
+        grossMarginPercent: canViewProfit ? (kpis.grossMarginPercent ?? '0') : null,
+        trend: canViewProfit || canViewCost ? profitTrend.rows.reverse() : [],
       },
-      cash: cashKpis.rows[0],
+      cash: {
+        ...cashKpis.rows[0],
+        shiftLogs: shiftLogs.rows,
+      },
     });
   });
   router.get('/summary', validateQuery(dateFilter), async (request, response) => {

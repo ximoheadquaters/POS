@@ -18,13 +18,13 @@ const BORDER = rgb(0.886, 0.91, 0.941);
 const SOFT = rgb(0.965, 0.976, 0.973);
 const A4: [number, number] = [595.28, 841.89];
 
-function money(value: string | number): string {
-  const amount = Number(value);
+function money(value: string | number | null | undefined): string {
+  const amount = Number(value ?? 0);
   return `PHP ${Number.isFinite(amount) ? amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}`;
 }
 
-function amount(value: string | number): number {
-  const result = Number(value);
+function amount(value: string | number | null | undefined): number {
+  const result = Number(value ?? 0);
   return Number.isFinite(result) ? result : 0;
 }
 

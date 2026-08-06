@@ -1,3 +1,55 @@
+export interface PayablesInvoiceDetail {
+  id: string;
+  invoiceNumber: string;
+  supplierName: string;
+  poNumber?: string;
+  invoiceDate?: string;
+  dueDate?: string;
+  total: string;
+  paidAmount: string;
+  balance: string;
+  status: string;
+  notes?: string;
+  branchName?: string;
+}
+
+export interface PurchaseOrderDetail {
+  id: string;
+  poNumber: string;
+  supplierName: string;
+  orderDate?: string;
+  status: string;
+  total: string;
+  branchName?: string;
+}
+
+export interface SalesReceiptDetail {
+  id: string;
+  receiptNumber: string;
+  status: string;
+  paymentMethod: string;
+  completedAt?: string;
+  total: string;
+  discount?: string;
+  tax?: string;
+  branchName?: string;
+  cashierName?: string;
+}
+
+export interface ShiftLogDetail {
+  id: string;
+  cashierName?: string;
+  openedAt?: string;
+  closedAt?: string;
+  status: string;
+  startingCash?: string;
+  cashSales?: string;
+  expectedCash?: string;
+  countedCash?: string;
+  variance?: string;
+  branchName?: string;
+}
+
 export interface ReportsWorkspace {
   range?: { from: string; to: string; branchId: string | null };
   kpis: {
@@ -10,9 +62,9 @@ export interface ReportsWorkspace {
     uniqueCustomers: number;
     averageTransaction: string;
     itemsSold: number;
-    netCost: string;
-    grossProfit: string;
-    grossMarginPercent: string;
+    netCost: string | null;
+    grossProfit: string | null;
+    grossMarginPercent: string | null;
     refundRatePercent: string;
   };
   sales: {
@@ -23,18 +75,19 @@ export interface ReportsWorkspace {
       unit: string;
       quantity: number;
       sales: string;
-      cost: string;
-      profit: string;
+      cost: string | null;
+      profit: string | null;
     }>;
     topCategories: Array<{ name: string; sales: string; quantity: number }>;
     branches: Array<{ id: string; name: string; sales: string; transactions: number }>;
     trend: Array<{ date: string; sales: string; transactions: number }>;
+    salesReceipts?: SalesReceiptDetail[];
   };
   inventory: {
     stockRecords: number;
     activeProducts: number;
     unitsOnHand: number;
-    inventoryValue: string;
+    inventoryValue: string | null;
     stockValue: string;
     lowStockCount: number;
     outOfStockCount: number;
@@ -62,14 +115,16 @@ export interface ReportsWorkspace {
     supplierRefunds: string;
     orderStatuses: Array<{ status: string; orders: number; value: string }>;
     topSuppliers: Array<{ id: string; name: string; orders: number; value: string }>;
+    payablesInvoices?: PayablesInvoiceDetail[];
+    purchaseOrdersList?: PurchaseOrderDetail[];
   };
   profit: {
     grossSales: string;
     refunds: string;
     netSales: string;
-    netCost: string;
-    grossProfit: string;
-    grossMarginPercent: string;
+    netCost: string | null;
+    grossProfit: string | null;
+    grossMarginPercent: string | null;
     trend: Array<{ date: string; netSales: string; netCost: string; profit: string }>;
   };
   cash: {
@@ -81,6 +136,7 @@ export interface ReportsWorkspace {
     variance: string;
     cashIn: string;
     cashOut: string;
+    shiftLogs?: ShiftLogDetail[];
   };
 }
 
@@ -92,3 +148,4 @@ export interface ReportExportMetadata {
   to: string;
   generatedAt?: Date;
 }
+

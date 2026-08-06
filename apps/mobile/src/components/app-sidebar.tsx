@@ -107,7 +107,7 @@ const sidebarSections: SidebarSection[] = [
         id: 'reports',
         title: 'Income & Reports',
         icon: 'trending-up',
-        children: [{ title: 'Overview', href: '/reports', module: 'reports' }],
+        children: [{ title: 'Overview', href: '/reports/overview', module: 'reports' }],
       },
       {
         id: 'settings',

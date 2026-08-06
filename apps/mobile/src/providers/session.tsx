@@ -41,9 +41,19 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
       setLoading(false);
     });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
-      if (!nextSession) setCurrentUser(null);
+      if (!nextSession) {
+        setCurrentUser(null);
+        return;
+      }
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+        void refreshUser(nextSession.access_token).catch(async (error) => {
+          if (error instanceof ApiError && error.status === 401) {
+            await supabase.auth.signOut();
+          }
+        });
+      }
     });
     return () => data.subscription.unsubscribe();
   }, [refreshUser]);

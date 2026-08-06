@@ -48,7 +48,16 @@ insert into public.permissions (code, description) values
   ('sales:create','Complete sales'), ('sales:read_branch','View branch sales'), ('sales:read_all','View all sales'),
   ('returns:create','Create returns'), ('returns:manage','Manage refund approvals'), ('customers:read','View customers'),
   ('customers:manage','Manage customers'), ('promotions:read','View promotions'), ('promotions:manage','Manage promotions and combos'),
-  ('reports:read','View reports'), ('settings:manage','Manage settings'), ('audit:read','View audit log'), ('modules:manage','Manage module overrides')
+  ('reports:read','View reports'),
+  ('reports:view_cost','View cost of goods and inventory valuation in reports'),
+  ('reports:view_profit','View gross profit and margin in reports'),
+  ('reports:view_all_branches','View report data across all organization branches'),
+  ('reports:export','Export reports'),
+  ('reports:manage_saved_views','Create and manage saved report views'),
+  ('reports:view_staff','View staff attribution in reports'),
+  ('reports:view_tax','View tax breakdowns in reports'),
+  ('reports:view_platform','View platform-level reporting diagnostics'),
+  ('settings:manage','Manage settings'), ('audit:read','View audit log'), ('modules:manage','Manage module overrides')
 on conflict (code) do nothing;
 
 insert into public.organizations (id, name, slug, currency, timezone)
@@ -90,7 +99,8 @@ and (
   or (r.code = 'manager' and p.code not in ('modules:manage'))
   or (r.code = 'cashier' and p.code in (
     'branches:read','products:read','inventory:read','registers:read','shifts:open',
-    'shifts:close','cash:move','sales:create','sales:read_branch','customers:read'
+    'shifts:close','cash:move','sales:create','sales:read_branch','customers:read',
+    'reports:read'
   ))
   or (r.code = 'inventory_staff' and p.code in (
     'branches:read','products:read','products:manage','inventory:read','inventory:adjust',

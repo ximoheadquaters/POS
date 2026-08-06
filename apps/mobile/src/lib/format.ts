@@ -1,4 +1,7 @@
-export function formatMoney(value: string, currency = 'PHP'): string {
+export function formatMoney(value: string | number | null | undefined, currency = 'PHP'): string {
+  if (value == null || value === '') {
+    return `${currency === 'PHP' ? '₱' : `${currency} `}0.00`;
+  }
   const num = Number(value);
   if (isNaN(num)) return `${currency === 'PHP' ? '₱' : `${currency} `}0.00`;
   const isNegative = num < 0;
