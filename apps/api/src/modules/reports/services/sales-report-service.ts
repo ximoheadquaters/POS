@@ -16,7 +16,7 @@ export class SalesReportService {
     const offset = (page - 1) * pageSize;
     const searchPattern = filter.search ? `%${filter.search}%` : null;
 
-    const values = [
+    const filterValues = [
       scope.organizationId,
       scope.fromIso,
       scope.toIso,
@@ -24,8 +24,16 @@ export class SalesReportService {
       scope.hasAllBranchesAccess,
       scope.allowedBranchIds,
       searchPattern,
-      pageSize,
-      offset,
+    ] as const;
+    const pageValues = [...filterValues, pageSize, offset] as const;
+    const trendValues = [
+      scope.organizationId,
+      scope.fromIso,
+      scope.toIso,
+      scope.branchId ?? null,
+      scope.hasAllBranchesAccess,
+      scope.allowedBranchIds,
+      scope.organizationTimezone,
     ] as const;
 
     const branchScopeSQL = (alias: string) =>
@@ -92,7 +100,7 @@ export class SalesReportService {
              then round(100 * (coalesce(sum(s.total), 0) - coalesce((select sum(refund_total) from scoped_returns), 0) - ((select total from sale_cost) - (select total from return_cost))) / (coalesce(sum(s.total), 0) - coalesce((select sum(refund_total) from scoped_returns), 0)), 2)::text
              else '0.00' end as "grossMarginPercent"
          from scoped_sales s`,
-        values,
+        filterValues,
       ),
 
       this.database.query<{
@@ -143,7 +151,7 @@ export class SalesReportService {
            and ${searchSQL('s')}
          order by s.completed_at desc
          limit $8 offset $9`,
-        values,
+        pageValues,
       ),
 
       this.database.query<{ totalRows: number }>(
@@ -152,12 +160,12 @@ export class SalesReportService {
            and s.status in ('completed','partially_refunded','refunded')
            and ${branchScopeSQL('s')}
            and ${searchSQL('s')}`,
-        values,
+        filterValues,
       ),
 
       this.database.query<{ period: string; finalSales: string; refunds: string; netSales: string }>(
         `select
-           to_char(s.completed_at at time zone $10, 'YYYY-MM-DD') as period,
+           to_char(s.completed_at at time zone $7, 'YYYY-MM-DD') as period,
            coalesce(sum(s.total), 0)::text as "finalSales",
            coalesce((select sum(refund_total) from returns r where r.organization_id = $1 and r.created_at >= $2 and r.created_at < $3 and ${branchScopeSQL('r')}), 0)::text as refunds,
            (coalesce(sum(s.total), 0) - coalesce((select sum(refund_total) from returns r where r.organization_id = $1 and r.created_at >= $2 and r.created_at < $3 and ${branchScopeSQL('r')}), 0))::text as "netSales"
@@ -166,7 +174,7 @@ export class SalesReportService {
            and s.status in ('completed','partially_refunded','refunded')
            and ${branchScopeSQL('s')}
          group by 1 order by 1 asc`,
-        [...values, scope.organizationTimezone],
+        trendValues,
       ),
 
       filter.branchId
