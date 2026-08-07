@@ -9,11 +9,15 @@ describe('Retail Navigation and Storyboard UX — 26 Focused Tests', () => {
     expect(titles).toEqual(['DAILY WORK', 'CATALOG', 'INVENTORY', 'STORE MANAGEMENT']);
   });
 
-  it('2. Dashboard & POS appears first under DAILY WORK', () => {
+  it('2. Dashboard and POS appear as separate items under DAILY WORK', () => {
     const user = { businessProfile: 'retail' as const };
     const sections = filterSectionsByProfile(user);
     const dailyWork = sections.find((s: SidebarSectionDef) => s.sectionTitle === 'DAILY WORK');
-    expect(dailyWork?.groups[0]?.title).toBe('Dashboard & POS');
+    expect(dailyWork?.groups.map((group) => group.title)).toEqual([
+      'Dashboard',
+      'POS',
+      'Sales & Orders',
+    ]);
   });
 
   it('3. Stock Overview is in INVENTORY, not under Product Catalog', () => {

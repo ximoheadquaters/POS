@@ -23,6 +23,10 @@ export interface CartProduct {
   status?: string;
   availableQuantity?: number | null;
   baseAvailableQuantity?: number | null;
+  /** When true, live catalog sync must not overwrite sellingPrice (combo allocations). */
+  priceLocked?: boolean;
+  promoId?: string;
+  promoName?: string;
 }
 
 export interface SellingUnit {
@@ -49,6 +53,8 @@ interface CartState {
   hydrated: boolean;
   hydrate(): Promise<void>;
   add(product: CartProduct): void;
+  /** Add an exact quantity (combo bundles). Merges with weighted-average price when needed. */
+  addQuantity(product: CartProduct, quantity: number): void;
   setQuantity(productId: string, quantity: number): void;
   syncProducts(products: CartProduct[]): void;
   remove(productId: string): void;
@@ -182,6 +188,43 @@ export const useCartStore = create<CartState>((set, get) => ({
     });
     void saveCart(get());
   },
+  addQuantity(product, quantity) {
+    const addQty = normalizeQuantity(quantity);
+    if (addQty <= 0) return;
+    set((state) => {
+      const key = cartProductKey(product);
+      const existing = state.items.find((item) => cartProductKey(item.product) === key);
+      if (!existing) {
+        return { items: [...state.items, { product, quantity: addQty }] };
+      }
+      const nextQty = normalizeQuantity(existing.quantity + addQty);
+      const nextThousandths = quantityToThousandths(nextQty);
+      const oldTotal =
+        moneyToMinor(existing.product.sellingPrice) * quantityToThousandths(existing.quantity);
+      const addTotal = moneyToMinor(product.sellingPrice) * quantityToThousandths(addQty);
+      const nextPrice =
+        nextThousandths > 0n
+          ? minorToMoney((oldTotal + addTotal + nextThousandths / 2n) / nextThousandths)
+          : product.sellingPrice;
+      return {
+        items: state.items.map((item) =>
+          cartProductKey(item.product) === key
+            ? {
+                ...item,
+                quantity: nextQty,
+                product: {
+                  ...item.product,
+                  ...product,
+                  sellingPrice: nextPrice,
+                  priceLocked: Boolean(item.product.priceLocked || product.priceLocked),
+                },
+              }
+            : item,
+        ),
+      };
+    });
+    void saveCart(get());
+  },
   setQuantity(productId, quantity) {
     const normalized = normalizeQuantity(quantity);
     set((state) => ({
@@ -203,9 +246,19 @@ export const useCartStore = create<CartState>((set, get) => ({
         const unit = product.sellingUnits?.find(
           (sellingUnit) => sellingUnit.variantId === item.product.variantId,
         );
+        const lockedPrice = item.product.sellingPrice;
+        const priceLocked = item.product.priceLocked;
+        const promoId = item.product.promoId;
+        const promoName = item.product.promoName;
+        const synced = selectSellingUnit({ ...item.product, ...product }, unit);
         return {
           ...item,
-          product: selectSellingUnit({ ...item.product, ...product }, unit),
+          product: {
+            ...synced,
+            ...(priceLocked
+              ? { sellingPrice: lockedPrice, priceLocked: true, promoId, promoName }
+              : {}),
+          },
         };
       }),
     }));

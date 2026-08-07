@@ -32,7 +32,8 @@ export default function TabLayout() {
   const branch = useBranchStore((state) => state.activeBranch);
   if (!session) return <Redirect href="/(auth)/login" />;
   if (!currentUser || !branch) return <Redirect href="/branch-select" />;
-  const dashboardEnabled = currentUser.modules.includes('dashboard');
+  const dashboardEnabled =
+    currentUser.modules.includes('dashboard') || currentUser.modules.includes('reports');
   const posEnabled = currentUser.modules.includes('pos');
   return (
     <AppSidebarProvider>
@@ -55,7 +56,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Home',
+            title: 'Dashboard',
             href: dashboardEnabled ? undefined : null,
             tabBarIcon: (props) => <Icon value={'\u2302'} {...props} />,
           }}

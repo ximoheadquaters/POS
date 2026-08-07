@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
-export type ReportExportFormat = 'pdf' | 'xlsx';
+export type ReportExportFormat = 'pdf' | 'xlsx' | 'csv';
 
 function base64FromBytes(bytes: Uint8Array): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -28,7 +28,9 @@ export async function saveReportExport(
   const mimeType =
     format === 'pdf'
       ? 'application/pdf'
-      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      : format === 'csv'
+        ? 'text/csv;charset=utf-8'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   if (Platform.OS === 'web') {
     const blob = new Blob([bytes.slice().buffer], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -54,6 +56,11 @@ export async function saveReportExport(
   await Sharing.shareAsync(fileUri, {
     dialogTitle: `Export ${fileName}`,
     mimeType,
-    UTI: format === 'pdf' ? 'com.adobe.pdf' : 'org.openxmlformats.spreadsheetml.sheet',
+    UTI:
+      format === 'pdf'
+        ? 'com.adobe.pdf'
+        : format === 'csv'
+          ? 'public.comma-separated-values-text'
+          : 'org.openxmlformats.spreadsheetml.sheet',
   });
 }

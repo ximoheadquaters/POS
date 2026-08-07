@@ -1,0 +1,53 @@
+{
+  "status": 200,
+  "summaryCards": [
+    {
+      "label": "Distinct Products Sold",
+      "value": "2"
+    },
+    {
+      "label": "Selling Units Sold",
+      "value": "2"
+    },
+    {
+      "label": "Equivalent Base Units Sold",
+      "value": "2"
+    },
+    {
+      "label": "Product Revenue",
+      "value": "₱47.04"
+    },
+    {
+      "label": "Net Product Sales",
+      "value": "₱47.04"
+    },
+    {
+      "label": "Cost of Goods Sold (COGS)",
+      "value": "₱28.00"
+    },
+    {
+      "label": "Gross Profit",
+      "value": "₱19.04"
+    }
+  ],
+  "rows": [
+    {
+      "title": "Bath Soap",
+      "quantity": 1,
+      "unit": "piece",
+      "baseQuantity": 1,
+      "baseUnit": "piece",
+      "value": "₱30.24",
+      "subValue": "1 piece (1 piece) • Avg Price: ₱30.24"
+    },
+    {
+      "title": "Bottled Water 500ml",
+      "quantity": 1,
+      "unit": "piece",
+      "baseQuantity": 1,
+      "baseUnit": "piece",
+      "value": "₱16.80",
+      "subValue": "1 piece (1 piece) • Avg Price: ₱16.80"
+    }
+  ]
+}

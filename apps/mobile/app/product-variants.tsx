@@ -1,5 +1,15 @@
-import { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
@@ -8,8 +18,38 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { useBarcodeScanner } from '@/hooks/use-barcode-scanner';
 import { ApiError, api } from '@/lib/api';
+import { formatMoney } from '@/lib/format';
 import { normalizeBarcode } from '@/lib/product-scan';
 import { useIosAlert } from '@/providers/ios-alert';
+
+function FormField({
+  label,
+  focused,
+  children,
+  className = '',
+}: {
+  label: string;
+  focused?: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <View className={className}>
+      <Text className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </Text>
+      <View
+        className={`min-h-12 justify-center rounded-xl border px-3 transition-all ${
+          focused
+            ? 'border-brand-600 bg-white ring-2 ring-brand-200'
+            : 'border-slate-200 bg-white'
+        }`}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
 
 interface Variant {
   id: string;
@@ -196,6 +236,10 @@ function ProductVariantsContent() {
     name?: string;
     baseUnit?: string;
   }>();
+  const { width } = useWindowDimensions();
+  // Full window width (includes sidebar). Side-by-side from laptop sizes up.
+  const isWide = width >= 1024;
+  const isTablet = width >= 640;
   const client = useQueryClient();
   const { showAlert } = useIosAlert();
 
@@ -397,6 +441,357 @@ function ProductVariantsContent() {
       }),
   });
 
+  const conversionLabel = (item: Variant) => {
+    const unitCode = item.unit.toLowerCase();
+    const base = (activeBaseUnit || '').toLowerCase();
+    if (
+      (unitCode === 'g' || unitCode === 'gram') &&
+      (base === 'kg' || base === 'kilogram')
+    ) {
+      return `${item.unitsPerBase < 1 ? item.unitsPerBase * 1000 : item.unitsPerBase} g = ${
+        item.unitsPerBase < 1 ? item.unitsPerBase : item.unitsPerBase / 1000
+      } kg`;
+    }
+    if (
+      (unitCode === 'ml' || unitCode === 'milliliter') &&
+      (base === 'l' || base === 'liter')
+    ) {
+      return `${item.unitsPerBase < 1 ? item.unitsPerBase * 1000 : item.unitsPerBase} ml = ${
+        item.unitsPerBase < 1 ? item.unitsPerBase : item.unitsPerBase / 1000
+      } l`;
+    }
+    return `1 ${item.unit} = ${item.unitsPerBase} ${activeBaseUnit}`;
+  };
+
+  const beginEdit = (item: Variant) => {
+    setEditing(item);
+    setName(item.name);
+    setSku(item.sku);
+    setUnit(item.unit);
+    setUnitsPerBase(String(item.unitsPerBase));
+    setCost(item.cost ?? '');
+    setPrice(item.sellingPrice ?? '');
+    setBarcode(item.barcodes[0] ?? '');
+    setIsPortioningContainer(item.isPortioningContainer);
+  };
+
+  const formCard = (
+    <View className="gap-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+      <View
+        className={`gap-3 rounded-2xl border border-brand-200 bg-brand-50 p-4 ${
+          isTablet ? 'flex-row items-center justify-between' : ''
+        }`}
+      >
+        <View className="min-w-0 flex-1 flex-row items-center gap-3">
+          <View className="h-11 w-11 items-center justify-center rounded-xl bg-brand-700">
+            <Feather name="package" size={20} color="#FFFFFF" />
+          </View>
+          <View className="min-w-0 flex-1">
+            <View className="flex-row flex-wrap items-center gap-2">
+              <Text className="text-xs font-semibold text-brand-800">Target product</Text>
+              <View className="flex-row items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5">
+                <View className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                <Text className="text-[10px] font-medium text-emerald-800">Scanner ready</Text>
+              </View>
+            </View>
+            <Text className="text-base font-bold text-slate-900" numberOfLines={2}>
+              {activeProductName}{' '}
+              <Text className="text-xs font-normal text-slate-500">({activeBaseUnit})</Text>
+            </Text>
+          </View>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Change product"
+          onPress={() => setPickerModalOpen(true)}
+          className={`min-h-11 items-center justify-center rounded-xl border border-brand-300 bg-white px-4 active:bg-brand-50 ${
+            isTablet ? '' : 'w-full'
+          }`}
+        >
+          <Text className="text-sm font-semibold text-brand-800">Change product</Text>
+        </Pressable>
+      </View>
+
+      <View>
+        <Text className="text-base font-semibold text-slate-900">
+          {editing ? 'Edit selling unit' : 'Add selling unit or variant'}
+        </Text>
+        <Text className="mt-1 text-xs leading-5 text-slate-500">
+          One sold unit deducts the conversion quantity from {activeProductName}&apos;s shared{' '}
+          {activeBaseUnit} inventory.
+        </Text>
+      </View>
+
+      <View className={`gap-3 ${isTablet ? 'flex-row' : ''}`}>
+        <FormField label="Name" focused={focusedField === 'name'} className="flex-1">
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            onFocus={() => setFocusedField('name')}
+            onBlur={() => setFocusedField(null)}
+            placeholder="e.g. Pack of 12"
+            placeholderTextColor="#94A3B8"
+            className="w-full py-2.5 text-sm text-slate-900"
+            style={{ outline: 'none' } as object}
+          />
+        </FormField>
+        <FormField label="Variant SKU" focused={focusedField === 'sku'} className="flex-1">
+          <TextInput
+            value={sku}
+            onChangeText={setSku}
+            onFocus={() => setFocusedField('sku')}
+            onBlur={() => setFocusedField(null)}
+            autoCapitalize="characters"
+            placeholder="SKU"
+            placeholderTextColor="#94A3B8"
+            className="w-full py-2.5 text-sm text-slate-900"
+            style={{ outline: 'none' } as object}
+          />
+        </FormField>
+      </View>
+
+      <View>
+        <Text className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          Selling unit
+        </Text>
+        <View className="flex-row flex-wrap gap-2">
+          {units.data
+            ?.filter((item) => item.isActive)
+            .map((item) => {
+              const selected = unit === item.code;
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => setUnit(item.code)}
+                  className={`min-h-9 items-center justify-center rounded-full border px-3.5 ${
+                    selected
+                      ? 'border-brand-700 bg-brand-700'
+                      : 'border-slate-200 bg-slate-50 active:bg-slate-100'
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      selected ? 'text-white' : 'text-slate-700'
+                    }`}
+                  >
+                    {item.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+        </View>
+      </View>
+
+      {unit.toLowerCase() === (activeBaseUnit || '').toLowerCase() &&
+      Number(unitsPerBase) !== 1 ? (
+        <View className="flex-row items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <Feather name="alert-triangle" size={16} color="#B45309" />
+          <Text className="flex-1 text-xs font-semibold leading-snug text-amber-900">
+            “{unit}” matches the base unit. To create a {unitsPerBase}-pack, choose Box, Pack, or
+            another container unit above.
+          </Text>
+        </View>
+      ) : null}
+
+      <View className={`gap-3 ${isTablet ? 'flex-row' : ''}`}>
+        <FormField
+          label={`Qty per unit (${activeBaseUnit})`}
+          focused={focusedField === 'unitsPerBase'}
+          className="flex-1"
+        >
+          <TextInput
+            value={unitsPerBase}
+            onChangeText={setUnitsPerBase}
+            onFocus={() => setFocusedField('unitsPerBase')}
+            onBlur={() => setFocusedField(null)}
+            keyboardType="decimal-pad"
+            placeholder={`e.g. 12`}
+            placeholderTextColor="#94A3B8"
+            className="w-full py-2.5 text-sm text-slate-900"
+            style={{ outline: 'none' } as object}
+          />
+        </FormField>
+        <FormField label="Selling price" focused={focusedField === 'price'} className="flex-1">
+          <TextInput
+            value={price}
+            onChangeText={setPrice}
+            onFocus={() => setFocusedField('price')}
+            onBlur={() => setFocusedField(null)}
+            keyboardType="decimal-pad"
+            placeholder="0.00"
+            placeholderTextColor="#94A3B8"
+            className="w-full py-2.5 text-sm text-slate-900"
+            style={{ outline: 'none' } as object}
+          />
+        </FormField>
+        <FormField label="Cost (optional)" focused={focusedField === 'cost'} className="flex-1">
+          <TextInput
+            value={cost}
+            onChangeText={setCost}
+            onFocus={() => setFocusedField('cost')}
+            onBlur={() => setFocusedField(null)}
+            keyboardType="decimal-pad"
+            placeholder="0.00"
+            placeholderTextColor="#94A3B8"
+            className="w-full py-2.5 text-sm text-slate-900"
+            style={{ outline: 'none' } as object}
+          />
+        </FormField>
+      </View>
+
+      <FormField label="Barcode (optional)" focused={focusedField === 'barcode'}>
+        <TextInput
+          value={barcode}
+          onChangeText={setBarcode}
+          onFocus={() => setFocusedField('barcode')}
+          onBlur={() => setFocusedField(null)}
+          placeholder="Scan or type barcode"
+          placeholderTextColor="#94A3B8"
+          className="w-full py-2.5 text-sm text-slate-900"
+          style={{ outline: 'none' } as object}
+        />
+      </FormField>
+
+      <View
+        className={`gap-3 rounded-2xl border border-brand-200 bg-brand-50 p-4 ${
+          isTablet ? 'flex-row items-center' : ''
+        }`}
+      >
+        <View className="min-w-0 flex-1">
+          <Text className="text-sm font-semibold text-brand-950">
+            Whole container reserved for direct sale
+          </Text>
+          <Text className="mt-1 text-xs leading-5 text-brand-800">
+            Uses sealed stock. Base unit and BOM recipes use opened stock only.
+          </Text>
+        </View>
+        <Switch
+          value={isPortioningContainer}
+          onValueChange={setIsPortioningContainer}
+          trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
+          thumbColor={isPortioningContainer ? '#1A593B' : '#FFFFFF'}
+        />
+      </View>
+
+      <View className={`gap-2 ${isTablet ? 'flex-row' : ''}`}>
+        {editing ? (
+          <View className={isTablet ? 'min-w-[120px]' : 'w-full'}>
+            <Button title="Cancel" variant="secondary" onPress={reset} />
+          </View>
+        ) : null}
+        <View className="flex-1">
+          <Button
+            title={save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add selling unit'}
+            disabled={
+              save.isPending ||
+              !activeProductId ||
+              !name.trim() ||
+              !sku.trim() ||
+              !(Number(unitsPerBase) > 0) ||
+              !price.trim()
+            }
+            onPress={() => save.mutate()}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  const listHeader = (
+    <View className="mb-3 flex-row items-center justify-between">
+      <View>
+        <Text className="text-base font-semibold text-slate-900">Configured units</Text>
+        <Text className="mt-0.5 text-xs text-slate-500">
+          {(variants.data ?? []).length} unit{(variants.data ?? []).length === 1 ? '' : 's'} for{' '}
+          {activeProductName}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const renderVariant = ({ item }: { item: Variant }) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Edit ${item.name}`}
+      onPress={() => beginEdit(item)}
+      className={`mb-2 rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50 ${
+        item.isActive ? '' : 'opacity-60'
+      } ${editing?.id === item.id ? 'border-brand-400 bg-brand-50/40' : ''}`}
+    >
+      <View className={`gap-3 ${isTablet ? 'flex-row items-center' : ''}`}>
+        <View className="min-w-0 flex-1">
+          <View className="flex-row flex-wrap items-center gap-2">
+            <Text className="text-base font-semibold text-slate-900">{item.name}</Text>
+            {item.isPortioningContainer ? (
+              <View className="rounded-full bg-amber-50 px-2.5 py-0.5">
+                <Text className="text-[10px] font-semibold text-amber-800">Sealed</Text>
+              </View>
+            ) : null}
+            {!item.isActive ? (
+              <View className="rounded-full bg-slate-100 px-2.5 py-0.5">
+                <Text className="text-[10px] font-semibold text-slate-500">Inactive</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text className="mt-1 text-xs text-slate-500">
+            {item.sku} · {conversionLabel(item)}
+          </Text>
+          <View className="mt-2 flex-row flex-wrap gap-x-3 gap-y-1">
+            <Text className="text-sm font-semibold text-brand-800">
+              {item.sellingPrice ? formatMoney(item.sellingPrice) : 'Base price'}
+            </Text>
+            {item.barcodes[0] ? (
+              <Text className="text-xs text-slate-500">Barcode {item.barcodes[0]}</Text>
+            ) : (
+              <Text className="text-xs text-slate-400">No barcode</Text>
+            )}
+          </View>
+        </View>
+        <View
+          className={`flex-row items-center gap-3 ${isTablet ? '' : 'justify-between border-t border-slate-100 pt-3'}`}
+        >
+          <Text className="text-xs font-medium text-slate-500">
+            {item.isActive ? 'Active' : 'Off'}
+          </Text>
+          <Switch
+            value={item.isActive}
+            disabled={toggle.isPending}
+            onValueChange={() => toggle.mutate(item)}
+            trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
+            thumbColor={item.isActive ? '#1A593B' : '#FFFFFF'}
+          />
+        </View>
+      </View>
+    </Pressable>
+  );
+
+  const variantsList =
+    variants.isLoading ? (
+      <LoadingState label="Loading selling units…" />
+    ) : variants.isError ? (
+      <ErrorState message={variants.error.message} retry={() => void variants.refetch()} />
+    ) : (
+      <FlatList
+        data={variants.data ?? []}
+        keyExtractor={(item) => item.id}
+        className="flex-1"
+        contentContainerClassName="pb-8"
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={
+          <View className="items-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10">
+            <Feather name="layers" size={28} color="#94A3B8" />
+            <Text className="mt-3 text-sm font-medium text-slate-700">No selling units yet</Text>
+            <Text className="mt-1 max-w-sm text-center text-xs text-slate-500">
+              Add a box, pack, or other sellable unit for {activeProductName}.
+            </Text>
+          </View>
+        }
+        renderItem={renderVariant}
+      />
+    );
+
   return (
     <Screen>
       <Header
@@ -419,275 +814,51 @@ function ProductVariantsContent() {
         }}
       />
 
-      <View className="border-b border-slate-200 bg-white p-4">
-        <View className="mx-auto w-full max-w-[720px] gap-3 rounded-2xl border border-slate-200 p-4">
-          <View className="flex-row items-center justify-between rounded-2xl border border-brand-200 bg-brand-50 p-4">
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-700">
-                <Feather name="package" size={20} color="#FFFFFF" />
-              </View>
-              <View>
-                <View className="flex-row items-center gap-2">
-                  <Text className="text-xs font-semibold text-brand-800">Target Product</Text>
-                  <View className="flex-row items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5">
-                    <View className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                    <Text className="text-[10px] font-medium text-emerald-800">Scanner Ready</Text>
-                  </View>
-                </View>
-                <Text className="text-base font-bold text-slate-900">
-                  {activeProductName} <Text className="text-xs font-normal text-slate-500">({activeBaseUnit})</Text>
-                </Text>
-              </View>
-            </View>
-            <Button
-              title="Change Product"
-              variant="secondary"
-              onPress={() => setPickerModalOpen(true)}
-            />
-          </View>
-
-          <Text className="mt-1 font-medium text-slate-900">
-            {editing ? 'Edit selling unit' : 'Add selling unit or variant'}
-          </Text>
-          <Text className="text-xs leading-5 text-slate-500">
-            One sold unit deducts the conversion quantity from {activeProductName}'s shared {activeBaseUnit}{' '}
-            inventory.
-          </Text>
-          <View className="flex-row gap-2">
-            <View
-              className={`min-h-12 flex-1 rounded-xl border px-3 justify-center transition-all ${
-                focusedField === 'name'
-                  ? 'border-brand-600 bg-white ring-2 ring-brand-200'
-                  : 'border-transparent bg-slate-100'
-              }`}
-            >
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                onFocus={() => setFocusedField('name')}
-                onBlur={() => setFocusedField(null)}
-                placeholder="Name, e.g. Pack of 12"
-                className="w-full text-sm text-slate-900"
-                style={{ outline: 'none' }}
-              />
-            </View>
-            <View
-              className={`min-h-12 flex-1 rounded-xl border px-3 justify-center transition-all ${
-                focusedField === 'sku'
-                  ? 'border-brand-600 bg-white ring-2 ring-brand-200'
-                  : 'border-transparent bg-slate-100'
-              }`}
-            >
-              <TextInput
-                value={sku}
-                onChangeText={setSku}
-                onFocus={() => setFocusedField('sku')}
-                onBlur={() => setFocusedField(null)}
-                autoCapitalize="characters"
-                placeholder="Variant SKU"
-                className="w-full text-sm text-slate-900"
-                style={{ outline: 'none' }}
-              />
-            </View>
-          </View>
-          <View className="flex-row flex-wrap gap-2">
-            {units.data
-              ?.filter((item) => item.isActive)
-              .map((item) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() => setUnit(item.code)}
-                  className={`rounded-full px-4 py-2 ${
-                    unit === item.code ? 'bg-brand-700' : 'bg-slate-100'
-                  }`}
-                >
-                  <Text
-                    className={`text-xs ${unit === item.code ? 'text-white' : 'text-slate-700'}`}
-                  >
-                    {item.name}
-                  </Text>
-                </Pressable>
-              ))}
-          </View>
-          {unit.toLowerCase() === (activeBaseUnit || '').toLowerCase() && Number(unitsPerBase) !== 1 ? (
-            <View className="flex-row items-center gap-2 rounded-xl bg-amber-50 p-3 border border-amber-200">
-              <Feather name="alert-triangle" size={16} color="#B45309" />
-              <Text className="flex-1 text-xs font-semibold text-amber-900 leading-snug">
-                You currently have "{unit}" selected (same as base unit). To create a {unitsPerBase}-pack, click the "Box", "Pack", or "Case" pill above.
-              </Text>
-            </View>
-          ) : null}
-          <View className="flex-row gap-2">
-            <View
-              className={`min-h-12 flex-1 rounded-xl border px-3 justify-center transition-all ${
-                focusedField === 'unitsPerBase'
-                  ? 'border-brand-600 bg-white ring-2 ring-brand-200'
-                  : 'border-transparent bg-slate-100'
-              }`}
-            >
-              <TextInput
-                value={unitsPerBase}
-                onChangeText={setUnitsPerBase}
-                onFocus={() => setFocusedField('unitsPerBase')}
-                onBlur={() => setFocusedField(null)}
-                keyboardType="decimal-pad"
-                placeholder={`Number of ${activeBaseUnit}`}
-                className="w-full text-sm text-slate-900"
-                style={{ outline: 'none' }}
-              />
-            </View>
-            <View
-              className={`min-h-12 flex-1 rounded-xl border px-3 justify-center transition-all ${
-                focusedField === 'price'
-                  ? 'border-brand-600 bg-white ring-2 ring-brand-200'
-                  : 'border-transparent bg-slate-100'
-              }`}
-            >
-              <TextInput
-                value={price}
-                onChangeText={setPrice}
-                onFocus={() => setFocusedField('price')}
-                onBlur={() => setFocusedField(null)}
-                keyboardType="decimal-pad"
-                placeholder="Selling price"
-                className="w-full text-sm text-slate-900"
-                style={{ outline: 'none' }}
-              />
-            </View>
-            <View
-              className={`min-h-12 flex-1 rounded-xl border px-3 justify-center transition-all ${
-                focusedField === 'cost'
-                  ? 'border-brand-600 bg-white ring-2 ring-brand-200'
-                  : 'border-transparent bg-slate-100'
-              }`}
-            >
-              <TextInput
-                value={cost}
-                onChangeText={setCost}
-                onFocus={() => setFocusedField('cost')}
-                onBlur={() => setFocusedField(null)}
-                keyboardType="decimal-pad"
-                placeholder="Cost (optional)"
-                className="w-full text-sm text-slate-900"
-                style={{ outline: 'none' }}
-              />
-            </View>
-          </View>
-          <View
-            className={`min-h-12 rounded-xl border px-3 justify-center transition-all ${
-              focusedField === 'barcode'
-                ? 'border-brand-600 bg-white ring-2 ring-brand-200'
-                : 'border-transparent bg-slate-100'
-            }`}
+      {isWide ? (
+        <View className="mx-auto w-full max-w-[1280px] flex-1 flex-row gap-5 px-4 py-4 lg:px-6">
+          <ScrollView
+            className="w-[46%] max-w-[560px] flex-none"
+            contentContainerClassName="pb-8"
+            keyboardShouldPersistTaps="handled"
           >
-            <TextInput
-              value={barcode}
-              onChangeText={setBarcode}
-              onFocus={() => setFocusedField('barcode')}
-              onBlur={() => setFocusedField(null)}
-              placeholder="Barcode (optional)"
-              className="w-full text-sm text-slate-900"
-              style={{ outline: 'none' }}
-            />
-          </View>
-          <View className="flex-row items-center rounded-2xl border border-brand-200 bg-brand-50 p-4">
-            <View className="flex-1 pr-3">
-              <Text className="text-sm font-semibold text-brand-950">
-                Whole container reserved for direct sale
-              </Text>
-              <Text className="mt-1 text-xs leading-5 text-brand-800">
-                When enabled, this unit uses sealed stock. The base unit and BOM recipes use only opened stock.
-              </Text>
-            </View>
-            <Switch
-              value={isPortioningContainer}
-              onValueChange={setIsPortioningContainer}
-              trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
-              thumbColor={isPortioningContainer ? '#1A593B' : '#FFFFFF'}
-            />
-          </View>
-          <View className="flex-row gap-2">
-            {editing ? <Button title="Cancel" variant="secondary" onPress={reset} /> : null}
-            <View className="flex-1">
-              <Button
-                title={save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add selling unit'}
-                disabled={
-                  save.isPending ||
-                  !activeProductId ||
-                  !name.trim() ||
-                  !sku.trim() ||
-                  !(Number(unitsPerBase) > 0) ||
-                  !price.trim()
-                }
-                onPress={() => save.mutate()}
-              />
-            </View>
+            {formCard}
+          </ScrollView>
+          <View className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-[#F8F9FA] p-4">
+            {variantsList}
           </View>
         </View>
-      </View>
-      {variants.isLoading ? (
-        <LoadingState />
-      ) : variants.isError ? (
-        <ErrorState message={variants.error.message} retry={() => void variants.refetch()} />
       ) : (
         <FlatList
           data={variants.data ?? []}
           keyExtractor={(item) => item.id}
-          contentContainerClassName="mx-auto w-full max-w-[720px] p-4 gap-2"
-          ListEmptyComponent={
-            <View className="items-center py-8">
-              <Text className="text-sm text-slate-500">No selling units configured for {activeProductName} yet.</Text>
+          className="flex-1"
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="mx-auto w-full max-w-[720px] gap-0 px-4 py-4 pb-10"
+          ListHeaderComponent={
+            <View className="mb-4 gap-4">
+              {formCard}
+              {listHeader}
             </View>
           }
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => {
-                setEditing(item);
-                setName(item.name);
-                setSku(item.sku);
-                setUnit(item.unit);
-                setUnitsPerBase(String(item.unitsPerBase));
-                setCost(item.cost ?? '');
-                setPrice(item.sellingPrice ?? '');
-                setBarcode(item.barcodes[0] ?? '');
-                setIsPortioningContainer(item.isPortioningContainer);
-              }}
-              className={`flex-row items-center rounded-2xl border border-slate-100 bg-white p-4 ${
-                item.isActive ? '' : 'opacity-60'
-              }`}
-            >
-              <View className="flex-1">
-                <Text className="font-medium text-slate-900">{item.name}</Text>
-                <Text className="mt-1 text-xs text-slate-500">
-                  {item.sku} · {
-                    (item.unit.toLowerCase() === 'g' || item.unit.toLowerCase() === 'gram') && (activeBaseUnit?.toLowerCase() === 'kg' || activeBaseUnit?.toLowerCase() === 'kilogram')
-                      ? `${item.unitsPerBase < 1 ? item.unitsPerBase * 1000 : item.unitsPerBase} g = ${item.unitsPerBase < 1 ? item.unitsPerBase : item.unitsPerBase / 1000} kg`
-                      : (item.unit.toLowerCase() === 'ml' || item.unit.toLowerCase() === 'milliliter') && (activeBaseUnit?.toLowerCase() === 'l' || activeBaseUnit?.toLowerCase() === 'liter')
-                        ? `${item.unitsPerBase < 1 ? item.unitsPerBase * 1000 : item.unitsPerBase} ml = ${item.unitsPerBase < 1 ? item.unitsPerBase : item.unitsPerBase / 1000} l`
-                        : `1 ${item.unit} = ${item.unitsPerBase} ${activeBaseUnit}`
-                  }
-                </Text>
-                <Text className="mt-1 text-xs text-brand-700">
-                  {item.sellingPrice ? `₱${item.sellingPrice}` : 'Uses base price'}
-                  {item.barcodes[0] ? ` · ${item.barcodes[0]}` : ''}
-                </Text>
-                {item.isPortioningContainer ? (
-                  <View className="mt-2 self-start rounded-full bg-amber-50 px-2.5 py-1">
-                    <Text className="text-[10px] font-semibold text-amber-800">
-                      Sealed stock container
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <Switch
-                value={item.isActive}
-                disabled={toggle.isPending}
-                onValueChange={() => toggle.mutate(item)}
-                trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
-                thumbColor={item.isActive ? '#1A593B' : '#FFFFFF'}
+          ListEmptyComponent={
+            variants.isLoading ? (
+              <LoadingState label="Loading selling units…" />
+            ) : variants.isError ? (
+              <ErrorState
+                message={variants.error.message}
+                retry={() => void variants.refetch()}
               />
-            </Pressable>
-          )}
+            ) : (
+              <View className="items-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10">
+                <Feather name="layers" size={28} color="#94A3B8" />
+                <Text className="mt-3 text-sm font-medium text-slate-700">No selling units yet</Text>
+                <Text className="mt-1 max-w-sm text-center text-xs text-slate-500">
+                  Add a box, pack, or other sellable unit for {activeProductName}.
+                </Text>
+              </View>
+            )
+          }
+          renderItem={renderVariant}
         />
       )}
     </Screen>

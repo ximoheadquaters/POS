@@ -1,5 +1,6 @@
 /* global self, caches, fetch, URL */
-const CACHE_NAME = 'ximo-pos-v1';
+// Bump on each release that must invalidate preview clients.
+const CACHE_NAME = 'ximo-pos-v7-audit-rows';
 const APP_SHELL = /* __XIMO_APP_SHELL__ */ ['/', '/manifest.json', '/ximo-icon.png'];
 
 self.addEventListener('install', (event) => {
@@ -28,30 +29,25 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
-          return response;
-        })
-        .catch(() => caches.match('/')),
-    );
-    return;
-  }
-
+  // Network-first so rebuilds (new hashed bundles) are picked up while online.
   event.respondWith(
-    caches.match(request).then(
-      (cached) =>
-        cached ||
-        fetch(request).then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        }),
-    ),
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          void caches.open(CACHE_NAME).then((cache) => {
+            // Navigate responses are stored under "/" for offline boot.
+            if (request.mode === 'navigate') {
+              void cache.put('/', copy);
+            } else {
+              void cache.put(request, copy);
+            }
+          });
+        }
+        return response;
+      })
+      .catch(() =>
+        request.mode === 'navigate' ? caches.match('/') : caches.match(request),
+      ),
   );
 });

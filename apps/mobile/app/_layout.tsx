@@ -8,8 +8,10 @@ import { StatusBar } from 'expo-status-bar';
 import { SessionProvider } from '@/providers/session';
 import { OfflineProvider } from '@/providers/offline';
 import { IosAlertProvider } from '@/providers/ios-alert';
+import { useBranchStore } from '@/store/branch';
 
 export default function RootLayout() {
+  const hydrateBranch = useBranchStore((state) => state.hydrate);
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -19,6 +21,9 @@ export default function RootLayout() {
         },
       }),
   );
+  useEffect(() => {
+    void hydrateBranch();
+  }, [hydrateBranch]);
   useEffect(() => {
     if (Platform.OS !== 'web' || !('serviceWorker' in navigator)) return;
     if (__DEV__) {

@@ -80,7 +80,7 @@ class ProductionDatabase implements Database {
         } as unknown as T,
       ]);
     }
-    if (sql.startsWith('update branch_inventory set quantity=quantity+$4')) {
+    if (sql.startsWith('insert into branch_inventory')) {
       const produced = Number(values[3]);
       const totalCost = Number(values[4]);
       this.state.finishedQuantity += produced;

@@ -351,7 +351,7 @@ export class ProductionService {
           input.branchId,
           output.id,
           input.quantityProduced,
-          outputState.rows[0]!.quantity,
+          outputState.rows[0]?.quantity ?? input.quantityProduced,
           `Produced from BOM ingredients (${batchNumber})`,
           batchId,
           actor.userId,
@@ -384,7 +384,7 @@ export class ProductionService {
         unit: output.unit,
         unitCost: unitCost.toFixed(4),
         totalCost: totalCost.toFixed(4),
-        quantityAfter: outputState.rows[0]!.quantity,
+        quantityAfter: outputState.rows[0]?.quantity ?? input.quantityProduced,
         ingredients: ingredientSummary,
       };
     });

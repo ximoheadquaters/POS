@@ -253,6 +253,7 @@ export function reportsRouter(database: Queryable): Router {
       ),
       database.query(
         `select si.product_name as name,si.sku,p.unit,
+          coalesce(c.name,'Uncategorized') as category,
           coalesce(sum(si.quantity),0)::float8 as quantity,
           coalesce(sum(si.line_total),0)::text as sales,
           coalesce(sum(si.quantity*si.unit_cost),0)::text as cost,
@@ -261,10 +262,11 @@ export function reportsRouter(database: Queryable): Router {
          from sale_items si
          join sales s on s.id=si.sale_id
          join products p on p.id=si.product_id
+         left join categories c on c.id=p.category_id
          where si.organization_id=$1 and s.completed_at >= $2 and s.completed_at < $3
            and s.status in ('completed','partially_refunded','refunded')
            and ${branchScope('s')}
-         group by si.product_name,si.sku,p.unit order by sales desc limit 10`,
+         group by si.product_name,si.sku,p.unit,c.name order by sales desc limit 100`,
         values,
       ),
       database.query(
@@ -278,7 +280,7 @@ export function reportsRouter(database: Queryable): Router {
          where si.organization_id=$1 and s.completed_at >= $2 and s.completed_at < $3
            and s.status in ('completed','partially_refunded','refunded')
            and ${branchScope('s')}
-         group by c.id,c.name order by sales desc limit 10`,
+         group by c.id,c.name order by sales desc limit 50`,
         values,
       ),
       database.query(

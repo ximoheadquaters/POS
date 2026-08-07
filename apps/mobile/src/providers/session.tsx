@@ -60,14 +60,39 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!session) return;
+    let cancelled = false;
+    let inFlight = false;
+    let backoffMs = 0;
+    let nextAllowedAt = 0;
+
     const refreshAccess = () => {
-      void refreshUser().catch(() => undefined);
+      if (cancelled || inFlight) return;
+      const now = Date.now();
+      if (now < nextAllowedAt) return;
+      inFlight = true;
+      void refreshUser()
+        .then(() => {
+          backoffMs = 0;
+        })
+        .catch((error) => {
+          // Back off hard on rate limits so the app doesn't keep 429-spamming.
+          if (error instanceof ApiError && error.status === 429) {
+            backoffMs = Math.min(Math.max(backoffMs * 2, 60_000), 5 * 60_000);
+            nextAllowedAt = Date.now() + backoffMs;
+          }
+        })
+        .finally(() => {
+          inFlight = false;
+        });
     };
+
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') refreshAccess();
     });
-    const refreshInterval = setInterval(refreshAccess, 60_000);
+    // Less aggressive than 60s — current-user rarely needs sub-minute polling.
+    const refreshInterval = setInterval(refreshAccess, 5 * 60_000);
     return () => {
+      cancelled = true;
       appStateSubscription.remove();
       clearInterval(refreshInterval);
     };

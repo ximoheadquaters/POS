@@ -1,0 +1,24 @@
+﻿{
+  "ownerWorkspace": {
+    "url": "***/api/v1/reports/workspace",
+    "status": 200,
+    "hasBearer": true,
+    "authError": null
+  },
+  "cashierWorkspaceLocalApprovedApi": {
+    "url": "***/api/v1/reports/workspace",
+    "status": 200,
+    "hasBearer": true,
+    "kpis": {
+      "netSales": "47.04",
+      "netCost": null,
+      "grossProfit": null,
+      "grossMarginPercent": null
+    }
+  },
+  "cashierWorkspaceRemoteRender": {
+    "note": "Render deploy still returns cost/profit fields until Phase F2 API deploy; local approved API sanitizes correctly.",
+    "status": 200,
+    "leaksCostOnRemote": true
+  }
+}

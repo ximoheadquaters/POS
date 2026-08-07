@@ -12,13 +12,19 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { minorToMoney, moneyToMinor, type POSBarcodeItem } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useIosAlert } from '@/providers/ios-alert';
 import { liveDataQueryOptions } from '@/lib/live-data';
+import {
+  comboCartLines,
+  comboSoldOut,
+  type PosComboPromotion,
+} from '@/lib/combo-cart';
+import { fetchPosCombos } from '@/lib/pos-combos';
 import { findExactScannedProduct, normalizeBarcode } from '@/lib/product-scan';
 import { useBarcodeScanner } from '@/hooks/use-barcode-scanner';
 import { useAppSidebar } from '@/components/app-sidebar';
@@ -38,12 +44,17 @@ import {
   type CartProduct,
   type SellingUnit,
 } from '@/store/cart';
+
+type PosRow =
+  | { kind: 'product'; key: string; product: CartProduct }
+  | { kind: 'combo'; key: string; promo: PosComboPromotion };
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
 import { useConnectivityStore } from '@/store/connectivity';
 
 function categoryIcon(name: string): ComponentProps<typeof Feather>['name'] {
   const normalized = name.toLowerCase();
+  if (normalized === 'combos') return 'gift';
   if (normalized.includes('beverage') || normalized.includes('water')) return 'droplet';
   if (normalized.includes('coffee')) return 'coffee';
   if (normalized.includes('snack')) return 'package';
@@ -148,10 +159,12 @@ export default function PosScreen() {
   const [unitProduct, setUnitProduct] = useState<CartProduct | null>(null);
   const items = useCartStore((state) => state.items);
   const add = useCartStore((state) => state.add);
+  const addQuantity = useCartStore((state) => state.addQuantity);
   const setQuantity = useCartStore((state) => state.setQuantity);
   const clearCart = useCartStore((state) => state.clear);
   const syncProducts = useCartStore((state) => state.syncProducts);
   const branch = useBranchStore((state) => state.activeBranch);
+  const promotionsEnabled = currentUser?.modules.includes('promotions') ?? false;
   const activeShift = useShiftStore((state) => state.activeShift);
   const hydrateShift = useShiftStore((state) => state.hydrate);
   const reservedByProduct = useConnectivityStore((state) => state.reservedByProduct);
@@ -255,6 +268,12 @@ export default function PosScreen() {
       lastPage.length === 30 ? allPages.length + 1 : undefined,
     ...liveDataQueryOptions,
   });
+  const promotionsQuery = useQuery({
+    queryKey: ['pos-promotions', branch?.id, debounced],
+    enabled: Boolean(branch) && promotionsEnabled,
+    queryFn: () => fetchPosCombos(branch!.id, debounced || undefined),
+    ...liveDataQueryOptions,
+  });
   const products = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
   const availableProducts = useMemo(
     () =>
@@ -266,9 +285,25 @@ export default function PosScreen() {
       }),
     [products, reservedByProduct],
   );
-  const categories = useMemo(
-    () => [
+  const combos = useMemo(() => {
+    const rows = promotionsQuery.data ?? [];
+    return rows.map((promo) => ({
+      ...promo,
+      components: promo.components.map((component) => {
+        const reserved = reservedByProduct[component.id] ?? 0;
+        return typeof component.availableQuantity === 'number'
+          ? {
+              ...component,
+              availableQuantity: Math.max(0, component.availableQuantity - reserved),
+            }
+          : component;
+      }),
+    }));
+  }, [promotionsQuery.data, reservedByProduct]);
+  const categories = useMemo(() => {
+    const names = [
       'All',
+      ...(combos.length ? ['Combos'] : []),
       ...Array.from(
         new Set(
           availableProducts
@@ -276,16 +311,26 @@ export default function PosScreen() {
             .filter((name): name is string => Boolean(name)),
         ),
       ),
-    ],
-    [availableProducts],
-  );
-  const visibleProducts = useMemo(
-    () =>
-      category === 'All'
-        ? availableProducts
-        : availableProducts.filter((product) => product.categoryName === category),
-    [availableProducts, category],
-  );
+    ];
+    return names;
+  }, [availableProducts, combos.length]);
+  const visibleRows = useMemo((): PosRow[] => {
+    const comboRows: PosRow[] = combos.map((promo) => ({
+      kind: 'combo',
+      key: `combo:${promo.id}`,
+      promo,
+    }));
+    const productRows: PosRow[] = availableProducts.map((product) => ({
+      kind: 'product',
+      key: product.id,
+      product,
+    }));
+    if (category === 'Combos') return comboRows;
+    if (category === 'All') return [...comboRows, ...productRows];
+    return productRows.filter(
+      (row) => row.kind === 'product' && row.product.categoryName === category,
+    );
+  }, [availableProducts, category, combos]);
   const cartQuantities = useMemo(() => {
     const quantities = new Map<string, number>();
     for (const item of items) {
@@ -402,6 +447,26 @@ export default function PosScreen() {
     }
     add(selectSellingUnit(product, sellingUnit));
     setUnitProduct(null);
+    focusInput();
+  };
+
+  const addCombo = (promo: PosComboPromotion) => {
+    if (comboSoldOut(promo, cartQuantities)) {
+      showAlert({
+        title: 'Not enough stock',
+        message: `One or more items in “${promo.name}” are out of stock for this combo.`,
+        type: 'error',
+      });
+      return;
+    }
+    for (const line of comboCartLines(promo)) {
+      addQuantity(line.product, line.quantity);
+    }
+    showAlert({
+      title: 'Combo added',
+      message: `${promo.name} added at ${formatMoney(promo.comboPrice)}.`,
+      type: 'success',
+    });
     focusInput();
   };
 
@@ -612,25 +677,87 @@ export default function PosScreen() {
                 <ErrorState message={query.error.message} retry={() => void query.refetch()} />
               ) : (
                 <FlatList
-                  data={visibleProducts}
-                  keyExtractor={(item) => item.id}
-                  onEndReached={() => query.hasNextPage && void query.fetchNextPage()}
+                  data={visibleRows}
+                  keyExtractor={(item) => item.key}
+                  onEndReached={() =>
+                    category !== 'Combos' && query.hasNextPage && void query.fetchNextPage()
+                  }
                   contentContainerClassName="pb-2"
                   ListEmptyComponent={
-                    <EmptyState title="No products" message="Try a different search or category." />
+                    promotionsQuery.isError && (category === 'All' || category === 'Combos') ? (
+                      <ErrorState
+                        message={promotionsQuery.error.message}
+                        retry={() => void promotionsQuery.refetch()}
+                      />
+                    ) : (
+                      <EmptyState
+                        title={category === 'Combos' ? 'No combos' : 'No products'}
+                        message={
+                          category === 'Combos'
+                            ? 'Create an active combo bundle with products in Promotions, then refresh POS.'
+                            : 'Try a different search or category.'
+                        }
+                      />
+                    )
                   }
                   renderItem={({ item, index }) => {
-                    const quantity = cartQuantities.get(item.id) ?? 0;
+                    if (item.kind === 'combo') {
+                      const soldOut = comboSoldOut(item.promo, cartQuantities);
+                      const summary = item.promo.components
+                        .map((component) =>
+                          component.requiredQuantity > 1
+                            ? `${component.requiredQuantity}× ${component.name}`
+                            : component.name,
+                        )
+                        .join(' + ');
+                      return (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add combo ${item.promo.name} to cart`}
+                          disabled={soldOut}
+                          onPress={() => addCombo(item.promo)}
+                          className={`min-h-16 flex-row items-center border-b border-slate-100 px-4 ${
+                            soldOut ? 'opacity-50' : 'active:bg-brand-50'
+                          }`}
+                        >
+                          <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-rose-50">
+                            <Feather name="gift" size={18} color="#BE123C" />
+                          </View>
+                          <View className="flex-1">
+                            <View className="flex-row items-center gap-2">
+                              <Text className="font-medium text-slate-900">{item.promo.name}</Text>
+                              <View className="rounded-full bg-rose-100 px-2 py-0.5">
+                                <Text className="text-[9px] font-semibold uppercase text-rose-700">
+                                  Combo
+                                </Text>
+                              </View>
+                            </View>
+                            <Text className="mt-0.5 text-[10px] text-slate-400" numberOfLines={1}>
+                              {summary}
+                            </Text>
+                          </View>
+                          <Text className="w-24 text-right text-base font-semibold text-slate-900">
+                            {formatMoney(item.promo.comboPrice)}
+                          </Text>
+                          <View className="ml-3 h-8 w-8 items-center justify-center rounded-full bg-brand-700">
+                            <Feather name="plus" size={16} color="#FFFFFF" />
+                          </View>
+                        </Pressable>
+                      );
+                    }
+
+                    const product = item.product;
+                    const quantity = cartQuantities.get(product.id) ?? 0;
                     const soldOut =
-                      item.availableQuantity !== null &&
-                      item.availableQuantity !== undefined &&
-                      (item.availableQuantity <= 0 || quantity >= item.availableQuantity);
+                      product.availableQuantity !== null &&
+                      product.availableQuantity !== undefined &&
+                      (product.availableQuantity <= 0 || quantity >= product.availableQuantity);
                     return (
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`Add ${item.name} to cart`}
+                        accessibilityLabel={`Add ${product.name} to cart`}
                         disabled={soldOut}
-                        onPress={() => addProduct(item)}
+                        onPress={() => addProduct(product)}
                         className={`min-h-16 flex-row items-center border-b border-slate-100 px-4 ${
                           soldOut ? 'opacity-50' : 'active:bg-brand-50'
                         }`}
@@ -645,7 +772,7 @@ export default function PosScreen() {
                           }`}
                         >
                           <Feather
-                            name={productIcon(item.name)}
+                            name={productIcon(product.name)}
                             size={18}
                             color={
                               index % 3 === 0 ? '#3867F4' : index % 3 === 1 ? '#B45309' : '#1A593B'
@@ -653,20 +780,21 @@ export default function PosScreen() {
                           />
                         </View>
                         <View className="flex-1">
-                          <Text className="font-medium text-slate-900">{item.name}</Text>
+                          <Text className="font-medium text-slate-900">{product.name}</Text>
                           <Text className="mt-0.5 text-[10px] uppercase text-slate-400">
-                            {item.sku}
+                            {product.sku}
                           </Text>
                         </View>
                         <Text className="w-28 text-right text-xs text-slate-400">
-                          {item.availableQuantity === null || item.availableQuantity === undefined
+                          {product.availableQuantity === null ||
+                          product.availableQuantity === undefined
                             ? quantity
                               ? `${quantity} in order`
                               : ''
-                            : `${item.availableQuantity} ${item.unit ?? 'piece'} in stock`}
+                            : `${product.availableQuantity} ${product.unit ?? 'piece'} in stock`}
                         </Text>
                         <Text className="w-24 text-right text-base font-semibold text-slate-900">
-                          {formatMoney(item.sellingPrice)}
+                          {formatMoney(product.sellingPrice)}
                         </Text>
                         <View className="ml-3 h-8 w-8 items-center justify-center rounded-full bg-brand-700">
                           <Feather name="plus" size={16} color="#FFFFFF" />
@@ -704,7 +832,9 @@ export default function PosScreen() {
                       <View className="flex-1 pr-2">
                         <Text className="font-medium text-slate-900">{item.product.name}</Text>
                         <Text className="mt-1 text-[10px] uppercase text-slate-400">
-                          {item.product.sku}
+                          {item.product.promoName
+                            ? `${item.product.promoName} · ${item.product.sku}`
+                            : item.product.sku}
                         </Text>
                       </View>
                       <Text className="font-semibold text-slate-900">

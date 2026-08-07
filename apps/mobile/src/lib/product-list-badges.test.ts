@@ -33,12 +33,12 @@ describe('product-list-badges unit tests', () => {
     expect(formatCatalogUnitPrice('25.00', 'piece')).toBe('₱25.00');
   });
 
-  it('4. Ingredient product shows Bulk Source in management catalog', () => {
+  it('4. Ingredient product shows Raw Material in management catalog', () => {
     const badges = getRetailProductTypeBadges({
       inventoryRole: 'ingredient',
       unit: 'kg',
     });
-    expect(badges.map((b) => b.label)).toContain('Bulk Source');
+    expect(badges.map((b) => b.label)).toContain('Raw Material');
   });
 
   it('5. Ingredient-only product is excluded from cashier catalog filter', () => {
@@ -53,7 +53,7 @@ describe('product-list-badges unit tests', () => {
       preparationBehavior: 'preproduced',
       unit: 'pack',
     });
-    expect(badges.map((b) => b.label)).toContain('Repacked');
+    expect(badges.map((b) => b.label)).toContain('Repacked Item');
   });
 
   it('7 & 8. hasRecipe shows recipe-configured status without extra N+1 recipe requests', () => {
@@ -62,7 +62,7 @@ describe('product-list-badges unit tests', () => {
       hasRecipe: true,
       unit: 'piece',
     });
-    expect(badges.map((b) => b.label)).toContain('Repacking recipe configured');
+    expect(badges.map((b) => b.label)).toContain('Has Repack Recipe');
   });
 
   it('9. Zero quantity shows Out of Stock', () => {
@@ -79,6 +79,14 @@ describe('product-list-badges unit tests', () => {
     const withThreshold = getStockStatus(3, 5);
     expect(withThreshold.status).toBe('low_stock');
     expect(withThreshold.label).toBe('Low Stock');
+
+    const warning = getStockStatus(8, 5);
+    expect(warning.status).toBe('warning');
+    expect(warning.label).toBe('Running Low');
+
+    const healthy = getStockStatus(12, 5);
+    expect(healthy.status).toBe('in_stock');
+    expect(healthy.label).toBe('In Stock');
   });
 
   it('11. Legacy invalid conversion product remains visible with non-blocking warning', () => {

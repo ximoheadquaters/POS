@@ -87,7 +87,8 @@ export const RETAIL_SIDEBAR_SECTIONS: SidebarSectionDef[] = [
   {
     sectionTitle: 'DAILY WORK',
     groups: [
-      { id: 'pos', title: 'Dashboard & POS' },
+      { id: 'dashboard', title: 'Dashboard' },
+      { id: 'pos', title: 'POS' },
       { id: 'sales', title: 'Sales & Orders' },
     ],
   },

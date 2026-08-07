@@ -12,11 +12,19 @@ export const notFoundHandler: RequestHandler = (_request, response) => {
 export const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   const requestId = response.locals.requestId as string | undefined;
   if (error instanceof ZodError) {
+    const firstIssue = error.issues[0];
+    const field = firstIssue?.path?.filter((part) => typeof part === 'string' || typeof part === 'number').join('.') || undefined;
+    const firstMessage = firstIssue?.message?.trim();
     response.status(400).json({
       success: false,
       error: {
         code: 'VALIDATION_ERROR',
-        message: 'Request validation failed',
+        message:
+          firstMessage && firstMessage !== 'Invalid input'
+            ? field
+              ? `${field}: ${firstMessage}`
+              : firstMessage
+            : 'Request validation failed',
         details: error.flatten(),
         requestId,
       },
@@ -30,7 +38,7 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
     });
     return;
   }
-  const pgError = error as { code?: string; constraint?: string };
+  const pgError = error as { code?: string; constraint?: string; table?: string };
   const pgCode = pgError.code;
   if (pgCode === '23505') {
     const duplicate =
@@ -45,6 +53,28 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
     response.status(409).json({
       success: false,
       error: { ...duplicate, requestId },
+    });
+    return;
+  }
+  if (pgCode === '42P01') {
+    response.status(503).json({
+      success: false,
+      error: {
+        code: 'SCHEMA_MISSING',
+        message: 'Required database tables are missing. Apply pending migrations and try again.',
+        requestId,
+      },
+    });
+    return;
+  }
+  if (pgCode === '23503') {
+    response.status(400).json({
+      success: false,
+      error: {
+        code: 'FOREIGN_KEY_VIOLATION',
+        message: 'One of the selected products is invalid or no longer available.',
+        requestId,
+      },
     });
     return;
   }

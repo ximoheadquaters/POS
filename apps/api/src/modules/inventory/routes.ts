@@ -24,10 +24,25 @@ export function inventoryRouter(database: Database): Router {
       paginationSchema.extend({
         branchId: stockAdjustmentSchema.shape.branchId,
         inventoryRole: z.enum(['sellable', 'ingredient', 'both']).optional(),
+        sort: z.enum(['name', 'quantity_asc', 'quantity_desc']).optional(),
       }),
     ),
     async (request, response) => {
-      const { branchId, page, pageSize, search, inventoryRole } = request.query as any;
+      const { branchId, page, pageSize, search, inventoryRole, sort } = request.query as {
+        branchId: string;
+        page: number;
+        pageSize: number;
+        search?: string;
+        inventoryRole?: 'sellable' | 'ingredient' | 'both';
+        sort?: 'name' | 'quantity_asc' | 'quantity_desc';
+      };
+      // Whitelist only — never interpolate raw query input into ORDER BY.
+      const orderBy =
+        sort === 'quantity_asc'
+          ? 'bi.quantity asc nulls last, lower(p.name) asc'
+          : sort === 'quantity_desc'
+            ? 'bi.quantity desc nulls last, lower(p.name) asc'
+            : 'lower(p.name) asc';
       const result = await database.query(
         `select bi.id,p.id as "productId",p.name,p.sku,p.unit,
           p.inventory_role as "inventoryRole",
@@ -56,8 +71,9 @@ export function inventoryRouter(database: Database): Router {
          ) container on true
          where bi.organization_id=$1 and bi.branch_id=$2 and p.track_inventory
            and ($3::text is null or p.name ilike '%'||$3||'%' or p.sku ilike '%'||$3||'%')
-           and ($6::text is null or p.inventory_role=$6)
-         order by p.name limit $4 offset $5`,
+           and ($6::text is null or coalesce(p.inventory_role, 'sellable') = $6)
+         order by ${orderBy}
+         limit $4 offset $5`,
         [
           request.authUser!.organization.id,
           branchId,
@@ -91,7 +107,7 @@ export function inventoryRouter(database: Database): Router {
         both: number;
       }>(
         `select count(*)::int as all,
-          count(*) filter (where p.inventory_role='sellable')::int as sellable,
+          count(*) filter (where coalesce(p.inventory_role,'sellable')='sellable')::int as sellable,
           count(*) filter (where p.inventory_role='ingredient')::int as ingredient,
           count(*) filter (where p.inventory_role='both')::int as both
          from branch_inventory bi

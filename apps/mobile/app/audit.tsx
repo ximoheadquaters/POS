@@ -1,12 +1,20 @@
-import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { useMemo, useState, type ComponentProps } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useQuery } from '@tanstack/react-query';
 import type { RoleCode } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/format';
-import { Button, EmptyState, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { useSession } from '@/providers/session';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { roleLabel } from '@/lib/access-control';
@@ -25,72 +33,92 @@ interface AuditLogRecord {
   branchName?: string;
 }
 
-interface PaginatedAuditLogs {
-  items: AuditLogRecord[];
-  page: number;
-  pageSize: number;
-  total: number;
+type FeatherName = ComponentProps<typeof Feather>['name'];
+
+interface DetailRow {
+  label: string;
+  value: string;
 }
 
-const CATEGORY_OPTIONS = [
-  { label: 'All Categories', value: 'all', icon: 'layers' },
-  { label: 'Sales & Checkout', value: 'sale', icon: 'shopping-cart' },
-  { label: 'Customer Refunds', value: 'return', icon: 'rotate-ccw' },
-  { label: 'Register & Cash Shifts', value: 'shift', icon: 'key' },
-  { label: 'Inventory & Transfers', value: 'inventory', icon: 'sliders' },
-  { label: 'Staff & Security PINs', value: 'user', icon: 'users' },
-  { label: 'Products & Catalogue', value: 'product', icon: 'box' },
-  { label: 'Purchasing & Suppliers', value: 'purchase_order', icon: 'truck' },
-  { label: 'Store Settings', value: 'organization', icon: 'settings' },
+const CATEGORY_OPTIONS: Array<{ label: string; value: string; icon: FeatherName }> = [
+  { label: 'All categories', value: 'all', icon: 'layers' },
+  { label: 'Sales', value: 'sale', icon: 'shopping-cart' },
+  { label: 'Refunds', value: 'return', icon: 'rotate-ccw' },
+  { label: 'Shifts & cash', value: 'shift', icon: 'key' },
+  { label: 'Inventory', value: 'inventory', icon: 'sliders' },
+  { label: 'Staff', value: 'user', icon: 'users' },
+  { label: 'Products', value: 'product', icon: 'box' },
+  { label: 'Purchasing', value: 'purchase_order', icon: 'truck' },
+  { label: 'Settings', value: 'organization', icon: 'settings' },
 ];
 
 const ROLE_OPTIONS: Array<{ label: string; value: string }> = [
-  { label: 'All Roles', value: 'all' },
+  { label: 'All roles', value: 'all' },
   { label: 'Owner', value: 'owner' },
   { label: 'Administrator', value: 'administrator' },
   { label: 'Manager', value: 'manager' },
   { label: 'Cashier', value: 'cashier' },
-  { label: 'Inventory Staff', value: 'inventory_staff' },
+  { label: 'Inventory staff', value: 'inventory_staff' },
 ];
 
-function actionLabel(action: string): { label: string; bg: string; text: string; icon: string } {
+function formatRelativeTime(isoString: string): string {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
+  const diffMs = Date.now() - date.getTime();
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 14) return `${days}d ago`;
+  return formatDate(isoString);
+}
+
+function actionLabel(action: string): string {
   switch (action) {
     case 'sale.created':
     case 'sale.completed':
-      return { label: 'Sale Completed', bg: 'bg-emerald-100', text: 'text-emerald-800', icon: 'shopping-cart' };
+      return 'Sale completed';
     case 'return.created':
-      return { label: 'Customer Refund', bg: 'bg-red-100', text: 'text-red-800', icon: 'rotate-ccw' };
+      return 'Customer refund';
     case 'shift.opened':
-      return { label: 'Shift Opened', bg: 'bg-blue-100', text: 'text-blue-800', icon: 'unlock' };
+      return 'Shift opened';
     case 'shift.closed':
-      return { label: 'Shift Closed', bg: 'bg-purple-100', text: 'text-purple-800', icon: 'lock' };
+      return 'Shift closed';
     case 'cash.moved':
-      return { label: 'Cash Drawer Movement', bg: 'bg-amber-100', text: 'text-amber-800', icon: 'dollar-sign' };
+      return 'Cash movement';
     case 'inventory.adjusted':
     case 'inventory.opening_stock':
-      return { label: 'Stock Adjusted', bg: 'bg-amber-100', text: 'text-amber-900', icon: 'sliders' };
+      return 'Stock adjusted';
     case 'user.created':
-      return { label: 'Employee Added', bg: 'bg-teal-100', text: 'text-teal-800', icon: 'user-plus' };
+      return 'Employee added';
     case 'user.updated':
-      return { label: 'Access Updated', bg: 'bg-indigo-100', text: 'text-indigo-800', icon: 'user-check' };
+      return 'Access updated';
     case 'user.pin_updated':
-      return { label: 'Security PIN Changed', bg: 'bg-rose-100', text: 'text-rose-800', icon: 'key' };
+      return 'PIN changed';
     case 'product.created':
     case 'product_variant.created':
-      return { label: 'Product Created', bg: 'bg-emerald-50', text: 'text-emerald-700', icon: 'box' };
+      return 'Product created';
     case 'product.updated':
-      return { label: 'Product Updated', bg: 'bg-slate-100', text: 'text-slate-700', icon: 'edit-2' };
+      return 'Product updated';
     case 'product.deleted':
-      return { label: 'Product Deleted', bg: 'bg-red-50', text: 'text-red-700', icon: 'trash-2' };
+      return 'Product deleted';
     case 'organization.settings_updated':
     case 'organization.updated':
-      return { label: 'Settings Updated', bg: 'bg-slate-200', text: 'text-slate-800', icon: 'settings' };
+      return 'Settings updated';
     default:
-      if (action.startsWith('purchase_order')) {
-        return { label: 'Supplier Order', bg: 'bg-cyan-100', text: 'text-cyan-800', icon: 'truck' };
-      }
-      return { label: action, bg: 'bg-slate-100', text: 'text-slate-700', icon: 'activity' };
+      if (action.startsWith('purchase_order')) return 'Supplier order';
+      return action.replace(/[._]/g, ' ');
   }
+}
+
+function isNegativeAction(action: string): boolean {
+  return (
+    action === 'return.created' ||
+    action === 'product.deleted' ||
+    action === 'user.pin_updated'
+  );
 }
 
 function formatKeyName(key: string): string {
@@ -101,118 +129,86 @@ function formatKeyName(key: string): string {
     .trim();
 }
 
-function formatValue(key: string, value: any): string {
-  if (value === null || value === undefined || value === '') return 'N/A';
+function formatValue(key: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (key.toLowerCase().includes('cost') || key.toLowerCase().includes('price') || key.toLowerCase().includes('amount')) {
-    return formatMoney(value);
+  const lower = key.toLowerCase();
+  if (
+    lower.includes('cost') ||
+    lower.includes('price') ||
+    lower.includes('amount') ||
+    lower.includes('cash') ||
+    lower.includes('total') ||
+    lower.includes('variance')
+  ) {
+    return formatMoney(value as string | number);
   }
   return String(value);
 }
 
-function formatDetailSummary(log: AuditLogRecord): string {
+function getTargetSummary(log: AuditLogRecord): string {
   const data = log.after || log.before || log.metadata || {};
 
-  // Sales
   if (log.action === 'sale.created' || log.action === 'sale.completed') {
     const rcpt = data.receiptNumber || data.receipt_number || log.entityId.slice(0, 8);
-    const amt = formatMoney(data.totalAmount || data.total_amount || '0');
-    return `Receipt #${rcpt} · Total: ${amt}`;
+    const total = data.total ?? data.totalAmount ?? data.total_amount ?? '0';
+    return `${rcpt} · ${formatMoney(total)}`;
   }
-
-  // Returns / Refunds
   if (log.action === 'return.created') {
-    const amt = formatMoney(data.refundAmount || data.refund_amount || '0');
-    const reason = data.reason || 'Customer Return';
-    return `Refund: ${amt} (${reason})`;
+    return formatMoney(data.refundAmount || data.refund_amount || '0');
   }
-
-  // Cash Movements
   if (log.action === 'cash.moved') {
-    const typeLabel = data.type === 'cash_in' ? 'Cash In' : 'Cash Out';
-    const amt = formatMoney(data.amount || '0');
-    const reason = data.reason ? ` · ${data.reason}` : '';
-    return `${typeLabel}: ${amt}${reason}`;
+    const typeLabel = data.type === 'cash_in' ? 'Cash in' : 'Cash out';
+    return `${typeLabel} · ${formatMoney(data.amount || '0')}`;
   }
-
-  // Register Shifts
   if (log.action === 'shift.opened') {
-    return `Opened shift · Starting cash: ${formatMoney(data.startingCash || '0')}`;
+    return `Start ${formatMoney(data.startingCash || '0')}`;
   }
   if (log.action === 'shift.closed') {
-    const counted = formatMoney(data.actualCash || '0');
-    const variance = formatMoney(data.variance || '0');
-    return `Closed shift · Counted: ${counted} (Variance: ${variance})`;
+    return `Counted ${formatMoney(data.actualCash || '0')}`;
   }
-
-  // Stock Adjustments / Opening Stock
   if (log.action === 'inventory.adjusted' || log.action === 'inventory.opening_stock') {
-    const prodName = data.productName || data.name || (data.productId ? `Product (${data.productId.slice(0, 8)})` : 'Stock item');
-    const delta = data.quantityDelta ?? data.quantity ?? data.openedQuantity ?? 0;
-    const deltaStr = delta > 0 ? `+${delta}` : `${delta}`;
-    const reason = data.reason || 'Manual Adjustment';
-    return `${prodName} · Quantity: ${deltaStr} · Reason: ${reason}`;
+    const prodName =
+      data.productName ||
+      data.name ||
+      (data.productId ? `Product ${String(data.productId).slice(0, 8)}` : 'Stock item');
+    const delta = Number(data.quantityDelta ?? data.quantity ?? data.openedQuantity ?? 0);
+    const deltaStr = Number.isFinite(delta) ? (delta > 0 ? `+${delta}` : `${delta}`) : '0';
+    return `${prodName} · ${deltaStr}`;
   }
+  if (
+    log.action.startsWith('product') ||
+    log.action === 'user.created' ||
+    log.action === 'user.updated' ||
+    log.action === 'user.pin_updated'
+  ) {
+    return String(data.name || data.displayName || data.email || log.branchName || '—');
+  }
+  if (log.branchName) return log.branchName;
+  return `#${log.entityId.slice(0, 8)}`;
+}
 
-  // Products
-  if (log.action === 'product.created' || log.action === 'product_variant.created') {
-    const name = data.name || 'New Item';
-    const sku = data.sku ? ` · SKU: ${data.sku}` : '';
-    const unit = data.unit ? ` · Unit: ${data.unit}` : '';
-    return `Created product "${name}"${sku}${unit}`;
-  }
-  if (log.action === 'product.updated' || log.action === 'product_variant.updated') {
-    const name = data.name || log.before?.name || 'Product';
-    return `Updated product details for "${name}"`;
-  }
-  if (log.action === 'product.deleted') {
-    const name = data.name || log.before?.name || 'Product';
-    return `Removed product "${name}" from catalogue`;
-  }
+function getDetailRows(log: AuditLogRecord): DetailRow[] {
+  const data = log.after || log.before || log.metadata || {};
+  const rows: DetailRow[] = [
+    { label: 'When', value: formatDate(log.createdAt) },
+    { label: 'Staff', value: `${log.actorName} (${roleLabel(log.actorRole || 'cashier')})` },
+  ];
+  if (log.branchName) rows.push({ label: 'Branch', value: log.branchName });
+  rows.push({ label: 'Log ID', value: `#${log.id.slice(0, 8)}` });
 
-  // Store Settings & Organization
-  if (log.action === 'organization.settings_updated' || log.action === 'organization.updated') {
-    const orgName = data.name || 'Store';
-    return `Updated profile & store settings for "${orgName}"`;
+  for (const [key, val] of Object.entries(data)) {
+    if (val === null || val === undefined || val === '' || typeof val === 'object' || key === 'id') {
+      continue;
+    }
+    rows.push({ label: formatKeyName(key), value: formatValue(key, val) });
   }
-
-  // Employees & Access
-  if (log.action === 'user.created') {
-    const name = data.displayName || data.email || 'Employee';
-    const role = roleLabel(data.role || 'cashier');
-    return `Added staff member "${name}" (${role})`;
-  }
-  if (log.action === 'user.updated') {
-    const name = data.displayName || log.before?.displayName || 'Employee';
-    return `Updated employee profile for "${name}"`;
-  }
-  if (log.action === 'user.pin_updated') {
-    const name = data.displayName || log.before?.displayName || 'Employee';
-    return `Updated security PIN for "${name}"`;
-  }
-
-  // Generic Human-Friendly Summary (No Raw JSON)
-  if (typeof data === 'object' && data !== null) {
-    const parts: string[] = [];
-    if (data.name) parts.push(`Name: ${data.name}`);
-    if (data.sku) parts.push(`SKU: ${data.sku}`);
-    if (data.barcode) parts.push(`Barcode: ${data.barcode}`);
-    if (data.unit) parts.push(`Unit: ${data.unit}`);
-    if (data.cost) parts.push(`Cost: ${formatMoney(data.cost)}`);
-    if (data.price) parts.push(`Price: ${formatMoney(data.price)}`);
-    if (parts.length > 0) return parts.join(' · ');
-
-    const entries = Object.entries(data)
-      .filter(([k, v]) => typeof v !== 'object' && v !== null && k !== 'id')
-      .slice(0, 3)
-      .map(([k, v]) => `${formatKeyName(k)}: ${formatValue(k, v)}`);
-    if (entries.length > 0) return entries.join(' · ');
-  }
-
-  return `Activity logged for Record #${log.entityId.slice(0, 8)}`;
+  return rows;
 }
 
 function AuditContent() {
+  const { width } = useWindowDimensions();
+  const isWide = width >= 960;
   const { currentUser } = useSession();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -220,7 +216,7 @@ function AuditContent() {
   const [selectedRole, setSelectedRole] = useState('all');
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedLog, setSelectedLog] = useState<AuditLogRecord | null>(null);
 
   const isModuleEnabled = currentUser?.modules.includes('audit');
   const canViewAudit =
@@ -228,7 +224,6 @@ function AuditContent() {
     (currentUser?.permissions.includes('audit:read') ||
       ['owner', 'administrator', 'manager'].includes(currentUser?.role || ''));
 
-  // Combined search term for API backend search filter
   const effectiveSearch = [
     selectedCategory !== 'all' ? selectedCategory : '',
     selectedRole !== 'all' ? selectedRole : '',
@@ -241,22 +236,34 @@ function AuditContent() {
     queryKey: ['audit-logs', page, effectiveSearch],
     queryFn: () =>
       api<AuditLogRecord[]>(
-        `/audit?page=${page}&pageSize=15${effectiveSearch ? `&search=${encodeURIComponent(effectiveSearch)}` : ''}`,
+        `/audit?page=${page}&pageSize=15${
+          effectiveSearch ? `&search=${encodeURIComponent(effectiveSearch)}` : ''
+        }`,
       ),
     enabled: canViewAudit,
   });
+
+  const logs = useMemo(() => {
+    if (Array.isArray(query.data)) return query.data;
+    return ((query.data as any)?.items ?? (query.data as any)?.data ?? []) as AuditLogRecord[];
+  }, [query.data]);
+
+  const activeCategory =
+    CATEGORY_OPTIONS.find((c) => c.value === selectedCategory) ?? CATEGORY_OPTIONS[0]!;
+  const activeRole = ROLE_OPTIONS.find((r) => r.value === selectedRole) ?? ROLE_OPTIONS[0]!;
+  const hasFilters = selectedCategory !== 'all' || selectedRole !== 'all' || Boolean(search.trim());
 
   if (!isModuleEnabled) {
     return (
       <Screen>
         <Header title="Audit Logs" showBack backLabel="Back" />
         <View className="flex-1 items-center justify-center p-8">
-          <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 border border-amber-200">
+          <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl border border-amber-200 bg-amber-50">
             <Feather name="lock" size={26} color="#B45309" />
           </View>
           <Text className="text-xl font-bold text-slate-900">Module Access Disabled</Text>
-          <Text className="mt-2 max-w-xs text-center text-xs text-slate-500 leading-relaxed">
-            The Audit Logs module is disabled for your organization. Contact your administrator or store owner to enable activity tracking.
+          <Text className="mt-2 max-w-xs text-center text-xs leading-relaxed text-slate-500">
+            The Audit Logs module is disabled for your organization.
           </Text>
           <View className="mt-6 w-full max-w-xs">
             <Button title="Return to POS" onPress={() => router.push('/(tabs)/pos')} />
@@ -269,227 +276,314 @@ function AuditContent() {
   if (!canViewAudit) {
     return (
       <Screen>
-        <Header title="Audit Logs" subtitle="Restricted Access" showBack backLabel="More" fallbackHref="/(tabs)/more" />
+        <Header
+          title="Audit Logs"
+          subtitle="Restricted access"
+          showBack
+          backLabel="More"
+          fallbackHref="/(tabs)/more"
+        />
         <View className="flex-1 items-center justify-center p-6">
           <View className="mb-4 h-14 w-14 items-center justify-center rounded-full bg-red-100">
             <Feather name="shield-off" size={26} color="#DC2626" />
           </View>
           <Text className="mb-2 text-xl font-bold text-slate-900">Access Restricted</Text>
           <Text className="max-w-sm text-center text-sm text-slate-600">
-            Audit logs contain sensitive transaction security trails. Only Store Owners, Administrators, and Managers are authorized to view audit history.
+            Only owners, administrators, and managers can view audit history.
           </Text>
         </View>
       </Screen>
     );
   }
 
-  const logs = Array.isArray(query.data)
-    ? query.data
-    : ((query.data as any)?.items ?? (query.data as any)?.data ?? []);
-  const totalPages = Math.max(1, Math.ceil(logs.length / 15));
-  const activeCategoryObj = CATEGORY_OPTIONS.find((c) => c.value === selectedCategory) ?? CATEGORY_OPTIONS[0]!;
-  const activeRoleObj = ROLE_OPTIONS.find((r) => r.value === selectedRole) ?? ROLE_OPTIONS[0]!;
-
   return (
     <Screen>
       <Header
         title="Audit Logs"
-        subtitle="Complete system transaction & activity trail across all staff roles"
+        subtitle="Staff actions and system activity"
         showBack
         backLabel="More"
         fallbackHref="/(tabs)/more"
       />
 
-      <ScrollView contentContainerClassName="p-4 pb-12">
-        <View className="mx-auto w-full max-w-5xl">
-          {/* Dropdown Filters & Search Bar */}
-          <View className="mb-4 gap-3">
-            <View className="flex-row flex-wrap gap-2">
-              {/* Category Dropdown Trigger */}
-              <View className="flex-1 min-w-[200px]">
-                <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Category Filter
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setCategoryDropdownOpen(true)}
-                  className="min-h-11 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 active:bg-slate-50 shadow-xs"
-                >
-                  <View className="flex-row items-center gap-2">
-                    <Feather name={activeCategoryObj.icon as any} size={16} color="#1A593B" />
-                    <Text className="text-sm font-semibold text-slate-900">{activeCategoryObj.label}</Text>
-                  </View>
-                  <Feather name="chevron-down" size={16} color="#64748B" />
-                </Pressable>
-              </View>
+      <View className="gap-2 border-b border-slate-100 bg-white px-4 py-3">
+        <View className="min-h-11 flex-row items-center rounded-xl border border-slate-200 bg-slate-100 px-3">
+          <Feather name="search" size={17} color="#81776E" />
+          <TextInput
+            value={search}
+            onChangeText={(text) => {
+              setSearch(text);
+              setPage(1);
+            }}
+            placeholder="Search staff, action, or details"
+            placeholderTextColor="#81776E"
+            selectionColor="#1A593B"
+            style={{ outline: 'none' } as object}
+            className="ml-2 min-h-11 flex-1 bg-transparent text-sm text-slate-900"
+          />
+          {search ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              onPress={() => {
+                setSearch('');
+                setPage(1);
+              }}
+            >
+              <Feather name="x" size={16} color="#81776E" />
+            </Pressable>
+          ) : null}
+        </View>
 
-              {/* Role Dropdown Trigger */}
-              <View className="w-[180px]">
-                <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Role Filter
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setRoleDropdownOpen(true)}
-                  className="min-h-11 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 active:bg-slate-50 shadow-xs"
-                >
-                  <View className="flex-row items-center gap-2">
-                    <Feather name="user" size={16} color="#1A593B" />
-                    <Text className="text-sm font-semibold text-slate-900">{activeRoleObj.label}</Text>
-                  </View>
-                  <Feather name="chevron-down" size={16} color="#64748B" />
-                </Pressable>
-              </View>
+        <View className="flex-row items-center gap-2">
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setCategoryDropdownOpen(true)}
+            className="min-h-11 min-w-0 flex-1 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
+          >
+            <View className="mr-2 min-w-0 flex-1 flex-row items-center gap-2">
+              <Feather name={activeCategory.icon} size={15} color="#1A593B" />
+              <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-900">
+                {activeCategory.label}
+              </Text>
             </View>
+            <Feather name="chevron-down" size={16} color="#64748B" />
+          </Pressable>
 
-            {/* Search Input & Refresh Button */}
-            <View className="flex-row items-center gap-3">
-              <View className="flex-1">
-                <Field
-                  label=""
-                  value={search}
-                  onChangeText={(text) => {
-                    setSearch(text);
-                    setPage(1);
-                  }}
-                  placeholder="Search staff name, action, or details…"
-                />
-              </View>
-
-              {(selectedCategory !== 'all' || selectedRole !== 'all' || search) ? (
-                <Button
-                  title="Reset"
-                  variant="secondary"
-                  onPress={() => {
-                    setSelectedCategory('all');
-                    setSelectedRole('all');
-                    setSearch('');
-                    setPage(1);
-                  }}
-                />
-              ) : null}
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Refresh audit logs"
-                onPress={() => void query.refetch()}
-                className="h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white active:bg-slate-100 shadow-xs"
-              >
-                <Feather name="refresh-cw" size={18} color="#475569" />
-              </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setRoleDropdownOpen(true)}
+            className="min-h-11 min-w-0 flex-1 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
+          >
+            <View className="mr-2 min-w-0 flex-1 flex-row items-center gap-2">
+              <Feather name="user" size={15} color="#1A593B" />
+              <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-900">
+                {activeRole.label}
+              </Text>
             </View>
-          </View>
+            <Feather name="chevron-down" size={16} color="#64748B" />
+          </Pressable>
 
-          {/* Audit Logs List Feed */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Refresh audit logs"
+            onPress={() => void query.refetch()}
+            className="h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white active:bg-slate-50"
+          >
+            <Feather name="refresh-cw" size={16} color="#475569" />
+          </Pressable>
+        </View>
+
+        {hasFilters ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setSelectedCategory('all');
+              setSelectedRole('all');
+              setSearch('');
+              setPage(1);
+            }}
+            className="self-start"
+          >
+            <Text className="text-xs font-semibold text-brand-800">Clear filters</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <ScrollView className="flex-1 bg-[#F8F9FA]" contentContainerClassName="grow px-3 py-3 sm:px-4 sm:py-4">
+        <View className="mx-auto w-full max-w-6xl">
           {query.isLoading ? (
-            <View className="min-h-60 rounded-2xl bg-white p-6 shadow-sm">
-              <LoadingState label="Loading audit trail records…" />
-            </View>
+            <LoadingState label="Loading activity…" />
           ) : query.isError ? (
-            <View className="min-h-60 rounded-2xl bg-white p-6 shadow-sm">
-              <ErrorState message={query.error.message} retry={() => void query.refetch()} />
-            </View>
+            <ErrorState message={query.error.message} retry={() => void query.refetch()} />
           ) : logs.length === 0 ? (
-            <View className="min-h-60 rounded-2xl bg-white p-6 shadow-sm">
-              <EmptyState
-                title="No audit records found"
-                message={effectiveSearch ? 'No audit records match your selected filters.' : 'System actions and transactions will be recorded here.'}
-              />
-            </View>
-          ) : (
-            <View className="gap-3">
-              {logs.map((log: AuditLogRecord) => {
-                const actionMeta = actionLabel(log.action);
-                const isExpanded = expandedId === log.id;
-
-                return (
-                  <View key={log.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => setExpandedId(isExpanded ? null : log.id)}
-                      className="flex-row items-start justify-between"
-                    >
-                      <View className="flex-1 pr-3">
-                        <View className="flex-row flex-wrap items-center gap-2">
-                          <View className={`flex-row items-center gap-1.5 rounded-full px-2.5 py-1 ${actionMeta.bg}`}>
-                            <Feather name={actionMeta.icon as any} size={12} className={actionMeta.text} />
-                            <Text className={`text-xs font-bold ${actionMeta.text}`}>{actionMeta.label}</Text>
-                          </View>
-
-                          <View className="rounded-full bg-slate-100 px-2 py-0.5">
-                            <Text className="text-[11px] font-semibold text-slate-700">
-                              {log.actorName} ({roleLabel(log.actorRole || 'cashier')})
-                            </Text>
-                          </View>
-
-                          {log.branchName ? (
-                            <Text className="text-xs font-medium text-slate-400">· {log.branchName}</Text>
-                          ) : null}
-                        </View>
-
-                        <Text className="mt-2 text-sm font-semibold text-slate-900">
-                          {formatDetailSummary(log)}
-                        </Text>
-                      </View>
-
-                      <View className="items-end">
-                        <Text className="text-xs font-medium text-slate-400">
-                          {formatDate(log.createdAt)}
-                        </Text>
-                        <Feather
-                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                          size={16}
-                          color="#94A3B8"
-                          className="mt-2"
-                        />
-                      </View>
-                    </Pressable>
-
-                    {isExpanded ? (
-                      <View className="mt-3 border-t border-slate-100 pt-3">
-                        <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Transaction & Record Details
-                        </Text>
-                        <View className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 gap-2">
-                          <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
-                            <Text className="text-xs font-medium text-slate-500">Performed By</Text>
-                            <Text className="text-xs font-semibold text-slate-900">{log.actorName} ({roleLabel(log.actorRole || 'cashier')})</Text>
-                          </View>
-
-                          {log.branchName ? (
-                            <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
-                              <Text className="text-xs font-medium text-slate-500">Branch Location</Text>
-                              <Text className="text-xs font-semibold text-slate-900">{log.branchName}</Text>
-                            </View>
-                          ) : null}
-
-                          <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
-                            <Text className="text-xs font-medium text-slate-500">Log Reference ID</Text>
-                            <Text className="text-xs font-mono font-semibold text-slate-700">#{log.id.slice(0, 8)}</Text>
-                          </View>
-
-                          {Object.entries(log.after || log.before || log.metadata || {}).map(([key, val]) => {
-                            if (val === null || val === undefined || val === '' || typeof val === 'object' || key === 'id') return null;
-                            return (
-                              <View key={key} className="flex-row items-center justify-between border-b border-slate-200/40 pb-1.5 pt-0.5 last:border-b-0">
-                                <Text className="text-xs font-medium text-slate-500">{formatKeyName(key)}</Text>
-                                <Text className="text-xs font-semibold text-slate-900">{formatValue(key, val)}</Text>
-                              </View>
-                            );
-                          })}
-                        </View>
-                      </View>
-                    ) : null}
+            <EmptyState
+              title="No activity found"
+              message={
+                hasFilters
+                  ? 'Nothing matches your filters. Try clearing them.'
+                  : 'Staff actions and transactions will show up here.'
+              }
+            />
+          ) : isWide ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View className="min-w-[980px] w-full">
+                <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+                    <Text className="w-[110px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      When
+                    </Text>
+                    <Text className="w-[140px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Staff
+                    </Text>
+                    <Text className="min-w-0 flex-[1.1] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Action
+                    </Text>
+                    <Text className="min-w-0 flex-[1.3] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Details
+                    </Text>
+                    <Text className="w-[110px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Status
+                    </Text>
+                    <View className="w-[88px]" />
                   </View>
+
+                  {logs.map((log, index) => {
+                    const negative = isNegativeAction(log.action);
+                    const target = getTargetSummary(log);
+                    return (
+                      <Pressable
+                        key={log.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View ${actionLabel(log.action)}`}
+                        onPress={() => setSelectedLog(log)}
+                        className={`flex-row items-center px-4 py-3.5 active:bg-brand-50/60 ${
+                          index > 0 ? 'border-t border-slate-100' : ''
+                        }`}
+                      >
+                        <Text className="w-[110px] text-sm text-slate-500">
+                          {formatRelativeTime(log.createdAt)}
+                        </Text>
+                        <View className="w-[140px] pr-2">
+                          <Text numberOfLines={1} className="text-sm font-medium text-slate-900">
+                            {log.actorName}
+                          </Text>
+                          <Text numberOfLines={1} className="text-[11px] text-slate-400">
+                            {roleLabel(log.actorRole || 'cashier')}
+                          </Text>
+                        </View>
+                        <Text
+                          numberOfLines={1}
+                          className="min-w-0 flex-[1.1] pr-3 text-sm font-semibold text-slate-900"
+                        >
+                          {actionLabel(log.action)}
+                        </Text>
+                        <Text
+                          numberOfLines={1}
+                          className="min-w-0 flex-[1.3] pr-3 text-sm text-slate-600"
+                        >
+                          {target}
+                        </Text>
+                        <View className="w-[110px] flex-row items-center gap-1.5">
+                          <View
+                            className={`h-5 w-5 items-center justify-center rounded-full ${
+                              negative ? 'bg-red-100' : 'bg-brand-100'
+                            }`}
+                          >
+                            <Feather
+                              name={negative ? 'x' : 'check'}
+                              size={12}
+                              color={negative ? '#B91C1C' : '#1A593B'}
+                            />
+                          </View>
+                          <Text
+                            className={`text-sm font-medium ${
+                              negative ? 'text-red-700' : 'text-brand-800'
+                            }`}
+                          >
+                            {negative ? 'Flagged' : 'Success'}
+                          </Text>
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="View log details"
+                          onPress={() => setSelectedLog(log)}
+                          className="min-h-9 w-[88px] flex-row items-center justify-center gap-1 rounded-lg border border-brand-300 bg-white px-2 active:bg-brand-50"
+                        >
+                          <Text className="text-xs font-semibold text-brand-800">View</Text>
+                          <Feather name="arrow-right" size={13} color="#1A593B" />
+                        </Pressable>
+                      </Pressable>
+                    );
+                  })}
+
+                  <View className="flex-row items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+                    <Text className="text-xs font-medium text-slate-500">
+                      Page {page} · {logs.length} shown
+                    </Text>
+                    <View className="flex-row gap-2">
+                      <Button
+                        title="Previous"
+                        variant="secondary"
+                        disabled={page <= 1}
+                        onPress={() => setPage((p) => Math.max(1, p - 1))}
+                      />
+                      <Button
+                        title="Next"
+                        variant="secondary"
+                        disabled={logs.length < 15}
+                        onPress={() => setPage((p) => p + 1)}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+          ) : (
+            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              {logs.map((log, index) => {
+                const negative = isNegativeAction(log.action);
+                const target = getTargetSummary(log);
+                return (
+                  <Pressable
+                    key={log.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View ${actionLabel(log.action)}`}
+                    onPress={() => setSelectedLog(log)}
+                    className={`gap-2 px-3.5 py-3.5 active:bg-brand-50/60 ${
+                      index > 0 ? 'border-t border-slate-100' : ''
+                    }`}
+                  >
+                    <View className="flex-row items-start justify-between gap-2">
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-semibold text-slate-900">
+                          {actionLabel(log.action)}
+                        </Text>
+                        <Text className="mt-0.5 text-xs text-slate-500" numberOfLines={1}>
+                          {log.actorName} · {formatRelativeTime(log.createdAt)}
+                        </Text>
+                      </View>
+                      <View className="flex-row items-center gap-1">
+                        <View
+                          className={`h-5 w-5 items-center justify-center rounded-full ${
+                            negative ? 'bg-red-100' : 'bg-brand-100'
+                          }`}
+                        >
+                          <Feather
+                            name={negative ? 'x' : 'check'}
+                            size={12}
+                            color={negative ? '#B91C1C' : '#1A593B'}
+                          />
+                        </View>
+                        <Text
+                          className={`text-xs font-semibold ${
+                            negative ? 'text-red-700' : 'text-brand-800'
+                          }`}
+                        >
+                          {negative ? 'Flagged' : 'Success'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text className="text-sm text-slate-600" numberOfLines={2}>
+                      {target}
+                    </Text>
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs text-slate-400" numberOfLines={1}>
+                        {log.branchName || '—'}
+                      </Text>
+                      <View className="flex-row items-center gap-1 rounded-lg border border-brand-300 px-2.5 py-1.5">
+                        <Text className="text-xs font-semibold text-brand-800">View</Text>
+                        <Feather name="arrow-right" size={12} color="#1A593B" />
+                      </View>
+                    </View>
+                  </Pressable>
                 );
               })}
 
-              {/* Pagination Bar */}
-              <View className="mt-4 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white p-4">
-                <Text className="text-xs font-semibold text-slate-500">
-                  Page {page} of {totalPages} ({logs.length} audit logs)
+              <View className="flex-row items-center justify-between border-t border-slate-200 bg-slate-50 px-3.5 py-3">
+                <Text className="text-xs font-medium text-slate-500">
+                  Page {page} · {logs.length} shown
                 </Text>
-
                 <View className="flex-row gap-2">
                   <Button
                     title="Previous"
@@ -500,8 +594,8 @@ function AuditContent() {
                   <Button
                     title="Next"
                     variant="secondary"
-                    disabled={page >= totalPages}
-                    onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={logs.length < 15}
+                    onPress={() => setPage((p) => p + 1)}
                   />
                 </View>
               </View>
@@ -510,83 +604,163 @@ function AuditContent() {
         </View>
       </ScrollView>
 
-      {/* Category Dropdown Modal */}
-      <Modal visible={categoryDropdownOpen} transparent animationType="fade">
-        <Pressable
-          onPress={() => setCategoryDropdownOpen(false)}
-          className="flex-1 items-center justify-center bg-black/40 p-4"
-        >
-          <Pressable onPress={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
+      <Modal
+        visible={Boolean(selectedLog)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedLog(null)}
+      >
+        <View className="flex-1 items-center justify-end bg-black/40 sm:justify-center sm:p-6">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close details"
+            onPress={() => setSelectedLog(null)}
+            className="absolute inset-0"
+          />
+          <View className="z-10 max-h-[85%] w-full max-w-lg overflow-hidden rounded-t-3xl bg-white sm:rounded-3xl">
+            {selectedLog ? (
+              <>
+                <View className="flex-row items-start justify-between border-b border-slate-100 px-5 py-4">
+                  <View className="min-w-0 flex-1 pr-3">
+                    <Text className="text-lg font-bold text-slate-900">
+                      {actionLabel(selectedLog.action)}
+                    </Text>
+                    <Text className="mt-1 text-xs text-slate-500">
+                      {formatDate(selectedLog.createdAt)}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setSelectedLog(null)}
+                    className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100"
+                  >
+                    <Feather name="x" size={18} color="#475569" />
+                  </Pressable>
+                </View>
+                <ScrollView contentContainerClassName="gap-0 px-5 py-3 pb-6">
+                  {getDetailRows(selectedLog).map((row) => (
+                    <View
+                      key={`${selectedLog.id}-${row.label}`}
+                      className="flex-row items-start justify-between gap-4 border-b border-slate-50 py-2.5"
+                    >
+                      <Text className="w-[120px] shrink-0 text-xs font-medium text-slate-500">
+                        {row.label}
+                      </Text>
+                      <Text className="min-w-0 flex-1 text-right text-sm font-semibold text-slate-900">
+                        {row.value}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={categoryDropdownOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCategoryDropdownOpen(false)}
+      >
+        <View className="flex-1 items-center justify-center p-4">
+          <Pressable
+            className="absolute inset-0 bg-black/40"
+            onPress={() => setCategoryDropdownOpen(false)}
+          />
+          <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
             <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
-              <Text className="text-base font-bold text-slate-900">Select Audit Category</Text>
+              <Text className="text-base font-bold text-slate-900">Category</Text>
               <Pressable onPress={() => setCategoryDropdownOpen(false)}>
                 <Feather name="x" size={20} color="#64748B" />
               </Pressable>
             </View>
             <View className="gap-1">
-              {CATEGORY_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.value}
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setSelectedCategory(opt.value);
-                    setCategoryDropdownOpen(false);
-                    setPage(1);
-                  }}
-                  className={`flex-row items-center justify-between rounded-xl px-3 py-2.5 ${
-                    selectedCategory === opt.value ? 'bg-brand-50 border border-brand-200' : 'active:bg-slate-100'
-                  }`}
-                >
-                  <View className="flex-row items-center gap-2.5">
-                    <Feather name={opt.icon as any} size={17} color={selectedCategory === opt.value ? '#1A593B' : '#64748B'} />
-                    <Text className={`text-sm ${selectedCategory === opt.value ? 'font-bold text-brand-900' : 'font-medium text-slate-700'}`}>
-                      {opt.label}
-                    </Text>
-                  </View>
-                  {selectedCategory === opt.value ? <Feather name="check" size={16} color="#1A593B" /> : null}
-                </Pressable>
-              ))}
+              {CATEGORY_OPTIONS.map((opt) => {
+                const selected = selectedCategory === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => {
+                      setSelectedCategory(opt.value);
+                      setCategoryDropdownOpen(false);
+                      setPage(1);
+                    }}
+                    className={`flex-row items-center justify-between rounded-xl px-3 py-2.5 ${
+                      selected ? 'border border-brand-200 bg-brand-50' : 'active:bg-slate-100'
+                    }`}
+                  >
+                    <View className="flex-row items-center gap-2.5">
+                      <Feather
+                        name={opt.icon}
+                        size={17}
+                        color={selected ? '#1A593B' : '#64748B'}
+                      />
+                      <Text
+                        className={`text-sm ${
+                          selected ? 'font-bold text-brand-900' : 'font-medium text-slate-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </Text>
+                    </View>
+                    {selected ? <Feather name="check" size={16} color="#1A593B" /> : null}
+                  </Pressable>
+                );
+              })}
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
-      {/* Role Dropdown Modal */}
-      <Modal visible={roleDropdownOpen} transparent animationType="fade">
-        <Pressable
-          onPress={() => setRoleDropdownOpen(false)}
-          className="flex-1 items-center justify-center bg-black/40 p-4"
-        >
-          <Pressable onPress={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
+      <Modal
+        visible={roleDropdownOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRoleDropdownOpen(false)}
+      >
+        <View className="flex-1 items-center justify-center p-4">
+          <Pressable
+            className="absolute inset-0 bg-black/40"
+            onPress={() => setRoleDropdownOpen(false)}
+          />
+          <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
             <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
-              <Text className="text-base font-bold text-slate-900">Select Staff Role</Text>
+              <Text className="text-base font-bold text-slate-900">Staff role</Text>
               <Pressable onPress={() => setRoleDropdownOpen(false)}>
                 <Feather name="x" size={20} color="#64748B" />
               </Pressable>
             </View>
             <View className="gap-1">
-              {ROLE_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.value}
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setSelectedRole(opt.value);
-                    setRoleDropdownOpen(false);
-                    setPage(1);
-                  }}
-                  className={`flex-row items-center justify-between rounded-xl px-3 py-2.5 ${
-                    selectedRole === opt.value ? 'bg-brand-50 border border-brand-200' : 'active:bg-slate-100'
-                  }`}
-                >
-                  <Text className={`text-sm ${selectedRole === opt.value ? 'font-bold text-brand-900' : 'font-medium text-slate-700'}`}>
-                    {opt.label}
-                  </Text>
-                  {selectedRole === opt.value ? <Feather name="check" size={16} color="#1A593B" /> : null}
-                </Pressable>
-              ))}
+              {ROLE_OPTIONS.map((opt) => {
+                const selected = selectedRole === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => {
+                      setSelectedRole(opt.value);
+                      setRoleDropdownOpen(false);
+                      setPage(1);
+                    }}
+                    className={`flex-row items-center justify-between rounded-xl px-3 py-2.5 ${
+                      selected ? 'border border-brand-200 bg-brand-50' : 'active:bg-slate-100'
+                    }`}
+                  >
+                    <Text
+                      className={`text-sm ${
+                        selected ? 'font-bold text-brand-900' : 'font-medium text-slate-700'
+                      }`}
+                    >
+                      {opt.label}
+                    </Text>
+                    {selected ? <Feather name="check" size={16} color="#1A593B" /> : null}
+                  </Pressable>
+                );
+              })}
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </Screen>
   );

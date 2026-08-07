@@ -48,6 +48,21 @@ describe('cashier cart behavior', () => {
     expect(useCartStore.getState().items[0]?.product.availableQuantity).toBe(2);
   });
 
+  it('adds combo quantities with locked price merge', () => {
+    useCartStore.getState().addQuantity(
+      { ...product, sellingPrice: '20.00', priceLocked: true, promoName: 'Combo' },
+      1,
+    );
+    useCartStore.getState().addQuantity(
+      { ...product, sellingPrice: '10.00', priceLocked: true, promoName: 'Combo' },
+      1,
+    );
+    const item = useCartStore.getState().items[0];
+    expect(item?.quantity).toBe(2);
+    expect(item?.product.sellingPrice).toBe('15.00');
+    expect(item?.product.priceLocked).toBe(true);
+  });
+
   it('keeps piece and pack sales separate for the same product', () => {
     const base = {
       ...product,

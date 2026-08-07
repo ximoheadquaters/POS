@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +12,7 @@ import { getHardwareDriver } from '@/hardware/registry';
 import { ApiError } from '@/lib/api';
 import { useIosAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
-import { cartTotal, useCartStore } from '@/store/cart';
+import { cartSubtotal, cartTotal, useCartStore } from '@/store/cart';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
 import { useConnectivityStore } from '@/store/connectivity';
@@ -32,6 +32,17 @@ interface RegisterStatus {
   activeCashierId?: string;
 }
 
+function safeMoney(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    moneyToMinor(trimmed);
+    return trimmed.includes('.') ? trimmed : `${trimmed}.00`;
+  } catch {
+    return null;
+  }
+}
+
 export default function PaymentScreen() {
   const { currentUser } = useSession();
   const items = useCartStore((state) => state.items);
@@ -47,38 +58,36 @@ export default function PaymentScreen() {
   const setOfflineQueue = useConnectivityStore((state) => state.setOfflineQueue);
   const { showAlert } = useIosAlert();
   const [discount, setDiscount] = useState('0.00');
-  const [cash, setCash] = useState('');
   const [cashReceived, setCashReceived] = useState('');
-  const [card, setCard] = useState('');
-  const [ewallet, setEwallet] = useState('');
-  const total = useMemo(() => cartTotal(items, discount || '0.00'), [discount, items]);
-  const remaining = useMemo(() => {
-    try {
-      const paid = [cash, card, ewallet]
-        .filter(Boolean)
-        .reduce((sum, value) => sum + moneyToMinor(value), 0n);
-      return minorToMoney(moneyToMinor(total) - paid);
-    } catch {
-      return total;
-    }
-  }, [card, cash, ewallet, total]);
-  const paymentMatches = remaining === '0.00';
 
-  const fillPayment = (method: 'cash' | 'card' | 'ewallet') => {
-    setCash(method === 'cash' ? total : '');
-    setCashReceived(method === 'cash' ? total : '');
-    setCard(method === 'card' ? total : '');
-    setEwallet(method === 'ewallet' ? total : '');
-  };
+  const subtotal = useMemo(() => cartSubtotal(items), [items]);
+  const total = useMemo(() => cartTotal(items, discount || '0.00'), [discount, items]);
+
+  useEffect(() => {
+    setCashReceived(total);
+  }, [total]);
+
+  const tendered = safeMoney(cashReceived) ?? '0.00';
+  const changeDue = useMemo(() => {
+    try {
+      const diff = moneyToMinor(tendered) - moneyToMinor(total);
+      return minorToMoney(diff > 0n ? diff : 0n);
+    } catch {
+      return '0.00';
+    }
+  }, [tendered, total]);
+  const canComplete = useMemo(() => {
+    try {
+      return Boolean(items.length) && moneyToMinor(tendered) >= moneyToMinor(total);
+    } catch {
+      return false;
+    }
+  }, [items.length, tendered, total]);
 
   const checkout = useMutation({
     mutationFn: async () => {
       if (!branch || !currentUser) throw new Error('An active branch and account are required');
-      const payments = [
-        cash ? { method: 'cash' as const, amount: cash, tendered: cashReceived || cash } : null,
-        card ? { method: 'card' as const, amount: card } : null,
-        ewallet ? { method: 'ewallet' as const, amount: ewallet } : null,
-      ].filter(Boolean);
+      const payments = [{ method: 'cash' as const, amount: total, tendered }];
       const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const checkoutItems = items.map((item) => ({
         productId: item.product.id,
@@ -90,11 +99,6 @@ export default function PaymentScreen() {
         discount && discount !== '0.00' ? { type: 'fixed' as const, value: discount } : undefined;
 
       if (!isOnline) {
-        if (card || ewallet) {
-          throw new Error(
-            'Card and e-wallet payments require internet access. Use cash or reconnect first.',
-          );
-        }
         if (!shift || shift.branchId !== branch.id) {
           throw new Error('An open shift saved on this device is required for offline sales.');
         }
@@ -117,13 +121,11 @@ export default function PaymentScreen() {
         });
         setPendingSales(pending);
         setOfflineQueue(await getOfflineSales());
-        const tendered = cashReceived || cash || total;
-        const change = moneyToMinor(tendered) - moneyToMinor(total);
         return {
           id: offlineId,
           receiptNumber: `OFFLINE-${Date.now().toString().slice(-6)}`,
           total,
-          changeDue: minorToMoney(change > 0n ? change : 0n),
+          changeDue,
           offline: true,
         };
       }
@@ -175,7 +177,7 @@ export default function PaymentScreen() {
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['reports'] }),
       ]);
-      if (cash && currentUser?.modules.includes('cash_drawer')) {
+      if (currentUser?.modules.includes('cash_drawer')) {
         const drawer = getHardwareDriver('cash_drawer');
         void drawer
           .status()
@@ -222,9 +224,13 @@ export default function PaymentScreen() {
   });
 
   const completeSale = async () => {
-    if (!cash && !card && !ewallet) {
-      setCash(total);
-      setCashReceived(total);
+    if (!canComplete) {
+      showAlert({
+        title: 'Not enough cash',
+        message: 'Cash received must be at least the amount due.',
+        type: 'warning',
+      });
+      return;
     }
     const confirmed = await confirmAction(
       'Complete sale?',
@@ -238,84 +244,115 @@ export default function PaymentScreen() {
     <Screen>
       <Header
         title="Payment"
-        subtitle="Split payments must equal the final total."
+        subtitle="Cash checkout"
         showBack
         backLabel="Cart"
         fallbackHref="/cart"
       />
-      <ScrollView contentContainerClassName="p-5 pb-10">
-        <View className="mb-6 rounded-2xl bg-brand-700 p-6">
-          <Text className="text-brand-100">Amount due</Text>
-          <Text className="mt-2 text-4xl font-black text-white">{formatMoney(total)}</Text>
-        </View>
-        <Field
-          label="Fixed discount"
-          value={discount}
-          onChangeText={setDiscount}
-          keyboardType="decimal-pad"
-        />
-        <Text className="mb-3 mt-2 text-lg font-bold text-slate-900">Quick payment</Text>
-        <View className="mb-6 flex-row gap-2">
-          {(
-            [
-              ['cash', 'Cash'],
-              ['card', 'Card'],
-              ['ewallet', 'E-wallet'],
-            ] as const
-          ).map(([method, label]) => (
-            <Pressable
-              key={method}
-              accessibilityRole="button"
-              onPress={() => fillPayment(method)}
-              className="min-h-12 flex-1 items-center justify-center rounded-xl bg-brand-50 px-2 active:bg-brand-100"
-            >
-              <Text className="text-sm font-bold text-brand-700">{label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text className="mb-1 text-lg font-bold text-slate-900">Payment split</Text>
-        <Text className="mb-4 text-sm leading-5 text-slate-500">
-          Use one method above, or divide the total across multiple methods below.
-        </Text>
-        <Field
-          label="Cash payment amount"
-          value={cash}
-          onChangeText={setCash}
-          keyboardType="decimal-pad"
-        />
-        {cash ? (
-          <Field
-            label="Cash received"
-            value={cashReceived}
-            onChangeText={setCashReceived}
-            keyboardType="decimal-pad"
-            placeholder={cash}
-          />
-        ) : null}
-        <Field label="Card amount" value={card} onChangeText={setCard} keyboardType="decimal-pad" />
-        <Field
-          label="E-wallet amount"
-          value={ewallet}
-          onChangeText={setEwallet}
-          keyboardType="decimal-pad"
-        />
-        <View
-          className={`mb-5 flex-row items-center justify-between rounded-2xl p-4 ${paymentMatches ? 'bg-brand-50' : 'bg-slate-100'}`}
-        >
-          <Text className={`font-bold ${paymentMatches ? 'text-brand-700' : 'text-slate-600'}`}>
-            {paymentMatches ? 'Payment matches total' : 'Remaining'}
-          </Text>
-          <Text
-            className={`text-lg font-black ${paymentMatches ? 'text-brand-700' : 'text-slate-900'}`}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="grow px-4 py-4 pb-10"
+      >
+        <View className="mx-auto w-full max-w-md gap-4">
+          <View className="rounded-2xl bg-brand-700 px-5 py-5">
+            <Text className="text-sm font-medium text-brand-100">Amount due</Text>
+            <Text className="mt-1 text-4xl font-black text-white">{formatMoney(total)}</Text>
+            {discount !== '0.00' && discount.trim() ? (
+              <Text className="mt-2 text-xs text-brand-100">
+                Subtotal {formatMoney(subtotal)} · Discount {formatMoney(discount)}
+              </Text>
+            ) : (
+              <Text className="mt-2 text-xs text-brand-100">
+                {items.length} item{items.length === 1 ? '' : 's'} · Cash only
+              </Text>
+            )}
+          </View>
+
+          <View className="rounded-2xl border border-slate-200 bg-white p-4">
+            <Field
+              label="Discount (optional)"
+              value={discount}
+              onChangeText={setDiscount}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+            />
+
+            <View className="mb-1 flex-row items-center justify-between">
+              <Text className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                Cash received
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Use exact amount"
+                onPress={() => setCashReceived(total)}
+                className="rounded-lg bg-brand-50 px-2.5 py-1 active:bg-brand-100"
+              >
+                <Text className="text-xs font-semibold text-brand-800">Exact</Text>
+              </Pressable>
+            </View>
+            <Field
+              label=""
+              value={cashReceived}
+              onChangeText={setCashReceived}
+              keyboardType="decimal-pad"
+              placeholder={total}
+            />
+
+            <View className="mt-1 flex-row flex-wrap gap-2">
+              {['50', '100', '200', '500', '1000'].map((amount) => (
+                <Pressable
+                  key={amount}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Tender ${amount}`}
+                  onPress={() => setCashReceived(`${amount}.00`)}
+                  className="min-h-10 flex-1 basis-[30%] items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-2 active:bg-slate-100"
+                >
+                  <Text className="text-sm font-semibold text-slate-800">₱{amount}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View
+            className={`flex-row items-center justify-between rounded-2xl border px-4 py-3.5 ${
+              canComplete
+                ? 'border-brand-200 bg-brand-50'
+                : 'border-amber-200 bg-amber-50'
+            }`}
           >
-            {paymentMatches ? 'Ready' : formatMoney(remaining)}
-          </Text>
+            <View>
+              <Text
+                className={`text-xs font-semibold uppercase tracking-wide ${
+                  canComplete ? 'text-brand-700' : 'text-amber-800'
+                }`}
+              >
+                Change
+              </Text>
+              <Text
+                className={`mt-0.5 text-xl font-black ${
+                  canComplete ? 'text-brand-900' : 'text-amber-900'
+                }`}
+              >
+                {formatMoney(changeDue)}
+              </Text>
+            </View>
+            <Text
+              className={`text-sm font-semibold ${
+                canComplete ? 'text-brand-800' : 'text-amber-800'
+              }`}
+            >
+              {canComplete ? 'Ready' : 'Need more cash'}
+            </Text>
+          </View>
+
+          <Button
+            title={
+              checkout.isPending ? 'Completing sale…' : `Complete · ${formatMoney(total)}`
+            }
+            disabled={checkout.isPending || !canComplete}
+            onPress={() => void completeSale()}
+          />
         </View>
-        <Button
-          title={checkout.isPending ? 'Completing sale…' : `Complete · ${formatMoney(total)}`}
-          disabled={checkout.isPending || !items.length || !paymentMatches}
-          onPress={() => void completeSale()}
-        />
       </ScrollView>
     </Screen>
   );

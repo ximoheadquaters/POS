@@ -27,17 +27,17 @@ export function getRetailProductTypeBadges(product: CatalogProductInput): Produc
   const badges: ProductBadgeItem[] = [];
 
   if (product.inventoryRole === 'ingredient') {
-    badges.push({ key: 'bulk_source', label: 'Bulk Source', type: 'bulk_source' });
+    badges.push({ key: 'bulk_source', label: 'Raw Material', type: 'bulk_source' });
   }
 
   if (product.preparationBehavior === 'preproduced') {
-    badges.push({ key: 'repacked', label: 'Repacked', type: 'repacked' });
+    badges.push({ key: 'repacked', label: 'Repacked Item', type: 'repacked' });
   } else if (product.hasRecipe) {
-    badges.push({ key: 'recipe_configured', label: 'Repacking recipe configured', type: 'recipe_configured' });
+    badges.push({ key: 'recipe_configured', label: 'Has Repack Recipe', type: 'recipe_configured' });
   }
 
   if (isMeasurementUnit(product.unit)) {
-    badges.push({ key: 'weighted', label: 'Weighted', type: 'weighted' });
+    badges.push({ key: 'weighted', label: 'Sold by Weight / Volume', type: 'weighted' });
   }
 
   const altBadge = formatAlternateSellingUnitBadge(product.sellingUnits, product.unit);
@@ -65,7 +65,7 @@ export function formatAlternateSellingUnitBadge(
 export function getStockStatus(
   availableQuantity?: number | null,
   lowStockThreshold?: number | null,
-): { status: 'out_of_stock' | 'low_stock' | 'in_stock'; label: string } {
+): { status: 'out_of_stock' | 'low_stock' | 'warning' | 'in_stock'; label: string } {
   if (availableQuantity === null || availableQuantity === undefined) {
     return { status: 'in_stock', label: 'In Stock' };
   }
@@ -81,6 +81,16 @@ export function getStockStatus(
     availableQuantity <= lowStockThreshold
   ) {
     return { status: 'low_stock', label: 'Low Stock' };
+  }
+
+  // Approaching the low-stock threshold (up to 2× the configured level).
+  if (
+    lowStockThreshold !== null &&
+    lowStockThreshold !== undefined &&
+    lowStockThreshold > 0 &&
+    availableQuantity <= lowStockThreshold * 2
+  ) {
+    return { status: 'warning', label: 'Running Low' };
   }
 
   return { status: 'in_stock', label: 'In Stock' };

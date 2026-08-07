@@ -52,7 +52,8 @@ const sidebarSections: SidebarSection[] = [
   {
     sectionTitle: 'DAILY WORK',
     groups: [
-      { id: 'pos', title: 'Dashboard & POS', icon: 'grid', href: '/(tabs)/pos', module: 'pos' },
+      { id: 'dashboard', title: 'Dashboard', icon: 'grid', href: '/(tabs)', module: 'dashboard' },
+      { id: 'pos', title: 'POS', icon: 'shopping-cart', href: '/(tabs)/pos', module: 'pos' },
       { id: 'sales', title: 'Sales & Orders', icon: 'shopping-bag', href: '/(tabs)/sales', module: 'pos' },
     ],
   },
@@ -152,8 +153,11 @@ export function filterSectionsByProfile(user: any): SidebarSection[] {
 }
 
 function isPathActive(pathname: string, href: Href): boolean {
-  const target = String(href).replace('/(tabs)', '');
-  if (target === '/pos' && (pathname === '/pos' || pathname === '/')) return true;
+  const target = String(href).replace('/(tabs)', '') || '/';
+  if (target === '/' || target === '') {
+    return pathname === '/' || pathname === '';
+  }
+  if (target === '/pos') return pathname === '/pos';
   if (target === '/products' && (pathname === '/products' || pathname.startsWith('/product') || pathname === '/catalogue')) return true;
   if (target === '/purchasing' && (pathname === '/purchasing' || pathname.startsWith('/purchase') || pathname.startsWith('/supplier'))) return true;
   if (pathname === target) return true;
@@ -172,6 +176,7 @@ function SidebarMenu({ close }: { close(): void }) {
   const pathname = usePathname();
   const { currentUser, refreshUser, signOut } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
+  const branchLabel = branch?.name ?? currentUser?.branches?.[0]?.name ?? 'No branch selected';
   const [refreshing, setRefreshing] = useState(false);
 
   const getActiveGroupId = (currentPath: string) => {
@@ -231,6 +236,7 @@ function SidebarMenu({ close }: { close(): void }) {
   const filterVisibleGroups = (groups: SidebarGroup[]) => {
     return groups.filter((group) => {
       const coreGroups = [
+        'dashboard',
         'products',
         'customers',
         'pos',
@@ -246,7 +252,11 @@ function SidebarMenu({ close }: { close(): void }) {
       const isOwnerOrAdmin = currentUser?.role === 'owner' || currentUser?.role === 'administrator';
       const hasPermission =
         !group.permission || isOwnerOrAdmin || currentUser?.permissions.includes(group.permission);
-      const hasModule = !group.module || currentUser?.modules.includes(group.module);
+      const hasModule =
+        !group.module ||
+        currentUser?.modules.includes(group.module) ||
+        (group.id === 'dashboard' &&
+          (currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')));
       return hasPermission && hasModule;
     });
   };
@@ -274,14 +284,14 @@ function SidebarMenu({ close }: { close(): void }) {
           <Image
             source={ximoIcon}
             resizeMode="cover"
-            className="h-10 w-10"
+            style={{ width: 40, height: 40 }}
             accessibilityLabel="Ximo logo"
           />
         </View>
         <View className="flex-1">
           <Text className="text-base font-black tracking-tight text-slate-900">Ximo POS</Text>
           <Text numberOfLines={1} className="text-xs font-medium text-slate-500">
-            {branch?.name ?? 'Main Branch'}
+            {branchLabel}
           </Text>
         </View>
       </View>
@@ -312,9 +322,13 @@ function SidebarMenu({ close }: { close(): void }) {
                     );
 
                     if (!hasChildren && group.href) {
-                      const isGroupDisabled = Boolean(
-                        group.module && !currentUser?.modules.includes(group.module),
-                      );
+                      const isGroupDisabled =
+                        group.id === 'dashboard'
+                          ? !(
+                              currentUser?.modules.includes('dashboard') ||
+                              currentUser?.modules.includes('reports')
+                            )
+                          : Boolean(group.module && !currentUser?.modules.includes(group.module));
 
                       return (
                         <Pressable
@@ -490,7 +504,7 @@ function SidebarMenu({ close }: { close(): void }) {
                 {currentUser?.displayName || 'Cashier'}
               </Text>
               <Text numberOfLines={1} className="text-xs font-medium text-slate-500">
-                {branch?.name || 'Main Branch'}
+                {branchLabel}
               </Text>
             </View>
           </Pressable>

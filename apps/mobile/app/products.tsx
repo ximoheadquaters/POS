@@ -398,6 +398,7 @@ function RecipeModal({
 function ProductsContent() {
   const [search, setSearch] = useState('');
   const [productFilter, setProductFilter] = useState<ProductFilter>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [editingRecipeProduct, setEditingRecipeProduct] = useState<Product | null>(null);
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
@@ -417,6 +418,14 @@ function ProductsContent() {
     }
     return ALL_PRODUCT_FILTERS;
   }, [isFoodService]);
+  const activeFilter =
+    productFilters.find((filter) => filter.id === productFilter) ?? productFilters[0]!;
+
+  useEffect(() => {
+    if (!productFilters.some((filter) => filter.id === productFilter)) {
+      setProductFilter('all');
+    }
+  }, [productFilter, productFilters]);
 
   const query = useInfiniteQuery({
     queryKey: ['products', branch?.id, search, productFilter],
@@ -507,64 +516,51 @@ function ProductsContent() {
           ) : null
         }
       />
-      <View className="border-b border-slate-100 bg-slate-50 p-4">
-        <View className="flex-row flex-wrap gap-3">
-          {productFilters.map((filter) => {
-            const selected = productFilter === filter.id;
-            return (
-              <Pressable
-                key={filter.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                onPress={() => setProductFilter(filter.id)}
-                className={`min-w-[145px] flex-1 rounded-2xl border p-4 active:opacity-80 ${
-                  selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
-                }`}
-              >
-                <View className="flex-row items-start justify-between">
-                  <View
-                    className={`h-10 w-10 items-center justify-center rounded-xl ${
-                      selected ? 'bg-white/15' : 'bg-brand-50'
-                    }`}
-                  >
-                    <Feather name={filter.icon} size={17} color={selected ? '#FFFFFF' : '#1A593B'} />
-                  </View>
-                  <Text className={`text-xl font-semibold ${selected ? 'text-white' : 'text-slate-950'}`}>
-                    {displayedProductCounts[filter.id]}
-                  </Text>
-                </View>
-                <Text className={`mt-3 text-sm font-semibold ${selected ? 'text-white' : 'text-slate-900'}`}>
-                  {filter.title}
-                </Text>
-                <Text className={`mt-1 text-xs ${selected ? 'text-brand-100' : 'text-slate-500'}`}>
-                  {filter.description}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-      <View className="bg-white p-4">
-        <View className="flex-row items-center rounded-xl bg-slate-100 px-4 border border-slate-200 focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-200">
-          <Feather name="search" size={18} color="#81776E" />
+      <View className="gap-3 border-b border-slate-100 bg-white px-4 py-3">
+        <View className="min-h-11 flex-row items-center rounded-xl border border-slate-200 bg-slate-100 px-3">
+          <Feather name="search" size={17} color="#81776E" />
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search products by name or SKU"
+            placeholder="Search name or SKU"
             placeholderTextColor="#81776E"
             selectionColor="#1A593B"
-            style={{ outline: 'none' }}
-            onSubmitEditing={(e: any) => {
-              if (e && e.preventDefault) e.preventDefault();
+            style={{ outline: 'none' } as object}
+            onSubmitEditing={(e: { preventDefault?: () => void }) => {
+              e.preventDefault?.();
             }}
-            className="ml-2 flex-1 min-h-14 bg-transparent text-sm text-slate-900"
+            className="ml-2 min-h-11 flex-1 bg-transparent text-sm text-slate-900"
           />
           {search ? (
-            <Pressable onPress={() => setSearch('')}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              onPress={() => setSearch('')}
+            >
               <Feather name="x" size={16} color="#81776E" />
             </Pressable>
           ) : null}
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Filter product type"
+          onPress={() => setFilterOpen(true)}
+          className="min-h-11 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
+        >
+          <View className="mr-2 min-w-0 flex-1 flex-row items-center gap-2">
+            <Feather name={activeFilter.icon} size={15} color="#1A593B" />
+            <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-900">
+              {activeFilter.title}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-2">
+            <Text className="text-sm font-semibold text-brand-800">
+              {displayedProductCounts[activeFilter.id]}
+            </Text>
+            <Feather name="chevron-down" size={16} color="#64748B" />
+          </View>
+        </Pressable>
       </View>
       {query.isLoading ? (
         <LoadingState />
@@ -646,11 +642,11 @@ function ProductsContent() {
                     </Text>
                     {item.status === 'active' ? (
                       <View className="rounded-full bg-emerald-50 px-2.5 py-1">
-                        <Text className="text-xs font-semibold text-emerald-700">Enabled</Text>
+                        <Text className="text-xs font-semibold text-emerald-700">Active (On POS)</Text>
                       </View>
                     ) : (
                       <View className="rounded-full bg-slate-100 px-2.5 py-1">
-                        <Text className="text-xs font-semibold text-slate-600">Disabled</Text>
+                        <Text className="text-xs font-semibold text-slate-600">Hidden from POS</Text>
                       </View>
                     )}
                   </View>
@@ -818,6 +814,81 @@ function ProductsContent() {
           }}
         />
       )}
+
+      <Modal
+        visible={filterOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterOpen(false)}
+      >
+        <View className="flex-1 items-center justify-center p-4">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close product type filter"
+            onPress={() => setFilterOpen(false)}
+            className="absolute inset-0 bg-black/40"
+          />
+          <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
+            <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
+              <Text className="text-base font-bold text-slate-900">Product type</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={() => setFilterOpen(false)}
+              >
+                <Feather name="x" size={20} color="#64748B" />
+              </Pressable>
+            </View>
+            <View className="gap-1">
+              {productFilters.map((filter) => {
+                const selected = productFilter === filter.id;
+                return (
+                  <Pressable
+                    key={filter.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      setProductFilter(filter.id);
+                      setFilterOpen(false);
+                    }}
+                    className={`flex-row items-center justify-between rounded-xl px-3 py-3 ${
+                      selected ? 'border border-brand-200 bg-brand-50' : 'active:bg-slate-100'
+                    }`}
+                  >
+                    <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
+                      <Feather
+                        name={filter.icon}
+                        size={17}
+                        color={selected ? '#1A593B' : '#64748B'}
+                      />
+                      <View className="min-w-0 flex-1">
+                        <Text
+                          className={`text-sm ${
+                            selected ? 'font-bold text-brand-900' : 'font-medium text-slate-700'
+                          }`}
+                        >
+                          {filter.title}
+                        </Text>
+                        <Text className="mt-0.5 text-xs text-slate-500">{filter.description}</Text>
+                      </View>
+                    </View>
+                    <View className="ml-2 flex-row items-center gap-2">
+                      <Text
+                        className={`text-sm font-semibold ${
+                          selected ? 'text-brand-800' : 'text-slate-500'
+                        }`}
+                      >
+                        {displayedProductCounts[filter.id]}
+                      </Text>
+                      {selected ? <Feather name="check" size={16} color="#1A593B" /> : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {isFoodService ? (
         <RecipeModal

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, type ReactNode } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 
 export type AlertType = 'success' | 'error' | 'warning' | 'info';
@@ -65,12 +65,21 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
         visible={visible}
         transparent
         animationType="fade"
+        statusBarTranslucent
+        presentationStyle="overFullScreen"
         onRequestClose={hideAlert}
       >
-        <View className="flex-1 items-center justify-center bg-black/45 p-5">
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            Platform.OS === 'web'
+              ? ({ zIndex: 2_000_000, position: 'fixed' } as object)
+              : { zIndex: 2_000_000, elevation: 2_000_000 },
+          ]}
+          className="items-center justify-center bg-black/45 p-5"
+        >
           {/* iOS Alert Card Container */}
           <View className="w-full max-w-[310px] overflow-hidden rounded-[24px] bg-white/95 backdrop-blur-xl shadow-2xl border border-slate-100/50">
-            
             {/* Header Icon & Text Content */}
             <View className="items-center px-6 pt-6 pb-5">
               <View className={`mb-3 h-12 w-12 items-center justify-center rounded-2xl ${iconDetails.bg}`}>

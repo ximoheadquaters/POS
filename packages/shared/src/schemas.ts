@@ -531,35 +531,77 @@ export const promotionTypeSchema = z.enum([
   'fixed_discount',
 ]);
 
-export const createPromotionSchema = z.object({
-  name: z.string().trim().min(2).max(180),
-  code: z.string().trim().max(50).optional(),
-  description: z.string().trim().max(1000).optional(),
-  type: promotionTypeSchema,
-  comboPrice: moneyStringSchema.optional(),
-  discountPercentage: z
-    .string()
-    .regex(/^(\d{1,2}(\.\d{1,2})?|100(\.0{1,2})?)$/)
-    .optional(),
-  discountAmount: moneyStringSchema.optional(),
-  minOrderQuantity: z.number().int().min(1).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  isActive: z.boolean().default(true),
-  items: z
-    .array(
-      z.object({
-        productId: uuidSchema,
-        role: z
-          .enum(['trigger_item', 'discounted_item', 'combo_component'])
-          .default('combo_component'),
-        requiredQuantity: z.number().int().min(1).default(1),
-      }),
-    )
-    .optional(),
-});
+const emptyToUndefined = (value: unknown) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
 
+export const createPromotionSchema = z
+  .object({
+    name: z.string().trim().min(2).max(180),
+    code: z.preprocess(emptyToUndefined, z.string().trim().max(50).optional()),
+    description: z.preprocess(emptyToUndefined, z.string().trim().max(1000).optional()),
+    type: promotionTypeSchema,
+    comboPrice: z.preprocess(emptyToUndefined, moneyStringSchema.optional()),
+    discountPercentage: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^(\d{1,2}(\.\d{1,2})?|100(\.0{1,2})?)$/)
+        .optional(),
+    ),
+    discountAmount: z.preprocess(emptyToUndefined, moneyStringSchema.optional()),
+    minOrderQuantity: z.number().int().min(1).optional(),
+    startDate: z.preprocess(emptyToUndefined, z.string().optional()),
+    endDate: z.preprocess(emptyToUndefined, z.string().optional()),
+    isActive: z.boolean().default(true),
+    items: z
+      .array(
+        z.object({
+          productId: uuidSchema,
+          role: z
+            .enum(['trigger_item', 'discounted_item', 'combo_component'])
+            .default('combo_component'),
+          requiredQuantity: z.number().int().min(1).default(1),
+        }),
+      )
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type === 'combo_bundle' && !value.comboPrice) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['comboPrice'],
+        message: 'Combo bundle requires a combo price',
+      });
+    }
+    if (value.type === 'percentage_discount' && !value.discountPercentage) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['discountPercentage'],
+        message: 'Percentage discount requires a discount percentage',
+      });
+    }
+    if (value.type === 'fixed_discount' && !value.discountAmount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['discountAmount'],
+        message: 'Fixed discount requires a discount amount',
+      });
+    }
+    if (
+      (value.type === 'combo_bundle' || value.type === 'buy_x_get_y') &&
+      (!value.items || value.items.length === 0)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['items'],
+        message: 'Add at least one product component',
+      });
+    }
+  });
+
+export const updatePromotionSchema = createPromotionSchema;
 export type CreatePromotionInput = z.infer<typeof createPromotionSchema>;
+export type UpdatePromotionInput = z.infer<typeof updatePromotionSchema>;
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;

@@ -1,0 +1,37 @@
+{
+  "status": 200,
+  "role": "cashier",
+  "reportPerms": [
+    "reports:read"
+  ],
+  "kpis": {
+    "netSales": "47.04",
+    "netCost": null,
+    "grossProfit": null,
+    "grossMarginPercent": null
+  },
+  "inventoryValue": null,
+  "profit": {
+    "netCost": null,
+    "grossProfit": null,
+    "grossMarginPercent": null
+  },
+  "topProducts": [
+    {
+      "name": "Bath Soap",
+      "sales": "30.24",
+      "cost": null,
+      "profit": null,
+      "quantity": 1,
+      "unit": "piece"
+    },
+    {
+      "name": "Bottled Water 500ml",
+      "sales": "16.80",
+      "cost": null,
+      "profit": null,
+      "quantity": 1,
+      "unit": "piece"
+    }
+  ]
+}
