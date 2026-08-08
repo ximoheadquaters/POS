@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Feather from '@expo/vector-icons/Feather';
 import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { enqueueOfflineSale, getOfflineSales } from '@/lib/offline-sales';
@@ -16,6 +17,8 @@ import { cartSubtotal, cartTotal, useCartStore } from '@/store/cart';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
 import { useConnectivityStore } from '@/store/connectivity';
+
+import { evaluateCartPromotions, getQualifyingPromotions, type PromotionRule } from '@/lib/promo-evaluator';
 
 interface Receipt {
   id: string;
@@ -59,8 +62,83 @@ export default function PaymentScreen() {
   const { showAlert } = useIosAlert();
   const [discount, setDiscount] = useState('0.00');
   const [cashReceived, setCashReceived] = useState('');
+  const [discountMode, setDiscountMode] = useState<'fixed' | 'percent'>('fixed');
+  const [percentValue, setPercentValue] = useState('');
+  const [selectedPromoId, setSelectedPromoId] = useState<string | null>(null);
+  const [manualClear, setManualClear] = useState(false);
+
+  const promotionsQuery = useQuery({
+    queryKey: ['pos-checkout-promotions', branch?.id],
+    queryFn: async () => {
+      if (!branch?.id) return [];
+      const res = await api<any[]>(`/promotions?branchId=${branch.id}&pageSize=50`);
+      const list = Array.isArray(res) ? res : (res as any)?.pages?.flat() ?? (res as any)?.data ?? [];
+      return list.filter(
+        (p: any) =>
+          p.isActive &&
+          (p.type === 'percentage_discount' ||
+            p.type === 'fixed_discount' ||
+            p.type === 'tiered_quantity' ||
+            Boolean(p.discountPercentage) ||
+            Boolean(p.discountAmount)),
+      );
+    },
+    enabled: Boolean(branch?.id),
+  });
 
   const subtotal = useMemo(() => cartSubtotal(items), [items]);
+
+  const qualifyingPromos = useMemo(() => {
+    if (!promotionsQuery.data) return [];
+    return getQualifyingPromotions(items, promotionsQuery.data as PromotionRule[]);
+  }, [promotionsQuery.data, items]);
+
+  // Auto-apply only product-targeted qualifying promos (not generic ones)
+  useEffect(() => {
+    if (manualClear || selectedPromoId || discount !== '0.00') return;
+    if (!qualifyingPromos.length || !promotionsQuery.data) return;
+    // Only auto-apply promos that have specific product items assigned
+    const rawMap = new Map<string, any>();
+    for (const p of promotionsQuery.data) rawMap.set(p.id, p);
+    const targeted = qualifyingPromos.filter((qp) => {
+      const raw = rawMap.get(qp.id);
+      return raw?.items && raw.items.length > 0;
+    });
+    if (!targeted.length) return;
+    const best = targeted.reduce((a, b) => (b.discountMinor > a.discountMinor ? b : a));
+    if (best.discountMinor > 0n) {
+      setDiscount(best.discountMoney);
+      setSelectedPromoId(best.id);
+    }
+  }, [qualifyingPromos, promotionsQuery.data, manualClear, selectedPromoId, discount]);
+
+  const applyPercentDiscount = (percent: number, promoId?: string) => {
+    try {
+      const subtotalMinor = moneyToMinor(subtotal);
+      const discountMinor = (subtotalMinor * BigInt(Math.round(percent * 100))) / 10000n;
+      setDiscount(minorToMoney(discountMinor));
+      setPercentValue(String(percent));
+      setSelectedPromoId(promoId ?? null);
+      setManualClear(false);
+    } catch {
+      setDiscount('0.00');
+    }
+  };
+
+  const applyFixedDiscount = (amount: string, promoId?: string) => {
+    setDiscount(amount);
+    setPercentValue('');
+    setSelectedPromoId(promoId ?? null);
+    setManualClear(false);
+  };
+
+  const clearDiscount = () => {
+    setDiscount('0.00');
+    setPercentValue('');
+    setSelectedPromoId(null);
+    setManualClear(true);
+  };
+
   const total = useMemo(() => cartTotal(items, discount || '0.00'), [discount, items]);
 
   useEffect(() => {
@@ -268,15 +346,130 @@ export default function PaymentScreen() {
             )}
           </View>
 
-          <View className="rounded-2xl border border-slate-200 bg-white p-4">
+          <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-3">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-1.5">
+                <Feather name="tag" size={16} color="#1A593B" />
+                <Text className="text-sm font-bold text-slate-900">Promotions & Discounts</Text>
+              </View>
+              {discount !== '0.00' && discount.trim() ? (
+                <Pressable
+                  onPress={clearDiscount}
+                  className="flex-row items-center gap-1 rounded-lg bg-red-50 px-2.5 py-1 active:bg-red-100"
+                >
+                  <Feather name="x" size={12} color="#DC2626" />
+                  <Text className="text-xs font-semibold text-red-700">Clear Discount</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {(() => {
+              if (!qualifyingPromos.length) return null;
+              // Build a lookup from the raw promo data for labels
+              const promoMap = new Map<string, any>();
+              for (const p of promotionsQuery.data ?? []) promoMap.set(p.id, p);
+              return (
+                <View className="gap-1.5">
+                  <Text className="text-[11px] font-semibold uppercase text-slate-500">
+                    Qualifying Promotions
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
+                    {qualifyingPromos.map((qp) => {
+                      const raw = promoMap.get(qp.id);
+                      const isSelected = selectedPromoId === qp.id;
+                      const discountLabel = raw?.discountPercentage
+                        ? `${raw.discountPercentage}% OFF`
+                        : raw?.discountAmount
+                          ? `\u20b1${raw.discountAmount} OFF`
+                          : qp.name;
+                      const volumeLabel = raw?.type === 'tiered_quantity' && raw?.minOrderQuantity
+                        ? `Min ${raw.minOrderQuantity}+ \u00b7 `
+                        : '';
+                      return (
+                        <Pressable
+                          key={qp.id}
+                          onPress={() => {
+                            if (raw?.discountPercentage) {
+                              applyPercentDiscount(Number(raw.discountPercentage), qp.id);
+                            } else if (raw?.discountAmount) {
+                              applyFixedDiscount(raw.discountAmount, qp.id);
+                            }
+                          }}
+                          className={`flex-row items-center gap-1.5 rounded-xl border px-3 py-2 ${
+                            isSelected
+                              ? 'border-brand-600 bg-brand-50'
+                              : 'border-slate-200 bg-slate-50 active:bg-slate-100'
+                          }`}
+                        >
+                          <Feather
+                            name={raw?.type === 'tiered_quantity' ? 'trending-up' : 'gift'}
+                            size={13}
+                            color={isSelected ? '#1A593B' : '#64748B'}
+                          />
+                          <Text
+                            className={`text-xs font-bold ${
+                              isSelected ? 'text-brand-900' : 'text-slate-700'
+                            }`}
+                          >
+                            {qp.name} ({volumeLabel}{discountLabel})
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              );
+            })()}
+
+            <View className="gap-1.5">
+              <Text className="text-[11px] font-semibold uppercase text-slate-500">
+                Quick Discount Presets
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {[
+                  { label: '5% OFF', percent: 5 },
+                  { label: '10% OFF', percent: 10 },
+                  { label: '15% OFF', percent: 15 },
+                  { label: '20% Senior / PWD', percent: 20 },
+                ].map((preset) => {
+                  const isSelected = percentValue === String(preset.percent);
+                  return (
+                    <Pressable
+                      key={preset.label}
+                      onPress={() => applyPercentDiscount(preset.percent)}
+                      className={`rounded-xl border px-3 py-1.5 ${
+                        isSelected
+                          ? 'border-brand-600 bg-brand-50'
+                          : 'border-slate-200 bg-slate-50 active:bg-slate-100'
+                      }`}
+                    >
+                      <Text
+                        className={`text-xs font-semibold ${
+                          isSelected ? 'text-brand-900' : 'text-slate-700'
+                        }`}
+                      >
+                        {preset.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
             <Field
-              label="Discount (optional)"
+              label="Custom Discount Amount (₱)"
               value={discount}
-              onChangeText={setDiscount}
+              onChangeText={(val) => {
+                setDiscount(val);
+                setPercentValue('');
+                setSelectedPromoId(null);
+              }}
               keyboardType="decimal-pad"
               placeholder="0.00"
             />
+          </View>
 
+          <View className="rounded-2xl border border-slate-200 bg-white p-4">
             <View className="mb-1 flex-row items-center justify-between">
               <Text className="text-xs font-semibold uppercase tracking-wider text-slate-600">
                 Cash received

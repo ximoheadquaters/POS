@@ -150,3 +150,60 @@ export interface ReportExportMetadata {
   generatedAt?: Date;
 }
 
+export interface InventoryReportStockRow {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  inventoryRole: string;
+  unit: string;
+  quantity: number;
+  sealedQuantity: number;
+  openedQuantity: number;
+  lowStockLevel: number;
+  isLowStock: boolean;
+  averageCost: string | null;
+  inventoryValue: string | null;
+  branchName: string;
+  conversionHint: string | null;
+}
+
+export interface InventoryReportConversionRow {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  baseUnit: string;
+  sellingUnit: string;
+  sellingUnitName: string;
+  unitsPerBase: number;
+  isPortioningContainer: boolean;
+  ruleLabel: string;
+}
+
+export interface InventoryReportMovementRow {
+  id: string;
+  createdAt: string;
+  productName: string;
+  sku: string;
+  unit: string;
+  type: string;
+  quantityDelta: number;
+  quantityAfter: number;
+  reason: string;
+  createdBy: string | null;
+  conversionLabel: string | null;
+  branchName: string;
+}
+
+export interface InventoryReportResponse {
+  title: string;
+  range: { from: string; to: string; branchId: string | null };
+  stock: InventoryReportStockRow[];
+  conversions: InventoryReportConversionRow[];
+  movements: InventoryReportMovementRow[];
+  movementsTotal: number;
+  page: number;
+  pageSize: number;
+}
+

@@ -335,7 +335,11 @@ function StockAdjustmentContent() {
                     />
                   </View>
                 ) : productsQuery.data?.length ? (
-                  <View className="overflow-hidden rounded-xl border border-slate-200">
+                  <ScrollView
+                    nestedScrollEnabled
+                    className="max-h-72 rounded-xl border border-slate-200"
+                    contentContainerStyle={{ flexGrow: 0 }}
+                  >
                     {productsQuery.data.map((product, index) => (
                       <Pressable
                         key={product.id}
@@ -360,7 +364,7 @@ function StockAdjustmentContent() {
                         <Feather name="chevron-right" size={17} color="#1A593B" />
                       </Pressable>
                     ))}
-                  </View>
+                  </ScrollView>
                 ) : (
                   <View className="items-center rounded-xl bg-slate-50 p-6">
                     <Text className="text-sm font-medium text-slate-700">No inventory product found</Text>

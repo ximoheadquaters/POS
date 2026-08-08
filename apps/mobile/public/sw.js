@@ -1,6 +1,6 @@
 /* global self, caches, fetch, URL */
 // Bump on each release that must invalidate preview clients.
-const CACHE_NAME = 'ximo-pos-v7-audit-rows';
+const CACHE_NAME = 'ximo-pos-v10-volume-promotions';
 const APP_SHELL = /* __XIMO_APP_SHELL__ */ ['/', '/manifest.json', '/ximo-icon.png'];
 
 self.addEventListener('install', (event) => {

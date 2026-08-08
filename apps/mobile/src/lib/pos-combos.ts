@@ -103,52 +103,49 @@ async function fetchCombosViaPromotionsApi(
     (promo) => promo.isActive && promo.type === 'combo_bundle' && Boolean(promo.comboPrice),
   );
 
-  const results: PosComboPromotion[] = [];
-  for (const promo of activeCombos) {
-    const detail = await api<PromotionDetail>(`/promotions/${promo.id}`);
-    const components = (
-      await Promise.all((detail.items ?? []).map((item) => enrichComponent(item, branchId)))
-    ).filter((component): component is PosComboComponent => Boolean(component));
+  if (!activeCombos.length) return [];
 
-    if (!components.length) continue;
+  // Fetch all combo details + components in parallel
+  const settled = await Promise.all(
+    activeCombos.map(async (promo): Promise<PosComboPromotion | null> => {
+      try {
+        const detail = await api<PromotionDetail>(`/promotions/${promo.id}`);
+        const components = (
+          await Promise.all((detail.items ?? []).map((item) => enrichComponent(item, branchId)))
+        ).filter((component): component is PosComboComponent => Boolean(component));
 
-    results.push({
-      id: promo.id,
-      name: promo.name,
-      code: promo.code,
-      type: 'combo_bundle',
-      comboPrice: promo.comboPrice!,
-      description: promo.description,
-      components,
-    });
-  }
+        if (!components.length) return null;
 
-  return results;
+        return {
+          id: promo.id,
+          name: promo.name,
+          code: promo.code,
+          type: 'combo_bundle',
+          comboPrice: promo.comboPrice!,
+          description: promo.description,
+          components,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return settled.filter((r): r is PosComboPromotion => r !== null);
 }
 
-/** Load sellable combo bundles for POS. Prefers dedicated endpoints, falls back to promotions CRUD. */
+/** Load sellable combo bundles for POS. */
 export async function fetchPosCombos(
   branchId: string,
   search?: string,
 ): Promise<PosComboPromotion[]> {
   const query = search ? `&search=${encodeURIComponent(search)}` : '';
 
+  // Try dedicated endpoint first (single fast attempt)
   try {
     return await api<PosComboPromotion[]>(`/pos/promotions?branchId=${branchId}${query}`);
-  } catch (error) {
-    if (!isMissingRoute(error)) {
-      // Continue — older APIs may not expose /pos/promotions yet.
-    }
-  }
-
-  try {
-    return await api<PosComboPromotion[]>(
-      `/promotions/pos-catalog?branchId=${branchId}${query}`,
-    );
-  } catch (error) {
-    if (!isMissingRoute(error)) {
-      // Continue to list/detail composition.
-    }
+  } catch {
+    // Fall through to manual composition
   }
 
   return fetchCombosViaPromotionsApi(branchId, search);

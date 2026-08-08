@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterSectionsByProfile, resolveFeatureLock, type SidebarSectionDef } from '../lib/feature-lock';
+import { filterSectionsByProfile, isPathActive, resolveFeatureLock, type SidebarSectionDef } from '../lib/feature-lock';
 
 describe('Retail Navigation and Storyboard UX — 26 Focused Tests', () => {
   it('1. Retail sidebar uses the approved sequence: DAILY WORK, CATALOG, INVENTORY, STORE MANAGEMENT', () => {
@@ -241,5 +241,22 @@ describe('Retail Navigation and Storyboard UX — 26 Focused Tests', () => {
   it('26. Sidebar, modal, and wizard layout remains usable at 320 px', () => {
     const minWidth = 320;
     expect(minWidth).toBe(320);
+  });
+
+  it('27. isPathActive highlights only the exact active item without overlapping /product-variants with /products', () => {
+    // When on Selling Units & Barcodes (/product-variants)
+    expect(isPathActive('/product-variants', '/product-variants')).toBe(true);
+    expect(isPathActive('/product-variants', '/products')).toBe(false);
+    expect(isPathActive('/product-variants', '/catalogue')).toBe(false);
+
+    // When on Overview (/products)
+    expect(isPathActive('/products', '/products')).toBe(true);
+    expect(isPathActive('/products', '/product-variants')).toBe(false);
+    expect(isPathActive('/products', '/catalogue')).toBe(false);
+
+    // When on Categories (/catalogue)
+    expect(isPathActive('/catalogue', '/catalogue')).toBe(true);
+    expect(isPathActive('/catalogue', '/products')).toBe(false);
+    expect(isPathActive('/catalogue', '/product-variants')).toBe(false);
   });
 });

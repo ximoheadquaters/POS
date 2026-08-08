@@ -29,6 +29,7 @@ import { SalesSummaryReportService } from './services/sales-summary-service.js';
 import { OverviewReportService } from './services/overview-report-service.js';
 import { SalesReportService } from './services/sales-report-service.js';
 import { ProductPerformanceReportService } from './services/product-performance-report-service.js';
+import { InventoryReportService } from './services/inventory-report-service.js';
 import { TransactionDetailService } from './services/transaction-detail-service.js';
 import type { Database } from '../../database/types.js';
 
@@ -39,6 +40,7 @@ export function reportsRouter(database: Queryable): Router {
   const overviewService = new OverviewReportService(db);
   const salesReportService = new SalesReportService(db);
   const productPerformanceService = new ProductPerformanceReportService(db);
+  const inventoryReportService = new InventoryReportService(db);
   const transactionDetailService = new TransactionDetailService(db);
 
   router.use(requireAnyModule('dashboard', 'reports'), requirePermission('reports:read'));
@@ -107,6 +109,34 @@ export function reportsRouter(database: Queryable): Router {
 
     const scope = resolveReportScope(request.authUser!, filterInput);
     const result = await productPerformanceService.generate(scope, filterInput);
+    sendData(response, result);
+  });
+
+  router.get('/inventory', async (request, response) => {
+    const fromStr =
+      (request.query.from as string) ||
+      new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const toStr = (request.query.to as string) || new Date().toISOString().slice(0, 10);
+    const branchIdStr =
+      typeof request.query.branchId === 'string' && request.query.branchId
+        ? request.query.branchId
+        : undefined;
+    const pageNum = request.query.page ? parseInt(String(request.query.page), 10) : 1;
+    const pageSizeNum = request.query.pageSize
+      ? parseInt(String(request.query.pageSize), 10)
+      : 100;
+
+    const filterInput: { from: string; to: string; branchId?: string; page?: number; pageSize?: number } =
+      {
+        from: fromStr,
+        to: toStr,
+        page: pageNum,
+        pageSize: pageSizeNum,
+      };
+    if (branchIdStr) filterInput.branchId = branchIdStr;
+
+    const scope = resolveReportScope(request.authUser!, filterInput);
+    const result = await inventoryReportService.generate(scope, filterInput);
     sendData(response, result);
   });
 

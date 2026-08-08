@@ -2,7 +2,7 @@ import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { convertRecipeQuantity } from '@ximo/shared';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
@@ -187,41 +187,42 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
           title={isRetail ? 'Retail Repacking' : 'Production & Repacking'}
           subtitle={
             isRetail
-              ? 'Portion bulk goods and raw materials into retail-ready finished packs'
-              : 'Record finished product output from recipe ingredients'
+              ? 'Portion bulk goods into retail finished packs'
+              : 'Produce finished stock from recipe ingredients'
           }
           showBack
+          backLabel="Back"
         />
 
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 130 }}>
           {lastSubmittedBatch ? (
-            <View className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <View className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
               <View className="flex-row items-center gap-3">
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-emerald-600">
+                <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-600">
                   <Feather name="check" size={20} color="#FFFFFF" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-bold text-emerald-950">
-                    Repacking Recorded Successfully
+                    Repacking Batch Recorded
                   </Text>
-                  <Text className="mt-1 text-sm text-emerald-700">
+                  <Text className="mt-0.5 text-xs text-emerald-700">
                     Batch #{lastSubmittedBatch.batchNumber} • {lastSubmittedBatch.quantityProduced}{' '}
                     {lastSubmittedBatch.unit} of {lastSubmittedBatch.productName}
                   </Text>
                 </View>
               </View>
-              <View className="mt-4 flex-row justify-between border-t border-emerald-200/60 pt-3">
-                <Text className="text-xs text-emerald-800">
-                  Total Cost: {formatMoney(lastSubmittedBatch.totalCost)}
+              <View className="mt-3 flex-row justify-between border-t border-emerald-200/60 pt-2.5">
+                <Text className="text-xs font-medium text-emerald-800">
+                  Total Cost: <Text className="font-bold">{formatMoney(lastSubmittedBatch.totalCost)}</Text>
                 </Text>
-                <Text className="text-xs text-emerald-800">
-                  Unit Cost: {formatMoney(lastSubmittedBatch.unitCost)} / pack
+                <Text className="text-xs font-medium text-emerald-800">
+                  Unit Cost: <Text className="font-bold">{formatMoney(lastSubmittedBatch.unitCost)}</Text> / pack
                 </Text>
               </View>
               <Button
                 title="Repack Another Item"
                 variant="secondary"
-                className="mt-4"
+                className="mt-3"
                 onPress={() => {
                   setLastSubmittedBatch(null);
                   setSelectedProductId(null);
@@ -232,20 +233,27 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
           ) : null}
 
           {/* Step 1: Select Finished Product */}
-          <View className="rounded-2xl border border-slate-200 bg-white p-5">
-            <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Step 1 — Select Finished Product
-            </Text>
-            <Text className="mt-1 text-sm text-slate-600">
-              Choose the retail product you are repacking into.
-            </Text>
+          <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-3">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-2">
+                <View className="h-6 w-6 items-center justify-center rounded-full bg-brand-700">
+                  <Text className="text-xs font-bold text-white">1</Text>
+                </View>
+                <Text className="text-sm font-bold text-slate-900">Select Finished Product</Text>
+              </View>
+              <Text className="text-xs text-slate-500">
+                {productsList.length} recipe item{productsList.length === 1 ? '' : 's'}
+              </Text>
+            </View>
 
-            <View className="mt-4 gap-2">
+            <View className="gap-2">
               {productsList.length === 0 ? (
-                <Text className="py-4 text-center text-sm text-slate-500">
-                  No preproduced repacking products found in this branch. Add a product with
-                  repacking recipe in the Product Form.
-                </Text>
+                <View className="items-center justify-center py-6">
+                  <Feather name="package" size={28} color="#94A3B8" />
+                  <Text className="mt-2 text-center text-xs font-medium text-slate-500">
+                    No repacking recipe products found in this branch.
+                  </Text>
+                </View>
               ) : (
                 productsList.map((prod) => {
                   const selected = prod.id === selectedProductId;
@@ -256,23 +264,37 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                         setSelectedProductId(prod.id);
                         setLastSubmittedBatch(null);
                       }}
-                      className={`flex-row items-center justify-between rounded-xl border p-4 ${
+                      className={`flex-row items-center justify-between rounded-xl border p-3.5 ${
                         selected
                           ? 'border-brand-600 bg-brand-50'
-                          : 'border-slate-200 bg-white'
+                          : 'border-slate-200 bg-white active:bg-slate-50'
                       }`}
                     >
-                      <View className="flex-1">
-                        <Text className="font-semibold text-slate-900">{prod.name}</Text>
-                        <Text className="mt-1 text-xs text-slate-500">
-                          SKU: {prod.sku} • Current Stock: {prod.quantity} {prod.unit}s
+                      <View className="flex-1 pr-3">
+                        <Text
+                          className={`text-sm font-bold ${
+                            selected ? 'text-brand-900' : 'text-slate-900'
+                          }`}
+                        >
+                          {prod.name}
                         </Text>
+                        <View className="mt-1 flex-row flex-wrap items-center gap-2">
+                          <Text className="text-xs text-slate-500">SKU: {prod.sku}</Text>
+                          <Text className="text-xs text-slate-300">•</Text>
+                          <View className="rounded-md bg-slate-100 px-1.5 py-0.5">
+                            <Text className="text-[11px] font-semibold text-slate-600">
+                              Stock: {prod.quantity} {prod.unit}s
+                            </Text>
+                          </View>
+                        </View>
                       </View>
-                      <Feather
-                        name={selected ? 'check-circle' : 'circle'}
-                        size={20}
-                        color={selected ? '#1A593B' : '#94A3B8'}
-                      />
+                      <View
+                        className={`h-5 w-5 items-center justify-center rounded-full border ${
+                          selected ? 'border-brand-700 bg-brand-700' : 'border-slate-300 bg-white'
+                        }`}
+                      >
+                        {selected ? <Feather name="check" size={12} color="#FFFFFF" /> : null}
+                      </View>
                     </Pressable>
                   );
                 })
@@ -280,117 +302,157 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
             </View>
           </View>
 
-          {/* Step 2 & 3: Recipe Review & Quantity Output */}
+          {/* Step 2: Output Quantity & Recipe Requirements */}
           {selectedProduct ? (
-            <View className="rounded-2xl border border-slate-200 bg-white p-5">
-              <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Step 2 & 3 — Recipe & Output Quantity
-              </Text>
+            <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-4">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center gap-2">
+                  <View className="h-6 w-6 items-center justify-center rounded-full bg-brand-700">
+                    <Text className="text-xs font-bold text-white">2</Text>
+                  </View>
+                  <Text className="text-sm font-bold text-slate-900">Packs to Produce</Text>
+                </View>
+                <Text className="text-xs text-slate-500">{selectedProduct.unit}s output</Text>
+              </View>
 
-              <View className="mt-4">
-                <Text className="text-sm font-medium text-slate-700">Packs to Make</Text>
-                <Field
-                  label=""
+              <View className="flex-row items-center gap-2">
+                <Pressable
+                  onPress={() => {
+                    const next = Math.max(1, (numOutputQuantity || 1) - 5);
+                    setOutputQuantity(String(next));
+                  }}
+                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
+                >
+                  <Text className="text-sm font-bold text-slate-700">-5</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const next = Math.max(1, (numOutputQuantity || 1) - 1);
+                    setOutputQuantity(String(next));
+                  }}
+                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
+                >
+                  <Feather name="minus" size={16} color="#334155" />
+                </Pressable>
+
+                <TextInput
                   value={outputQuantity}
                   onChangeText={setOutputQuantity}
                   keyboardType="numeric"
-                  placeholder="e.g. 10"
+                  placeholder="10"
+                  placeholderTextColor="#94A3B8"
+                  selectionColor="#1A593B"
+                  className="h-12 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-center text-base font-bold text-slate-900 focus:border-brand-600"
                 />
+
+                <Pressable
+                  onPress={() => {
+                    const next = (numOutputQuantity || 0) + 1;
+                    setOutputQuantity(String(next));
+                  }}
+                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
+                >
+                  <Feather name="plus" size={16} color="#334155" />
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const next = (numOutputQuantity || 0) + 10;
+                    setOutputQuantity(String(next));
+                  }}
+                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
+                >
+                  <Text className="text-sm font-bold text-slate-700">+10</Text>
+                </Pressable>
               </View>
 
-              <Text className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Source Materials Required
-              </Text>
+              <View className="gap-2 border-t border-slate-100 pt-3">
+                <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Required Source Materials
+                </Text>
 
-              {selectedProduct.ingredients.map((ing) => {
-                const reqPerUnit = convertRecipeQuantity(ing.quantityRequired, ing.recipeUnit, ing.baseUnit);
-                const totalReq = reqPerUnit * (validOutputQuantity ? numOutputQuantity : 0);
-                const sufficient = ing.availableQuantity >= totalReq;
-                const isPackage = ['pouch', 'label', 'bottle', 'box', 'bag', 'container'].includes(
-                  ing.baseUnit.toLowerCase(),
-                );
+                {selectedProduct.ingredients.map((ing) => {
+                  const reqPerUnit = convertRecipeQuantity(ing.quantityRequired, ing.recipeUnit, ing.baseUnit);
+                  const totalReq = reqPerUnit * (validOutputQuantity ? numOutputQuantity : 0);
+                  const sufficient = ing.availableQuantity >= totalReq;
 
-                return (
-                  <View
-                    key={ing.productId}
-                    className={`mb-2 rounded-xl border p-3 ${
-                      sufficient ? 'border-slate-200 bg-slate-50' : 'border-amber-300 bg-amber-50'
-                    }`}
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <Text className="font-semibold text-slate-800">
-                        {ing.name}{' '}
-                        <Text className="text-xs font-normal text-slate-500">
-                          ({isPackage ? 'Packaging Material' : 'Bulk Source Product'})
+                  return (
+                    <View
+                      key={ing.productId}
+                      className={`rounded-xl border p-3 ${
+                        sufficient ? 'border-slate-200 bg-slate-50' : 'border-amber-300 bg-amber-50'
+                      }`}
+                    >
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-sm font-bold text-slate-900">{ing.name}</Text>
+                        <View
+                          className={`rounded-full px-2 py-0.5 ${
+                            sufficient ? 'bg-emerald-100' : 'bg-amber-100'
+                          }`}
+                        >
+                          <Text
+                            className={`text-[10px] font-bold ${
+                              sufficient ? 'text-emerald-800' : 'text-amber-900'
+                            }`}
+                          >
+                            {sufficient ? '✓ Stock Available' : '⚠ Low Stock'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View className="mt-1 flex-row items-center justify-between">
+                        <Text className="text-xs text-slate-600">
+                          Need: <Text className="font-semibold text-slate-900">{totalReq} {ing.baseUnit}</Text> ({ing.quantityRequired} {ing.recipeUnit}/pack)
                         </Text>
-                      </Text>
-                      <Text
-                        className={`text-xs font-bold ${
-                          sufficient ? 'text-emerald-700' : 'text-amber-800'
-                        }`}
-                      >
-                        {sufficient ? 'Stock Available' : 'Insufficient Stock'}
-                      </Text>
+                        <Text className="text-xs text-slate-500">
+                          In Stock: {ing.availableQuantity} {ing.baseUnit}
+                        </Text>
+                      </View>
                     </View>
-                    <Text className="mt-1 text-xs text-slate-600">
-                      Needed per pack: {ing.quantityRequired} {ing.recipeUnit} • Needed for {numOutputQuantity} packs: {totalReq} {ing.baseUnit}
-                    </Text>
-                    <Text className="text-xs text-slate-500">
-                      Current Stock Available: {ing.availableQuantity} {ing.baseUnit}
-                    </Text>
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </View>
             </View>
           ) : null}
 
-          {/* Step 4: Server Preview & Action */}
+          {/* Step 3: Cost Preview Breakdown */}
           {selectedProduct && validOutputQuantity ? (
-            <View className="rounded-2xl border border-slate-200 bg-white p-5">
-              <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Step 4 — Repacking Cost & Stock Preview
-              </Text>
+            <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-3">
+              <View className="flex-row items-center gap-2">
+                <View className="h-6 w-6 items-center justify-center rounded-full bg-brand-700">
+                  <Text className="text-xs font-bold text-white">3</Text>
+                </View>
+                <Text className="text-sm font-bold text-slate-900">Cost & Valuation Preview</Text>
+              </View>
 
               {previewQuery.isLoading ? (
-                <Text className="py-4 text-center text-sm text-slate-500">
-                  Calculating authoritative preview…
+                <Text className="py-3 text-center text-xs text-slate-500">
+                  Calculating cost preview…
                 </Text>
               ) : preview ? (
-                <View className="mt-3 gap-3">
-                  <View className="flex-row justify-between border-b border-slate-100 pb-2">
-                    <Text className="text-sm text-slate-600">Output Product</Text>
-                    <Text className="text-sm font-semibold text-slate-900">
-                      {preview.productName} ({preview.quantity} packs)
-                    </Text>
-                  </View>
-                  <View className="flex-row justify-between border-b border-slate-100 pb-2">
-                    <Text className="text-sm text-slate-600">Estimated Total Cost</Text>
-                    <Text className="text-sm font-semibold text-slate-900">
-                      {formatMoney(preview.estimatedTotalCost)}
-                    </Text>
-                  </View>
-                  <View className="flex-row justify-between pb-2">
-                    <Text className="text-sm text-slate-600">Estimated Cost per Pack</Text>
-                    <Text className="text-sm font-bold text-brand-700">
-                      {formatMoney(preview.estimatedUnitCost)}
-                    </Text>
+                <View className="gap-2.5">
+                  <View className="flex-row items-center justify-between rounded-xl bg-slate-50 p-3">
+                    <View>
+                      <Text className="text-xs text-slate-500">Estimated Total Cost</Text>
+                      <Text className="mt-0.5 text-base font-black text-slate-900">
+                        {formatMoney(preview.estimatedTotalCost)}
+                      </Text>
+                    </View>
+                    <View className="items-end">
+                      <Text className="text-xs text-slate-500">Cost per Pack</Text>
+                      <Text className="mt-0.5 text-base font-black text-brand-700">
+                        {formatMoney(preview.estimatedUnitCost)}
+                      </Text>
+                    </View>
                   </View>
 
                   {!preview.canProduce ? (
-                    <Text className="rounded-lg bg-amber-100 p-3 text-xs font-semibold text-amber-900">
-                      Warning: Insufficient stock for one or more source materials. Recording this
-                      batch will fail unless negative inventory is enabled for your organization.
-                    </Text>
+                    <View className="flex-row items-start gap-2 rounded-xl bg-amber-50 p-3 border border-amber-200">
+                      <Feather name="alert-triangle" size={16} color="#B45309" />
+                      <Text className="flex-1 text-xs text-amber-900">
+                        One or more materials do not have sufficient stock. Recording this batch
+                        will reduce inventory into negative unless restocked.
+                      </Text>
+                    </View>
                   ) : null}
-
-                  <Button
-                    title={
-                      recordMutation.isPending ? 'Recording Batch…' : 'Record Repacking Batch'
-                    }
-                    disabled={recordMutation.isPending || !preview.canProduce}
-                    onPress={() => setShowConfirmModal(true)}
-                    className="mt-2"
-                  />
                 </View>
               ) : (
                 <Text className="py-2 text-xs text-amber-800">
@@ -403,14 +465,14 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
 
         {/* Sticky Bottom Action Bar */}
         {selectedProduct && (
-          <View className="border-t border-slate-200 bg-white p-4 shadow-xl flex-row items-center justify-between">
-            <View className="flex-1 mr-4">
-              <Text className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <View className="border-t border-slate-200 bg-white px-4 py-3 shadow-lg flex-row items-center gap-3">
+            <View className="flex-1">
+              <Text className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 Ready to Repack
               </Text>
-              <Text className="text-base font-bold text-slate-900" numberOfLines={1}>
+              <Text className="text-sm font-black text-slate-900" numberOfLines={1}>
                 {preview
-                  ? `${preview.quantity} ${preview.quantity === 1 ? 'pack' : 'packs'} • Total ${formatMoney(preview.estimatedTotalCost)}`
+                  ? `${preview.quantity} packs • ${formatMoney(preview.estimatedTotalCost)}`
                   : `${numOutputQuantity || 1} packs of ${selectedProduct.name}`}
               </Text>
             </View>
@@ -418,15 +480,13 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
               accessibilityRole="button"
               disabled={!preview || recordMutation.isPending || !preview.canProduce}
               onPress={() => setShowConfirmModal(true)}
-              className={`min-h-12 flex-row items-center justify-center rounded-xl bg-brand-700 px-6 ${
-                !preview || recordMutation.isPending || !preview.canProduce
-                  ? 'opacity-50'
-                  : 'active:opacity-80'
+              className={`h-12 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:bg-brand-800 ${
+                !preview || recordMutation.isPending || !preview.canProduce ? 'opacity-50' : ''
               }`}
             >
               <Feather name="check-circle" size={18} color="#FFFFFF" />
-              <Text className="ml-2 text-base font-semibold text-white">
-                {recordMutation.isPending ? 'Recording Batch…' : 'Record Repacking Batch'}
+              <Text className="ml-2 text-sm font-bold text-white">
+                {recordMutation.isPending ? 'Recording…' : 'Record Batch'}
               </Text>
             </Pressable>
           </View>
@@ -435,32 +495,36 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
         {/* Confirmation Modal */}
         <Modal visible={showConfirmModal} transparent animationType="fade">
           <View className="flex-1 items-center justify-center bg-black/50 p-4">
-            <View className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-              <Text className="text-lg font-bold text-slate-900">
+            <View className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl gap-4">
+              <Text className="text-base font-bold text-slate-900">
                 Confirm Repacking Batch
               </Text>
-              <Text className="mt-1 text-sm text-slate-600">
+              <Text className="text-xs text-slate-600">
                 Review the batch details before recording inventory consumption and finished output.
               </Text>
 
               {selectedProduct && preview ? (
-                <View className="mt-4 gap-2 rounded-xl bg-slate-50 p-4">
-                  <Text className="text-sm font-semibold text-slate-800">
-                    Product: {selectedProduct.name}
-                  </Text>
-                  <Text className="text-sm text-slate-700">
-                    Output: {numOutputQuantity} {selectedProduct.unit}s
-                  </Text>
-                  <Text className="text-xs text-slate-600">
-                    Total Estimated Cost: {formatMoney(preview.estimatedTotalCost)}
-                  </Text>
-                  <Text className="text-xs text-slate-600">
-                    Cost per Unit: {formatMoney(preview.estimatedUnitCost)}
-                  </Text>
+                <View className="gap-2 rounded-xl bg-slate-50 p-3.5 border border-slate-100">
+                  <View className="flex-row justify-between">
+                    <Text className="text-xs text-slate-500">Product</Text>
+                    <Text className="text-xs font-bold text-slate-900">{selectedProduct.name}</Text>
+                  </View>
+                  <View className="flex-row justify-between">
+                    <Text className="text-xs text-slate-500">Output Quantity</Text>
+                    <Text className="text-xs font-bold text-brand-800">{numOutputQuantity} {selectedProduct.unit}s</Text>
+                  </View>
+                  <View className="flex-row justify-between border-t border-slate-200/60 pt-1.5">
+                    <Text className="text-xs text-slate-500">Total Cost</Text>
+                    <Text className="text-xs font-bold text-slate-900">{formatMoney(preview.estimatedTotalCost)}</Text>
+                  </View>
+                  <View className="flex-row justify-between">
+                    <Text className="text-xs text-slate-500">Unit Cost</Text>
+                    <Text className="text-xs font-bold text-slate-900">{formatMoney(preview.estimatedUnitCost)}</Text>
+                  </View>
                 </View>
               ) : null}
 
-              <View className="mt-6 flex-row justify-end gap-3">
+              <View className="flex-row justify-end gap-2.5 pt-1">
                 <Button
                   title="Cancel"
                   variant="secondary"
@@ -468,7 +532,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                 />
                 <Button
                   title={
-                    recordMutation.isPending ? 'Recording…' : 'Confirm & Record Batch'
+                    recordMutation.isPending ? 'Recording…' : 'Confirm & Record'
                   }
                   disabled={recordMutation.isPending}
                   onPress={() => recordMutation.mutate()}

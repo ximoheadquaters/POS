@@ -1,6 +1,6 @@
 import { formatMoney } from './format';
 
-export type ReportRouteId = 'overview' | 'sales' | 'products';
+export type ReportRouteId = 'overview' | 'sales' | 'products' | 'inventory';
 
 export interface ReportFilterState {
   from: string;
@@ -26,6 +26,8 @@ export function reportRouteTitle(route: ReportRouteId): string {
       return 'Detailed Sales Report';
     case 'products':
       return 'Product Performance Report';
+    case 'inventory':
+      return 'Inventory Report';
   }
 }
 
@@ -51,7 +53,10 @@ export function parseReportFiltersFromSearch(
   const branchId = params.get('branchId') ?? undefined;
   const sectionParam = params.get('section');
   const section =
-    sectionParam === 'overview' || sectionParam === 'sales' || sectionParam === 'products'
+    sectionParam === 'overview' ||
+    sectionParam === 'sales' ||
+    sectionParam === 'products' ||
+    sectionParam === 'inventory'
       ? sectionParam
       : undefined;
 

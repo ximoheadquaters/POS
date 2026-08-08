@@ -152,3 +152,23 @@ export function filterSectionsByProfile(user: { businessProfile?: string } | nul
     },
   ];
 }
+export function isPathActive(pathname: string, href: string): boolean {
+  const current = (pathname || '').split('?')[0].replace(/\/$/, '') || '/';
+  const target = String(href).split('?')[0].replace('/(tabs)', '').replace(/\/$/, '') || '/';
+
+  // Exact match
+  if (current === target) return true;
+
+  // Dashboard / root only matches exact root
+  if (target === '/' || current === '/') return false;
+
+  // Sub-routes must match with slash delimiter (e.g. /products/new matches /products, but NOT /product-variants or /production)
+  if (current.startsWith(`${target}/`)) return true;
+
+  // Specific alias routes where details pages belong exclusively to a parent group
+  if (target === '/purchasing' && (current.startsWith('/purchase/') || current.startsWith('/supplier/'))) {
+    return true;
+  }
+
+  return false;
+}

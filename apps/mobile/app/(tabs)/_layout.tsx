@@ -1,5 +1,6 @@
+import { useEffect } from 'react';
 import { Redirect, Tabs } from 'expo-router';
-import { Text, View, type ColorValue } from 'react-native';
+import { ActivityIndicator, Text, View, type ColorValue } from 'react-native';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
@@ -28,8 +29,25 @@ const Icon = ({
 );
 
 export default function TabLayout() {
-  const { session, currentUser } = useSession();
+  const { session, currentUser, loading } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
+  const hydrated = useBranchStore((state) => state.hydrated);
+  const hydrate = useBranchStore((state) => state.hydrate);
+
+  useEffect(() => {
+    if (!hydrated) {
+      void hydrate();
+    }
+  }, [hydrated, hydrate]);
+
+  if (loading || !hydrated) {
+    return (
+      <View className="flex-1 items-center justify-center bg-brand-700">
+        <ActivityIndicator color="#FFFFFF" size="large" />
+      </View>
+    );
+  }
+
   if (!session) return <Redirect href="/(auth)/login" />;
   if (!currentUser || !branch) return <Redirect href="/branch-select" />;
   const dashboardEnabled =

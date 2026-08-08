@@ -169,6 +169,7 @@ function addSheet(
 export function buildReportsExcel(
   report: ReportsWorkspace,
   metadata: ReportExportMetadata,
+  activeSection?: string,
 ): { bytes: Uint8Array; fileName: string } {
   const workbook = XLSX.utils.book_new();
   workbook.Props = {
@@ -698,4 +699,281 @@ export async function buildReportsPdf(
     });
   }
   return { bytes: await document.save(), fileName: `${reportFileStem(metadata)}.pdf` };
+}
+
+export interface InventoryExportData {
+  stockItems: Array<{
+    name: string;
+    sku: string;
+    category: string;
+    role: string;
+    unit: string;
+    containerName?: string | null;
+    containerUnit?: string | null;
+    unitsPerBase?: number | null;
+    quantity: number;
+    cost: number;
+    value: number;
+    status: string;
+  }>;
+  movements: Array<{
+    createdAt: string;
+    productName: string;
+    sku: string;
+    type: string;
+    quantityDelta: number;
+    quantityAfter: number;
+    reason: string;
+    createdBy: string;
+  }>;
+  conversions: Array<{
+    sourceName: string;
+    sourceUnit: string;
+    targetName: string;
+    targetUnit: string;
+    ratioDisplay: string;
+    sourceStock: number;
+    targetStock: number;
+    status: string;
+  }>;
+  filters?: {
+    subTab?: string;
+    category?: string;
+    role?: string;
+    movementType?: string;
+    lowStockOnly?: boolean;
+    search?: string;
+  };
+}
+
+export function buildInventoryExportExcel(
+  data: InventoryExportData,
+  metadata: ReportExportMetadata,
+): { bytes: Uint8Array; fileName: string } {
+  const workbook = XLSX.utils.book_new();
+  workbook.Props = {
+    Title: `${metadata.organizationName} Inventory Report`,
+    Subject: `${metadata.rangeLabel} - ${metadata.branchName}`,
+    Author: 'Ximo POS',
+    CreatedDate: metadata.generatedAt ?? new Date(),
+  };
+
+  const activeFiltersDesc = [
+    data.filters?.category && data.filters.category !== 'all' ? `Category: ${data.filters.category}` : null,
+    data.filters?.role && data.filters.role !== 'all' ? `Role: ${data.filters.role}` : null,
+    data.filters?.movementType && data.filters.movementType !== 'all' ? `Type: ${data.filters.movementType}` : null,
+    data.filters?.lowStockOnly ? 'Low Stock Only' : null,
+    data.filters?.search ? `Search: "${data.filters.search}"` : null,
+  ]
+    .filter(Boolean)
+    .join(' | ') || 'All Items';
+
+  // Sheet 1: Current Stock
+  addSheet(
+    workbook,
+    'Current Stock',
+    [
+      [`${metadata.organizationName} - Inventory Stock Report`],
+      ['Branch', metadata.branchName],
+      ['Date Range', metadata.rangeLabel],
+      ['Applied Filters', activeFiltersDesc],
+      ['Generated At', (metadata.generatedAt ?? new Date()).toISOString()],
+      [],
+      ['Product Name', 'SKU', 'Category', 'Role', 'Unit / Conversion', 'Stock Qty', 'Avg Cost', 'Valuation', 'Status'],
+      ...data.stockItems.map((item) => [
+        item.name,
+        item.sku,
+        item.category,
+        item.role,
+        item.containerUnit && item.unitsPerBase
+          ? `${item.unit} (1 ${item.containerUnit} = ${item.unitsPerBase} ${item.unit})`
+          : item.unit,
+        item.quantity,
+        amount(item.cost),
+        amount(item.value),
+        item.status === 'out_of_stock' ? 'Out of Stock' : item.status === 'low_stock' ? 'Low Stock' : 'In Stock',
+      ]),
+    ],
+    [28, 18, 20, 14, 26, 14, 16, 18, 16],
+  );
+
+  // Sheet 2: Stock Movements
+  addSheet(
+    workbook,
+    'Stock Movements',
+    [
+      [`${metadata.organizationName} - Stock Movements Audit Log`],
+      ['Branch', metadata.branchName],
+      ['Date Range', metadata.rangeLabel],
+      ['Applied Filters', activeFiltersDesc],
+      ['Generated At', (metadata.generatedAt ?? new Date()).toISOString()],
+      [],
+      ['Date & Time', 'Product Name', 'SKU', 'Movement Type', 'Qty Delta', 'Qty After', 'Reason / Ref', 'Performed By'],
+      ...data.movements.map((m) => [
+        m.createdAt ? new Date(m.createdAt).toLocaleString('en-US') : 'Recent',
+        m.productName,
+        m.sku,
+        m.type?.replaceAll('_', ' ') ?? 'adjustment',
+        m.quantityDelta,
+        m.quantityAfter,
+        m.reason,
+        m.createdBy,
+      ]),
+    ],
+    [22, 28, 18, 18, 14, 14, 26, 20],
+  );
+
+  // Sheet 3: Conversions & Repacking
+  addSheet(
+    workbook,
+    'Conversions & Repacking',
+    [
+      [`${metadata.organizationName} - Repacking & Conversion Recipes`],
+      ['Branch', metadata.branchName],
+      ['Date Range', metadata.rangeLabel],
+      ['Applied Filters', activeFiltersDesc],
+      ['Generated At', (metadata.generatedAt ?? new Date()).toISOString()],
+      [],
+      ['Bulk Source Raw Material', 'Repacked Target Product', 'Conversion Ratio', 'Source Stock', 'Repacked Stock', 'Repack Status'],
+      ...data.conversions.map((c) => [
+        `${c.sourceName} (${c.sourceUnit})`,
+        `${c.targetName} (${c.targetUnit})`,
+        c.ratioDisplay,
+        c.sourceStock,
+        c.targetStock,
+        c.status,
+      ]),
+    ],
+    [28, 28, 26, 16, 16, 20],
+  );
+
+  const start = new Date(metadata.from).toISOString().slice(0, 10);
+  const end = inclusiveEndDate(metadata.to).toISOString().slice(0, 10);
+  const branchStem = metadata.branchName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 30);
+  const fileName = `ximo-inventory-report-${branchStem || 'all-branches'}-${start}-to-${end}.xlsx`;
+
+  const output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  return { bytes: new Uint8Array(output), fileName };
+}
+
+export async function buildInventoryExportPdf(
+  data: InventoryExportData,
+  metadata: ReportExportMetadata,
+): Promise<{ bytes: Uint8Array; fileName: string }> {
+  const document = await PDFDocument.create();
+  const regular = await document.embedFont(StandardFonts.Helvetica);
+  const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  document.setTitle(`${metadata.organizationName} Inventory Report`);
+  document.setAuthor('Ximo POS');
+  document.setSubject(`${metadata.rangeLabel} - ${metadata.branchName}`);
+  document.setCreationDate(metadata.generatedAt ?? new Date());
+
+  const context: PdfContext = {
+    document,
+    regular,
+    bold,
+    page: document.addPage(A4),
+    y: 750,
+    pageNumber: 1,
+    metadata,
+  };
+  drawPageHeader(context);
+
+  const start = new Date(metadata.from).toISOString().slice(0, 10);
+  const end = inclusiveEndDate(metadata.to).toISOString().slice(0, 10);
+  const branchStem = metadata.branchName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 30);
+
+  const activeFiltersDesc = [
+    data.filters?.category && data.filters.category !== 'all' ? `Category: ${data.filters.category}` : null,
+    data.filters?.role && data.filters.role !== 'all' ? `Role: ${data.filters.role}` : null,
+    data.filters?.movementType && data.filters.movementType !== 'all' ? `Type: ${data.filters.movementType}` : null,
+    data.filters?.lowStockOnly ? 'Low Stock Only' : null,
+    data.filters?.search ? `Search: "${data.filters.search}"` : null,
+  ]
+    .filter(Boolean)
+    .join(' | ') || 'All Items';
+
+  sectionTitle(context, 'Inventory Report', `Applied Filters: ${activeFiltersDesc}`);
+
+  kpiTable(context, [
+    ['Branch', metadata.branchName],
+    ['Date Range', metadata.rangeLabel],
+    ['Applied Filters', activeFiltersDesc],
+    ['Total Stock Products', String(data.stockItems.length)],
+    ['Total Movement Logs', String(data.movements.length)],
+    ['Total Conversions', String(data.conversions.length)],
+  ]);
+
+  sectionTitle(context, 'Current Stock Items');
+  pdfTable(
+    context,
+    ['Product Name', 'SKU', 'Category', 'Stock Qty', 'Avg Cost', 'Valuation', 'Status'],
+    data.stockItems.slice(0, 100).map((item) => [
+      item.name,
+      item.sku,
+      item.category,
+      `${item.quantity} ${item.unit}`,
+      money(item.cost),
+      money(item.value),
+      item.status === 'out_of_stock' ? 'Out of Stock' : item.status === 'low_stock' ? 'Low Stock' : 'In Stock',
+    ]),
+    [130, 75, 80, 65, 65, 75, 60],
+  );
+
+  if (data.movements.length > 0) {
+    sectionTitle(context, 'Stock Movements Log');
+    pdfTable(
+      context,
+      ['Date & Time', 'Product Name', 'Type', 'Qty Delta', 'Qty After', 'Reason', 'User'],
+      data.movements.slice(0, 80).map((m) => [
+        m.createdAt ? new Date(m.createdAt).toLocaleDateString('en-US') : 'Recent',
+        m.productName,
+        m.type?.replaceAll('_', ' ') ?? 'adj',
+        `${m.quantityDelta > 0 ? '+' : ''}${m.quantityDelta}`,
+        String(m.quantityAfter),
+        m.reason,
+        m.createdBy,
+      ]),
+      [85, 120, 65, 55, 55, 100, 70],
+    );
+  }
+
+  if (data.conversions.length > 0) {
+    sectionTitle(context, 'Conversions & Repacking Recipes');
+    pdfTable(
+      context,
+      ['Source Bulk Item', 'Target Repacked Item', 'Conversion Ratio', 'Status'],
+      data.conversions.map((c) => [
+        c.sourceName,
+        c.targetName,
+        c.ratioDisplay,
+        c.status,
+      ]),
+      [150, 150, 150, 100],
+    );
+  }
+
+  const generatedAt = metadata.generatedAt ?? new Date();
+  for (const p of document.getPages()) {
+    p.drawText(`Generated by Ximo POS on ${generatedAt.toLocaleString('en-PH')}`, {
+      x: 40,
+      y: 25,
+      size: 7,
+      font: regular,
+      color: MUTED,
+    });
+  }
+
+  return {
+    bytes: await document.save(),
+    fileName: `ximo-inventory-report-${branchStem || 'all-branches'}-${start}-to-${end}.pdf`,
+  };
 }

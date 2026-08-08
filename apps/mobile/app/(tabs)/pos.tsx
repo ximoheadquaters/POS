@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { minorToMoney, moneyToMinor, type POSBarcodeItem } from '@ximo/shared';
 import { api } from '@/lib/api';
@@ -24,6 +24,7 @@ import {
   comboSoldOut,
   type PosComboPromotion,
 } from '@/lib/combo-cart';
+import { evaluateCartPromotions, type PromotionRule } from '@/lib/promo-evaluator';
 import { fetchPosCombos } from '@/lib/pos-combos';
 import { findExactScannedProduct, normalizeBarcode } from '@/lib/product-scan';
 import { useBarcodeScanner } from '@/hooks/use-barcode-scanner';
@@ -157,6 +158,7 @@ export default function PosScreen() {
   const [category, setCategory] = useState('All');
   const [scanPending, setScanPending] = useState(false);
   const [unitProduct, setUnitProduct] = useState<CartProduct | null>(null);
+  const queryClient = useQueryClient();
   const items = useCartStore((state) => state.items);
   const add = useCartStore((state) => state.add);
   const addQuantity = useCartStore((state) => state.addQuantity);
@@ -171,6 +173,39 @@ export default function PosScreen() {
   const { showAlert } = useIosAlert();
   const [holdModalVisible, setHoldModalVisible] = useState(false);
   const [holdNote, setHoldNote] = useState('');
+
+  const activePromotionsQuery = useQuery({
+    queryKey: ['pos-active-promotions-rules', branch?.id],
+    queryFn: async () => {
+      if (!branch?.id) return [];
+      const res = await api<any[]>(`/promotions?branchId=${branch.id}&pageSize=50`);
+      const list = Array.isArray(res) ? res : (res as any)?.pages?.flat() ?? (res as any)?.data ?? [];
+      return list.filter((p: any) => p.isActive);
+    },
+    enabled: Boolean(branch?.id),
+  });
+
+  const activePromo = useMemo(
+    () => evaluateCartPromotions(items, (activePromotionsQuery.data ?? []) as PromotionRule[]),
+    [items, activePromotionsQuery.data],
+  );
+
+  const posSubtotal = useMemo(() => cartSubtotal(items), [items]);
+  const posTotal = useMemo(
+    () => cartTotal(items, activePromo?.discountMoney || '0.00'),
+    [items, activePromo],
+  );
+
+  const heldSalesQuery = useQuery({
+    queryKey: ['pos-held-sales-count', branch?.id],
+    queryFn: async () => {
+      if (!branch?.id) return [];
+      const res = await api<any[]>(`/sales/held?branchId=${branch.id}`);
+      return Array.isArray(res) ? res : (res as any)?.data ?? [];
+    },
+    enabled: Boolean(branch?.id),
+  });
+  const heldCount = heldSalesQuery.data?.length ?? 0;
 
   const holdMutation = useMutation({
     mutationFn: () =>
@@ -192,9 +227,11 @@ export default function PosScreen() {
       setHoldModalVisible(false);
       setHoldNote('');
       clearCart();
+      queryClient.invalidateQueries({ queryKey: ['pos-held-sales-count'] });
+      queryClient.invalidateQueries({ queryKey: ['food-parked-sales'] });
       showAlert({
         title: 'Sale Parked',
-        message: `Order parked as ${data.receiptNumber}. You can resume it anytime from Sales & Orders.`,
+        message: `Order parked as ${data.receiptNumber}. You can resume it anytime from Parked Sales.`,
         type: 'success',
       });
     },
@@ -270,7 +307,7 @@ export default function PosScreen() {
   });
   const promotionsQuery = useQuery({
     queryKey: ['pos-promotions', branch?.id, debounced],
-    enabled: Boolean(branch) && promotionsEnabled,
+    enabled: Boolean(branch),
     queryFn: () => fetchPosCombos(branch!.id, debounced || undefined),
     ...liveDataQueryOptions,
   });
@@ -1009,10 +1046,23 @@ export default function PosScreen() {
           focusInput();
         }}
       />
-      <Header
-        title="Point of sale"
-        subtitle={activeShift ? activeShift.registerName : 'No open shift'}
-      />
+      <View className="flex-row items-center justify-between bg-white pr-4">
+        <View className="flex-1">
+          <Header
+            title="Point of sale"
+            subtitle={activeShift ? activeShift.registerName : 'No open shift'}
+          />
+        </View>
+        <Pressable
+          onPress={() => router.push('/food/parked-sales')}
+          className="flex-row items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 active:bg-amber-100"
+        >
+          <Feather name="pause-circle" size={15} color="#B45309" />
+          <Text className="text-xs font-bold text-amber-900">
+            Parked{heldCount > 0 ? ` (${heldCount})` : ''}
+          </Text>
+        </Pressable>
+      </View>
       <View className="border-b border-slate-200 bg-white p-4">
         {!activeShift ? (
           <View className="mb-3 rounded-xl bg-brand-50 p-3">
@@ -1059,6 +1109,48 @@ export default function PosScreen() {
           </View>
         ) : null}
       </View>
+      <View className="border-b border-slate-100 bg-white px-4 py-2.5">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-2 items-center"
+        >
+          {categories.map((name) => {
+            const selected = name === category;
+            return (
+              <Pressable
+                key={name}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => {
+                  setCategory(name);
+                  focusInput();
+                }}
+                className={`h-9 items-center justify-center rounded-full px-4 ${
+                  selected ? 'bg-brand-700' : 'border border-slate-200 bg-slate-50'
+                }`}
+              >
+                <View className="flex-row items-center gap-1.5">
+                  {name !== 'All' ? (
+                    <Feather
+                      name={categoryIcon(name)}
+                      size={13}
+                      color={selected ? '#FFFFFF' : '#81776E'}
+                    />
+                  ) : null}
+                  <Text
+                    className={`text-xs font-semibold ${
+                      selected ? 'text-white' : 'text-slate-600'
+                    }`}
+                  >
+                    {name}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
       <View className="flex-1 flex-row">
         <View className="flex-1">
           {query.isLoading ? (
@@ -1068,66 +1160,118 @@ export default function PosScreen() {
           ) : (
             <FlatList
               key={isTablet ? 'tablet-products' : 'phone-products'}
-              data={availableProducts}
+              data={visibleRows}
               numColumns={1}
-              keyExtractor={(item) => item.id}
-              onEndReached={() => query.hasNextPage && void query.fetchNextPage()}
-              onEndReachedThreshold={0.4}
-              contentContainerClassName={`p-4 gap-3 ${isTablet ? 'pb-4' : 'pb-32'}`}
-              ListEmptyComponent={
-                <EmptyState title="No products" message="Try a different search." />
+              keyExtractor={(item) => item.key}
+              onEndReached={() =>
+                category !== 'Combos' && query.hasNextPage && void query.fetchNextPage()
               }
-              renderItem={({ item }) => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Add ${item.name} to cart`}
-                  accessibilityState={{
-                    disabled:
-                      item.availableQuantity !== null &&
-                      item.availableQuantity !== undefined &&
-                      (item.availableQuantity <= 0 ||
-                        (cartQuantities.get(item.id) ?? 0) >= item.availableQuantity),
-                  }}
-                  disabled={
-                    item.availableQuantity !== null &&
-                    item.availableQuantity !== undefined &&
-                    (item.availableQuantity <= 0 ||
-                      (cartQuantities.get(item.id) ?? 0) >= item.availableQuantity)
-                  }
-                  className={`min-h-20 flex-1 flex-row items-center rounded-xl border border-slate-100 bg-white px-4 py-3 active:border-brand-300 active:bg-brand-50 ${
-                    item.availableQuantity !== null &&
-                    item.availableQuantity !== undefined &&
-                    (item.availableQuantity <= 0 ||
-                      (cartQuantities.get(item.id) ?? 0) >= item.availableQuantity)
-                      ? 'opacity-50'
-                      : ''
-                  }`}
-                  onPress={() => addProduct(item)}
-                >
-                  <View className="flex-1">
-                    <Text className="text-base font-medium text-slate-900">{item.name}</Text>
-                    <Text className="mt-1 text-xs text-slate-500">{item.sku}</Text>
-                  </View>
-                  <View className="items-end">
-                    <Text className="text-lg font-semibold text-brand-700">
-                      {formatMoney(item.sellingPrice)}
-                    </Text>
-                    <Text className="mt-1 text-xs font-medium text-brand-500">
-                      {item.availableQuantity === null || item.availableQuantity === undefined
-                        ? cartQuantities.get(item.id)
-                          ? `${cartQuantities.get(item.id)} in cart`
-                          : '+ Add'
-                        : item.availableQuantity <= 0
-                          ? 'Sold out'
-                          : `${item.availableQuantity} ${item.unit ?? 'piece'} in stock${
-                              cartQuantities.get(item.id)
-                                ? ` · ${cartQuantities.get(item.id)} in cart`
-                                : ''
-                            }`}
-                    </Text>
-                  </View>
-                </Pressable>
-              )}
+              onEndReachedThreshold={0.4}
+              contentContainerClassName="p-4 gap-3 pb-24"
+              ListEmptyComponent={
+                promotionsQuery.isError && (category === 'All' || category === 'Combos') ? (
+                  <ErrorState
+                    message={promotionsQuery.error.message}
+                    retry={() => void promotionsQuery.refetch()}
+                  />
+                ) : (
+                  <EmptyState
+                    title={category === 'Combos' ? 'No combos' : 'No products'}
+                    message={
+                      category === 'Combos'
+                        ? 'Create an active combo bundle in Promotions, then it will appear here.'
+                        : 'Try a different search or category.'
+                    }
+                  />
+                )
+              }
+              renderItem={({ item, index }) => {
+                if (item.kind === 'combo') {
+                  const soldOut = comboSoldOut(item.promo, cartQuantities);
+                  const summary = item.promo.components
+                    .map((component) =>
+                      component.requiredQuantity > 1
+                        ? `${component.requiredQuantity}× ${component.name}`
+                        : component.name,
+                    )
+                    .join(' + ');
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add combo ${item.promo.name} to cart`}
+                      disabled={soldOut}
+                      onPress={() => addCombo(item.promo)}
+                      className={`min-h-16 flex-row items-center rounded-xl border border-slate-100 bg-white px-4 py-3 active:border-brand-300 active:bg-brand-50 ${
+                        soldOut ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-rose-50">
+                        <Feather name="gift" size={18} color="#BE123C" />
+                      </View>
+                      <View className="flex-1">
+                        <View className="flex-row items-center gap-2">
+                          <Text className="font-bold text-slate-900">{item.promo.name}</Text>
+                          <View className="rounded-full bg-rose-100 px-2 py-0.5">
+                            <Text className="text-[9px] font-bold uppercase text-rose-700">
+                              Combo
+                            </Text>
+                          </View>
+                        </View>
+                        <Text className="mt-0.5 text-xs text-slate-500" numberOfLines={1}>
+                          {summary}
+                        </Text>
+                      </View>
+                      <View className="items-end pl-2">
+                        <Text className="text-base font-bold text-slate-900">
+                          {formatMoney(item.promo.comboPrice)}
+                        </Text>
+                        <Text className="mt-0.5 text-xs font-semibold text-brand-700">
+                          + Add Combo
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                }
+
+                const product = item.product;
+                const quantity = cartQuantities.get(product.id) ?? 0;
+                const soldOut =
+                  product.availableQuantity !== null &&
+                  product.availableQuantity !== undefined &&
+                  (product.availableQuantity <= 0 || quantity >= product.availableQuantity);
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add ${product.name} to cart`}
+                    disabled={soldOut}
+                    className={`min-h-20 flex-1 flex-row items-center rounded-xl border border-slate-100 bg-white px-4 py-3 active:border-brand-300 active:bg-brand-50 ${
+                      soldOut ? 'opacity-50' : ''
+                    }`}
+                    onPress={() => addProduct(product)}
+                  >
+                    <View className="flex-1">
+                      <Text className="text-base font-medium text-slate-900">{product.name}</Text>
+                      <Text className="mt-1 text-xs text-slate-500">{product.sku}</Text>
+                    </View>
+                    <View className="items-end">
+                      <Text className="text-lg font-semibold text-brand-700">
+                        {formatMoney(product.sellingPrice)}
+                      </Text>
+                      <Text className="mt-1 text-xs font-medium text-brand-500">
+                        {product.availableQuantity === null || product.availableQuantity === undefined
+                          ? quantity
+                            ? `${quantity} in cart`
+                            : '+ Add'
+                          : product.availableQuantity <= 0
+                            ? 'Sold out'
+                            : `${product.availableQuantity} ${product.unit ?? 'piece'} in stock${
+                                quantity ? ` · ${quantity} in cart` : ''
+                              }`}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              }}
             />
           )}
         </View>
@@ -1148,79 +1292,105 @@ export default function PosScreen() {
                   </Text>
                 </View>
               ) : (
-                items.map((item) => (
-                  <View
-                    key={cartProductKey(item.product)}
-                    className="rounded-2xl border border-slate-100 p-4"
-                  >
-                    <View className="flex-row">
-                      <View className="flex-1 pr-3">
-                        <Text className="font-medium text-slate-900">{item.product.name}</Text>
-                        <Text className="mt-1 text-xs text-slate-500">
-                          {formatMoney(item.product.sellingPrice)} per{' '}
-                          {item.product.unit ?? 'piece'}
+                items.map((item) => {
+                  const hasPromo = activePromo?.appliedProductIds.has(item.product.id);
+                  return (
+                    <View
+                      key={cartProductKey(item.product)}
+                      className="rounded-2xl border border-slate-100 p-4"
+                    >
+                      <View className="flex-row">
+                        <View className="flex-1 pr-3">
+                          <Text className="font-medium text-slate-900">{item.product.name}</Text>
+                          <Text className="mt-1 text-xs text-slate-500">
+                            {formatMoney(item.product.sellingPrice)} per{' '}
+                            {item.product.unit ?? 'piece'}
+                          </Text>
+                          {hasPromo ? (
+                            <View className="mt-1 flex-row items-center gap-1 self-start rounded-md bg-emerald-50 px-1.5 py-0.5 border border-emerald-200">
+                              <Feather name="trending-up" size={10} color="#047857" />
+                              <Text className="text-[10px] font-bold text-emerald-800">
+                                {activePromo?.name || 'Volume Discount Applied'}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text className="font-semibold text-brand-700">
+                          {formatMoney(minorToMoney(moneyToMinor(cartLineTotal(item))))}
                         </Text>
                       </View>
-                      <Text className="font-semibold text-brand-700">
-                        {formatMoney(minorToMoney(moneyToMinor(cartLineTotal(item))))}
-                      </Text>
+                      <View className="mt-3 flex-row items-center">
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Decrease ${item.product.name}`}
+                          onPress={() =>
+                            setQuantity(
+                              cartProductKey(item.product),
+                              item.quantity - quantityStep(item.product),
+                            )
+                          }
+                          className="h-10 w-10 items-center justify-center rounded-xl bg-slate-100"
+                        >
+                          <Text className="text-xl font-medium text-slate-700">−</Text>
+                        </Pressable>
+                        <QuantityInput
+                          product={item.product}
+                          quantity={item.quantity}
+                          onChange={(quantity) => setQuantity(cartProductKey(item.product), quantity)}
+                        />
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Increase ${item.product.name}`}
+                          disabled={
+                            item.product.availableQuantity !== null &&
+                            item.product.availableQuantity !== undefined &&
+                            item.quantity >= item.product.availableQuantity
+                          }
+                          onPress={() =>
+                            setQuantity(
+                              cartProductKey(item.product),
+                              item.quantity + quantityStep(item.product),
+                            )
+                          }
+                          className="h-10 w-10 items-center justify-center rounded-xl bg-brand-100 disabled:opacity-40"
+                        >
+                          <Text className="text-xl font-medium text-brand-900">+</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${item.product.name}`}
+                          onPress={() => setQuantity(cartProductKey(item.product), 0)}
+                          className="ml-auto min-h-10 justify-center px-2"
+                        >
+                          <Text className="text-sm font-medium text-red-700">Remove</Text>
+                        </Pressable>
+                      </View>
                     </View>
-                    <View className="mt-3 flex-row items-center">
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Decrease ${item.product.name}`}
-                        onPress={() =>
-                          setQuantity(
-                            cartProductKey(item.product),
-                            item.quantity - quantityStep(item.product),
-                          )
-                        }
-                        className="h-10 w-10 items-center justify-center rounded-xl bg-slate-100"
-                      >
-                        <Text className="text-xl font-medium text-slate-700">−</Text>
-                      </Pressable>
-                      <QuantityInput
-                        product={item.product}
-                        quantity={item.quantity}
-                        onChange={(quantity) => setQuantity(cartProductKey(item.product), quantity)}
-                      />
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Increase ${item.product.name}`}
-                        disabled={
-                          item.product.availableQuantity !== null &&
-                          item.product.availableQuantity !== undefined &&
-                          item.quantity >= item.product.availableQuantity
-                        }
-                        onPress={() =>
-                          setQuantity(
-                            cartProductKey(item.product),
-                            item.quantity + quantityStep(item.product),
-                          )
-                        }
-                        className="h-10 w-10 items-center justify-center rounded-xl bg-brand-100 disabled:opacity-40"
-                      >
-                        <Text className="text-xl font-medium text-brand-900">+</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove ${item.product.name}`}
-                        onPress={() => setQuantity(cartProductKey(item.product), 0)}
-                        className="ml-auto min-h-10 justify-center px-2"
-                      >
-                        <Text className="text-sm font-medium text-red-700">Remove</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </ScrollView>
             <View className="border-t border-brand-100 p-5">
-              <View className="mb-4 flex-row items-end justify-between">
-                <Text className="text-base font-medium text-slate-700">Total</Text>
-                <Text className="text-2xl font-semibold text-brand-700">
-                  {formatMoney(cartTotal(items))}
-                </Text>
+              <View className="mb-3 gap-1">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-xs text-slate-500">Subtotal</Text>
+                  <Text className="text-xs font-semibold text-slate-800">{formatMoney(posSubtotal)}</Text>
+                </View>
+                {activePromo ? (
+                  <View className="flex-row items-center justify-between rounded-xl bg-emerald-50 px-2.5 py-1.5 border border-emerald-200">
+                    <View className="flex-row items-center gap-1.5">
+                      <Feather name="trending-up" size={12} color="#047857" />
+                      <Text className="text-xs font-bold text-emerald-900">{activePromo.name}</Text>
+                    </View>
+                    <Text className="text-xs font-black text-emerald-700">
+                      -{formatMoney(activePromo.discountMoney)}
+                    </Text>
+                  </View>
+                ) : null}
+                <View className="flex-row items-end justify-between border-t border-slate-100 pt-2">
+                  <Text className="text-base font-bold text-slate-900">Total</Text>
+                  <Text className="text-2xl font-black text-brand-700">{formatMoney(posTotal)}</Text>
+                </View>
               </View>
               {hasStockConflict ? (
                 <Text className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">
@@ -1241,18 +1411,92 @@ export default function PosScreen() {
         ) : null}
       </View>
       {!isTablet ? (
-        <View className="absolute bottom-0 left-0 right-0 border-t border-brand-100 bg-white p-4">
+        <View className="border-t border-slate-200 bg-white p-3 shadow-sm">
           {activeShift ? (
-            <Button
-              title={`Cart · ${items.reduce((sum, item) => sum + item.quantity, 0)} items · ${formatMoney(cartTotal(items))}`}
-              disabled={!items.length}
-              onPress={() => router.push('/cart')}
-            />
+            items.length > 0 ? (
+              <View className="flex-row items-center gap-2">
+                <Pressable
+                  onPress={() => {
+                    clearCart();
+                    focusInput();
+                  }}
+                  className="h-12 w-12 items-center justify-center rounded-xl border border-red-200 bg-red-50 active:bg-red-100"
+                  accessibilityLabel="Clear cart items"
+                >
+                  <Feather name="trash-2" size={18} color="#DC2626" />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setHoldModalVisible(true)}
+                  disabled={holdMutation.isPending}
+                  className={`h-12 flex-row items-center justify-center rounded-xl bg-amber-600 px-3.5 ${
+                    holdMutation.isPending ? 'opacity-50' : 'active:bg-amber-700'
+                  }`}
+                  accessibilityLabel="Hold sale"
+                >
+                  <Feather name="pause-circle" size={18} color="#FFFFFF" />
+                  <Text className="ml-1.5 font-bold text-white text-xs">Hold</Text>
+                </Pressable>
+
+                <View className="flex-1">
+                  <Button
+                    title={`Cart · ${items.reduce((sum, item) => sum + item.quantity, 0)} items · ${formatMoney(posTotal)}`}
+                    onPress={() => router.push('/cart')}
+                  />
+                </View>
+              </View>
+            ) : null
           ) : (
             <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
           )}
         </View>
       ) : null}
+
+      <Modal visible={holdModalVisible} transparent animationType="fade">
+        <View className="flex-1 items-center justify-center bg-black/40 p-5">
+          <View className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+            <View className="mb-4 flex-row items-start justify-between">
+              <View className="mr-4 flex-1">
+                <Text className="text-lg font-bold text-slate-950">Hold Current Sale?</Text>
+                <Text className="mt-1 text-sm text-slate-500">
+                  Park this order to free up checkout for other customers. You can resume it anytime from Parked Sales.
+                </Text>
+              </View>
+              <Pressable onPress={() => setHoldModalVisible(false)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100">
+                <Feather name="x" size={18} color="#475569" />
+              </Pressable>
+            </View>
+            <View className="mb-5">
+              <Field
+                label="Optional Customer Tag / Reason"
+                value={holdNote}
+                onChangeText={setHoldNote}
+                placeholder="e.g. Customer stepped out for cash"
+              />
+            </View>
+            <View className="flex-row gap-3">
+              <Pressable
+                disabled={holdMutation.isPending}
+                onPress={() => setHoldModalVisible(false)}
+                className="min-h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white"
+              >
+                <Text className="font-semibold text-slate-700">Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={holdMutation.isPending}
+                onPress={() => holdMutation.mutate()}
+                className={`min-h-12 flex-[2] items-center justify-center rounded-xl bg-amber-600 ${
+                  holdMutation.isPending ? 'opacity-50' : 'active:bg-amber-700'
+                }`}
+              >
+                <Text className="font-bold text-white">
+                  {holdMutation.isPending ? 'Holding…' : 'Confirm & Park Cart'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }

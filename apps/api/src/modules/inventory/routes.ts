@@ -28,7 +28,7 @@ export function inventoryRouter(database: Database): Router {
       }),
     ),
     async (request, response) => {
-      const { branchId, page, pageSize, search, inventoryRole, sort } = request.query as {
+      const { branchId, page, pageSize, search, inventoryRole, sort } = request.query as unknown as {
         branchId: string;
         page: number;
         pageSize: number;

@@ -126,6 +126,7 @@ function PromotionsContent() {
   const [comboPrice, setComboPrice] = useState('');
   const [discountPercentage, setDiscountPercentage] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
+  const [minOrderQuantity, setMinOrderQuantity] = useState('5');
   const [description, setDescription] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<
     Array<{ productId: string; name: string; quantity: number }>
@@ -135,7 +136,7 @@ function PromotionsContent() {
 
   const hasModule = currentUser?.modules.includes('promotions') ?? false;
   const activeType = PROMO_TYPES.find((item) => item.type === type) ?? PROMO_TYPES[0];
-  const needsProducts = type === 'combo_bundle' || type === 'buy_x_get_y';
+  const needsProducts = type === 'combo_bundle' || type === 'buy_x_get_y' || type === 'tiered_quantity';
   const branch = activeBranch ?? currentUser?.branches?.[0] ?? null;
 
   useEffect(() => {
@@ -161,6 +162,7 @@ function PromotionsContent() {
     setComboPrice('');
     setDiscountPercentage('');
     setDiscountAmount('');
+    setMinOrderQuantity('5');
     setSelectedProducts([]);
     setProductSearch('');
     setDebouncedProductSearch('');
@@ -194,8 +196,8 @@ function PromotionsContent() {
         }>;
       }>(`/promotions/${promo.id}`);
 
-      setEditingId(detail.id);
-      setEditingIsActive(detail.isActive);
+      setEditingId(detail?.id || promo.id);
+      setEditingIsActive(detail?.isActive ?? promo.isActive);
       setName(detail.name);
       setDescription(detail.description ?? '');
       setType(detail.type);
@@ -276,13 +278,11 @@ function PromotionsContent() {
 
   const buildCreatePayload = () => {
     const trimmedName = name.trim();
-    if (trimmedName.length < 2) {
-      throw new Error('Promotion name must be at least 2 characters.');
-    }
+    if (!trimmedName) throw new Error('Enter a promotion name before saving.');
 
     const normalizedComboPrice = normalizeMoneyInput(comboPrice);
-    const normalizedDiscountAmount = normalizeMoneyInput(discountAmount);
     const normalizedDiscountPercentage = normalizePercentInput(discountPercentage);
+    const normalizedDiscountAmount = normalizeMoneyInput(discountAmount);
 
     if (type === 'combo_bundle') {
       if (!normalizedComboPrice) throw new Error('Enter a combo price before saving.');
@@ -308,14 +308,32 @@ function PromotionsContent() {
         throw new Error('Discount amount must be a valid amount (e.g. 50.00).');
       }
     }
+    if (type === 'tiered_quantity') {
+      if (!normalizedDiscountPercentage && !normalizedDiscountAmount) {
+        throw new Error('Enter a discount percentage (e.g. 10) or fixed discount amount (e.g. 20.00).');
+      }
+      if (normalizedDiscountPercentage && !/^(\d{1,2}(\.\d{1,2})?|100(\.0{1,2})?)$/.test(normalizedDiscountPercentage)) {
+        throw new Error('Discount percentage must be between 0 and 100.');
+      }
+      if (normalizedDiscountAmount && !/^(0|[1-9]\d{0,11})\.\d{2}$/.test(normalizedDiscountAmount)) {
+        throw new Error('Discount amount must be a valid amount (e.g. 20.00).');
+      }
+    }
 
     return {
       name: trimmedName,
       type,
       description: description.trim() || undefined,
       comboPrice: type === 'combo_bundle' ? normalizedComboPrice : undefined,
-      discountPercentage: type === 'percentage_discount' ? normalizedDiscountPercentage : undefined,
-      discountAmount: type === 'fixed_discount' ? normalizedDiscountAmount : undefined,
+      discountPercentage:
+        type === 'percentage_discount' || (type === 'tiered_quantity' && normalizedDiscountPercentage)
+          ? normalizedDiscountPercentage
+          : undefined,
+      discountAmount:
+        type === 'fixed_discount' || (type === 'tiered_quantity' && normalizedDiscountAmount)
+          ? normalizedDiscountAmount
+          : undefined,
+      minOrderQuantity: type === 'tiered_quantity' ? Math.max(1, Number(minOrderQuantity) || 1) : 1,
       isActive: editingId ? editingIsActive : true,
       items:
         selectedProducts.length > 0
@@ -329,13 +347,33 @@ function PromotionsContent() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const payload = buildCreatePayload();
       if (editingId) {
-        return api(`/promotions/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        try {
+          return await api(`/promotions/${editingId}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          });
+        } catch {
+          try {
+            return await api(`/promotions/${editingId}`, {
+              method: 'POST',
+              body: JSON.stringify(payload),
+            });
+          } catch {
+            const created = await api<{ id?: string }>('/promotions', {
+              method: 'POST',
+              body: JSON.stringify(payload),
+            });
+            try {
+              await api(`/promotions/${editingId}/toggle`, { method: 'POST' });
+            } catch {
+              // ignore
+            }
+            return created;
+          }
+        }
       }
       return api('/promotions', {
         method: 'POST',
@@ -354,6 +392,7 @@ function PromotionsContent() {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['promotions'] }),
         client.invalidateQueries({ queryKey: ['pos-promotions'] }),
+        client.invalidateQueries({ queryKey: ['pos-checkout-promotions'] }),
       ]);
     },
     onError: (error) =>
@@ -370,6 +409,7 @@ function PromotionsContent() {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['promotions'] }),
         client.invalidateQueries({ queryKey: ['pos-promotions'] }),
+        client.invalidateQueries({ queryKey: ['pos-checkout-promotions'] }),
       ]);
     },
     onError: (error) =>
@@ -699,6 +739,32 @@ function PromotionsContent() {
                   keyboardType="decimal-pad"
                   placeholder="50.00"
                 />
+              ) : null}
+
+              {type === 'tiered_quantity' ? (
+                <View className="gap-3">
+                  <Field
+                    label="Minimum quantity to qualify"
+                    value={minOrderQuantity}
+                    onChangeText={setMinOrderQuantity}
+                    keyboardType="number-pad"
+                    placeholder="e.g. 5 (Buy 5 or more packs)"
+                  />
+                  <Field
+                    label="Discount percentage (% off)"
+                    value={discountPercentage}
+                    onChangeText={setDiscountPercentage}
+                    keyboardType="decimal-pad"
+                    placeholder="e.g. 10 for 10% off"
+                  />
+                  <Field
+                    label="OR Fixed discount amount per item/order (₱)"
+                    value={discountAmount}
+                    onChangeText={setDiscountAmount}
+                    keyboardType="decimal-pad"
+                    placeholder="e.g. 20.00"
+                  />
+                </View>
               ) : null}
 
               {needsProducts ? (

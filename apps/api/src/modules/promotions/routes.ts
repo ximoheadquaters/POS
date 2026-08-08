@@ -225,69 +225,74 @@ export function promotionsRouter(database: Database): Router {
     sendData(response, created, 201);
   });
 
-  // PUT /promotions/:id -> Update promotion / combo deal
-  router.put('/:id', validateBody(updatePromotionSchema), async (request, response) => {
-    const id = uuidSchema.parse(request.params.id);
-    const input = request.body;
-    const organizationId = request.authUser!.organization.id;
+    const updateHandler = async (request: any, response: any) => {
+      const id = uuidSchema.parse(request.params.id);
+      const input = request.body;
+      const organizationId = request.authUser!.organization.id;
 
-    const updated = await database.transaction(async (tx) => {
-      const existing = await tx.query<{ id: string }>(
-        `select id from promotions where id = $1 and organization_id = $2`,
-        [id, organizationId],
-      );
-      if (!existing.rows[0]) throw notFound('Promotion');
+      const updated = await database.transaction(async (tx) => {
+        const existing = await tx.query<{ id: string }>(
+          `select id from promotions where id = $1 and organization_id = $2`,
+          [id, organizationId],
+        );
+        if (!existing.rows[0]) throw notFound('Promotion');
 
-      await tx.query(
-        `update promotions set
-           name = $3, code = $4, description = $5, type = $6,
-           combo_price = $7, discount_percentage = $8, discount_amount = $9,
-           min_order_quantity = $10, start_date = $11, end_date = $12,
-           is_active = coalesce($13, is_active), updated_at = now()
-         where id = $1 and organization_id = $2`,
-        [
-          id,
-          organizationId,
-          input.name,
-          input.code ?? null,
-          input.description ?? null,
-          input.type,
-          input.comboPrice ?? null,
-          input.discountPercentage ?? null,
-          input.discountAmount ?? null,
-          input.minOrderQuantity ?? 1,
-          input.startDate ?? null,
-          input.endDate ?? null,
-          input.isActive ?? null,
-        ],
-      );
+        await tx.query(
+          `update promotions set
+             name = $3, code = $4, description = $5, type = $6,
+             combo_price = $7, discount_percentage = $8, discount_amount = $9,
+             min_order_quantity = $10, start_date = $11, end_date = $12,
+             is_active = coalesce($13, is_active), updated_at = now()
+           where id = $1 and organization_id = $2`,
+          [
+            id,
+            organizationId,
+            input.name,
+            input.code ?? null,
+            input.description ?? null,
+            input.type,
+            input.comboPrice ?? null,
+            input.discountPercentage ?? null,
+            input.discountAmount ?? null,
+            input.minOrderQuantity ?? 1,
+            input.startDate ?? null,
+            input.endDate ?? null,
+            input.isActive ?? null,
+          ],
+        );
 
-      await tx.query(
-        `delete from promotion_items where promotion_id = $1 and organization_id = $2`,
-        [id, organizationId],
-      );
+        await tx.query(
+          `delete from promotion_items where promotion_id = $1 and organization_id = $2`,
+          [id, organizationId],
+        );
 
-      if (input.items && input.items.length > 0) {
-        for (const item of input.items) {
-          await tx.query(
-            `insert into promotion_items (organization_id, promotion_id, product_id, role, required_quantity)
-             values ($1, $2, $3, $4, $5)`,
-            [
-              organizationId,
-              id,
-              item.productId,
-              item.role || 'combo_component',
-              item.requiredQuantity || 1,
-            ],
-          );
+        if (input.items && input.items.length > 0) {
+          for (const item of input.items) {
+            await tx.query(
+              `insert into promotion_items (organization_id, promotion_id, product_id, role, required_quantity)
+               values ($1, $2, $3, $4, $5)`,
+              [
+                organizationId,
+                id,
+                item.productId,
+                item.role || 'combo_component',
+                item.requiredQuantity || 1,
+              ],
+            );
+          }
         }
-      }
 
-      return { id, name: input.name, type: input.type };
-    });
+        return { id, name: input.name, type: input.type };
+      });
 
-    sendData(response, updated);
-  });
+      sendData(response, updated);
+    };
+
+    // PUT /promotions/:id -> Update promotion / combo deal
+    router.put('/:id', validateBody(updatePromotionSchema), updateHandler);
+
+    // POST /promotions/:id -> Update alias
+    router.post('/:id', validateBody(updatePromotionSchema), updateHandler);
 
   // POST /promotions/:id/toggle -> Enable or disable promotion
   router.post('/:id/toggle', async (request, response) => {

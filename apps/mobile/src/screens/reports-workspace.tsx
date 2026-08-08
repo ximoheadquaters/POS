@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   Modal,
   Pressable,
@@ -16,7 +16,13 @@ import { DateRangeCalendar } from '@/components/date-range-calendar';
 import { Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
-import { buildReportsExcel, buildReportsPdf } from '@/lib/report-export';
+import {
+  buildInventoryExportExcel,
+  buildInventoryExportPdf,
+  buildReportsExcel,
+  buildReportsPdf,
+  type InventoryExportData,
+} from '@/lib/report-export';
 import type { ReportsWorkspace } from '@/lib/report-types';
 import { saveReportExport } from '@/lib/save-report-export';
 import { useIosAlert } from '@/providers/ios-alert';
@@ -3768,252 +3774,1021 @@ function ProductPerformanceReport({
   );
 }
 
+function SelectDropdown({
+  value,
+  options,
+  onChange,
+  icon = 'filter',
+  label,
+}: {
+  value: string;
+  options: Array<{ label: string; value: string }>;
+  onChange: (val: string) => void;
+  icon?: string;
+  label?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((o) => o.value === value) || options[0];
+
+  return (
+    <View className="relative z-50">
+      <Pressable
+        onPress={() => setIsOpen((prev) => !prev)}
+        className="flex-row items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 transition-colors hover:bg-slate-100"
+      >
+        <Feather name={icon as any} size={14} color="#64748B" />
+        <Text className="text-xs font-semibold text-slate-700">
+          {label ? `${label}: ` : ''}
+          {selectedOption?.label}
+        </Text>
+        <Feather name={isOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#64748B" />
+      </Pressable>
+
+      {isOpen ? (
+        <>
+          <Pressable
+            onPress={() => setIsOpen(false)}
+            className="fixed inset-0 z-40 bg-transparent"
+          />
+          <View className="absolute right-0 top-11 z-50 max-h-60 min-w-[200px] overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl">
+            {options.map((opt) => (
+              <Pressable
+                key={opt.value}
+                onPress={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className={`flex-row items-center justify-between px-3.5 py-2.5 hover:bg-emerald-50 ${
+                  opt.value === value ? 'bg-emerald-50/80' : ''
+                }`}
+              >
+                <Text
+                  className={`text-xs ${
+                    opt.value === value ? 'font-bold text-brand-800' : 'font-medium text-slate-700'
+                  }`}
+                >
+                  {opt.label}
+                </Text>
+                {opt.value === value ? <Feather name="check" size={14} color="#047857" /> : null}
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 function InventoryReport({
   report,
   productsList,
+  inventoryItems = [],
+  inventoryMovements = [],
+  productionProducts = [],
+  isLoadingMovements = false,
   onOpenDetail,
+  exportRef,
 }: {
   report: ReportsWorkspace;
   productsList: any[];
+  inventoryItems?: any[];
+  inventoryMovements?: any[];
+  productionProducts?: any[];
+  isLoadingMovements?: boolean;
   onOpenDetail(config: MetricDrilldownConfig): void;
+  exportRef?: React.MutableRefObject<(() => InventoryExportData) | null>;
 }) {
-  return (
-    <>
-      <View className="w-full flex-row flex-wrap gap-3">
-        <MetricCard
-          label="Inventory value"
-          value={formatMoney(report.inventory.inventoryValue)}
-          icon="archive"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'inventory_value',
-              title: 'Inventory Valuation Itemized Breakdown',
-              subtitle: 'Itemized list of products sorted by total inventory valuation.',
-              icon: 'archive',
-              summaryLabel: 'Total Branch Valuation',
-              summaryValue: formatMoney(report.inventory.inventoryValue),
-              categoriesSummary: report.inventory.byCategory.map((c) => ({
-                name: c.name,
-                value: Number(c.value),
-                display: formatMoney(c.value),
-              })),
-              items: productsList
-                .filter((p) => (p.availableQuantity ?? 0) > 0)
-                .map((p) => {
-                  const qty = p.availableQuantity ?? 0;
-                  const cost = Number(p.averageCost || p.cost || 0);
-                  const totalVal = qty * cost;
-                  return {
-                    id: p.id,
-                    title: p.name,
-                    sku: p.sku,
-                    category: p.categoryName ?? 'Uncategorized',
-                    quantity: qty,
-                    unit: p.unit,
-                    note: `${qty} ${p.unit ?? 'pcs'} · Avg cost: ${formatMoney(String(cost))}`,
-                    value: formatMoney(String(totalVal)),
-                    statusTag: p.status === 'active' ? 'Active' : 'Hidden',
-                    statusTone: (p.status === 'active' ? 'green' : 'slate') as 'green' | 'slate',
-                  };
-                })
-                .sort((a, b) => parseFloat(b.value.replace(/[^0-9.]/g, '') || '0') - parseFloat(a.value.replace(/[^0-9.]/g, '') || '0')),
-            })
-          }
-        />
-        <MetricCard
-          label="Total stock count (Units on hand)"
-          value={report.inventory.unitsOnHand.toLocaleString()}
-          icon="package"
-          tone="blue"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'units_on_hand',
-              title: 'Total Stock Count (Units on Hand)',
-              subtitle: 'Combined physical inventory quantities of all items currently in stock.',
-              icon: 'package',
-              tone: 'blue',
-              summaryLabel: 'Total Stock Units',
-              summaryValue: `${report.inventory.unitsOnHand.toLocaleString()} units`,
-              categoriesSummary: report.inventory.byCategory.map((c) => ({
-                name: c.name,
-                value: c.quantity,
-                display: `${c.quantity.toLocaleString()} units`,
-              })),
-              items: productsList
-                .map((p) => ({
-                  id: p.id,
-                  title: p.name,
-                  sku: p.sku,
-                  category: p.categoryName ?? 'Uncategorized',
-                  note: `Unit: ${p.unit ?? 'piece'} · Cost: ${formatMoney(String(p.averageCost || p.cost || 0))}`,
-                  value: `${(p.availableQuantity ?? 0).toLocaleString()} ${p.unit ?? 'pcs'}`,
-                  subValue: formatMoney(String((p.availableQuantity ?? 0) * Number(p.averageCost || p.cost || 0))),
-                  statusTag: (p.availableQuantity ?? 0) <= 0 ? 'Out of Stock' : (p.availableQuantity ?? 0) <= (p.lowStockThreshold ?? 5) ? 'Low Stock' : 'In Stock',
-                  statusTone: ((p.availableQuantity ?? 0) <= 0 ? 'red' : (p.availableQuantity ?? 0) <= (p.lowStockThreshold ?? 5) ? 'amber' : 'green') as 'red' | 'amber' | 'green',
-                }))
-                .sort((a, b) => parseFloat(b.value.replace(/[^0-9.]/g, '') || '0') - parseFloat(a.value.replace(/[^0-9.]/g, '') || '0')),
-            })
-          }
-        />
-        <MetricCard
-          label="Active products"
-          value={String(report.inventory.activeProducts)}
-          icon="tag"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'active_products',
-              title: 'Active Products Catalog',
-              subtitle: 'Products currently enabled and available on the POS cash register screen.',
-              icon: 'tag',
-              summaryLabel: 'Active Catalog Items',
-              summaryValue: `${report.inventory.activeProducts} products`,
-              items: productsList
-                .filter((p) => p.status === 'active')
-                .map((p) => ({
-                  id: p.id,
-                  title: p.name,
-                  sku: p.sku,
-                  category: p.categoryName ?? 'Uncategorized',
-                  note: `Price: ${formatMoney(p.sellingPrice)}`,
-                  value: `${p.availableQuantity ?? 0} ${p.unit ?? 'pcs'}`,
-                  statusTag: 'Active (On POS)',
-                  statusTone: 'green',
-                })),
-            })
-          }
-        />
-        <MetricCard
-          label="Low stock"
-          value={String(report.inventory.lowStockCount)}
-          icon="alert-triangle"
-          tone="amber"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'low_stock',
-              title: 'Low Stock Alert Items',
-              subtitle: 'Products at or below their configured reorder alert thresholds.',
-              icon: 'alert-triangle',
-              tone: 'amber',
-              summaryLabel: 'Low Stock Alert Items',
-              summaryValue: `${report.inventory.lowStockCount} items`,
-              items: report.inventory.lowStock
-                .filter((item) => item.quantity > 0)
-                .map((item) => ({
-                  id: item.id,
-                  title: item.name,
-                  sku: item.sku,
-                  note: `Alert limit: ${item.lowStockLevel} ${item.unit}`,
-                  value: `${item.quantity} ${item.unit}`,
-                  subValue: formatMoney(item.inventoryValue),
-                  statusTag: 'Low Stock',
-                  statusTone: 'amber',
-                })),
-            })
-          }
-        />
-        <MetricCard
-          label="Out of stock"
-          value={String(report.inventory.outOfStockCount)}
-          icon="x-circle"
-          tone="red"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'out_of_stock',
-              title: 'Out of Stock Items',
-              subtitle: 'Products with zero (0) stock remaining in branch inventory.',
-              icon: 'x-circle',
-              tone: 'red',
-              summaryLabel: 'Out of Stock Items',
-              summaryValue: `${report.inventory.outOfStockCount} items`,
-              items: report.inventory.lowStock
-                .filter((item) => item.quantity <= 0)
-                .map((item) => ({
-                  id: item.id,
-                  title: item.name,
-                  sku: item.sku,
-                  note: `Zero stock remaining`,
-                  value: `0 ${item.unit}`,
-                  statusTag: 'Out of Stock',
-                  statusTone: 'red',
-                })),
-            })
-          }
-        />
-      </View>
+  const [subTab, setSubTab] = useState<'stock' | 'movements' | 'conversions'>('stock');
 
-      <View className="flex-row flex-wrap gap-4">
-        <ResponsivePanel>
-          <ReportCard title="Inventory value by category">
-            <BarRows
-              rows={report.inventory.byCategory.map((item) => ({
-                key: item.name,
-                label: item.name,
-                note: `${item.products} products · ${item.quantity} units`,
-                value: Number(item.value),
-                display: formatMoney(item.value),
-              }))}
-            />
-          </ReportCard>
-        </ResponsivePanel>
-        <ResponsivePanel>
-          <ReportCard title="Inventory movements" subtitle="Movement activity during this period.">
-            <BarRows
-              rows={report.inventory.movements.map((item) => ({
-                key: item.type,
-                label: item.type.replaceAll('_', ' '),
-                note: `${item.quantity} units affected`,
-                value: item.movements,
-                display: `${item.movements} entries`,
-              }))}
-            />
-          </ReportCard>
-        </ResponsivePanel>
-      </View>
+  // Stock table state
+  const [stockSearch, setStockSearch] = useState('');
+  const [stockCategoryFilter, setStockCategoryFilter] = useState<string>('all');
+  const [stockRoleFilter, setStockRoleFilter] = useState<'all' | 'sellable' | 'ingredient' | 'both'>('all');
+  const [stockLowOnly, setStockLowOnly] = useState(false);
+  const [stockSortKey, setStockSortKey] = useState<string>('name');
+  const [stockSortDir, setStockSortDir] = useState<'asc' | 'desc'>('asc');
 
-      <ReportCard
-        title="Low-stock and out-of-stock products"
-        subtitle="Products at or below their configured alert level."
-        action={
-          <Pressable
-            onPress={() => router.push('/(tabs)/inventory')}
-            className="min-h-10 flex-row items-center rounded-xl bg-brand-50 px-3"
-          >
-            <Text className="text-xs font-medium text-brand-700">Open inventory</Text>
-            <Feather name="chevron-right" size={14} color="#1A593B" />
-          </Pressable>
+  // Movements table state
+  const [movementSearch, setMovementSearch] = useState('');
+  const [movementTypeFilter, setMovementTypeFilter] = useState<string>('all');
+  const [movementSortKey, setMovementSortKey] = useState<string>('date');
+  const [movementSortDir, setMovementSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Conversion table state
+  const [conversionSearch, setConversionSearch] = useState('');
+  const [conversionStatusFilter, setConversionStatusFilter] = useState<string>('all');
+  const [conversionSortKey, setConversionSortKey] = useState<string>('source');
+  const [conversionSortDir, setConversionSortDir] = useState<'asc' | 'desc'>('asc');
+
+  // Combine products & inventoryItems for complete data
+  const combinedStockItems = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const p of productsList) {
+      map.set(p.id, {
+        id: p.id,
+        name: p.name,
+        sku: p.sku ?? 'N/A',
+        category: p.categoryName ?? 'Uncategorized',
+        role: p.inventoryRole ?? 'sellable',
+        unit: p.unit ?? 'pcs',
+        quantity: p.availableQuantity ?? 0,
+        lowStockLevel: p.lowStockThreshold ?? 5,
+        cost: Number(p.averageCost || p.cost || 0),
+        value: (p.availableQuantity ?? 0) * Number(p.averageCost || p.cost || 0),
+        portioningEnabled: p.preparationBehavior === 'preproduced' || p.inventoryRole === 'ingredient',
+        containerName: p.containerName ?? null,
+        containerUnit: p.containerUnit ?? null,
+        unitsPerBase: p.unitsPerBase ?? null,
+        status:
+          (p.availableQuantity ?? 0) <= 0
+            ? 'out_of_stock'
+            : (p.availableQuantity ?? 0) <= (p.lowStockThreshold ?? 5)
+            ? 'low_stock'
+            : 'in_stock',
+      });
+    }
+    for (const item of inventoryItems) {
+      if (item.productId && map.has(item.productId)) {
+        const existing = map.get(item.productId)!;
+        existing.quantity = item.quantity ?? existing.quantity;
+        existing.lowStockLevel = item.lowStockLevel ?? existing.lowStockLevel;
+        existing.cost = Number(item.averageCost ?? existing.cost);
+        existing.value = Number(item.inventoryValue ?? existing.quantity * existing.cost);
+        existing.portioningEnabled = item.portioningEnabled ?? existing.portioningEnabled;
+        existing.containerName = item.containerName ?? existing.containerName;
+        existing.containerUnit = item.containerUnit ?? existing.containerUnit;
+        existing.unitsPerBase = item.containerUnitsPerBase ?? existing.unitsPerBase;
+        existing.status =
+          existing.quantity <= 0
+            ? 'out_of_stock'
+            : existing.quantity <= existing.lowStockLevel
+            ? 'low_stock'
+            : 'in_stock';
+      }
+    }
+    return Array.from(map.values());
+  }, [productsList, inventoryItems]);
+
+  // Extract unique categories for category dropdown
+  const categoriesList = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of combinedStockItems) {
+      if (item.category) set.add(item.category);
+    }
+    for (const p of productsList) {
+      if (p.categoryName) set.add(p.categoryName);
+    }
+    return ['all', ...Array.from(set).sort()];
+  }, [combinedStockItems, productsList]);
+
+  // Filtered & sorted stock items
+  const filteredStockItems = useMemo(() => {
+    return combinedStockItems
+      .filter((item) => {
+        if (stockCategoryFilter !== 'all' && item.category !== stockCategoryFilter) return false;
+        if (stockRoleFilter !== 'all' && item.role !== stockRoleFilter) return false;
+        if (stockLowOnly && item.status === 'in_stock') return false;
+        if (stockSearch.trim()) {
+          const q = stockSearch.toLowerCase().trim();
+          const matchName = item.name.toLowerCase().includes(q);
+          const matchSku = item.sku.toLowerCase().includes(q);
+          const matchCat = item.category.toLowerCase().includes(q);
+          if (!matchName && !matchSku && !matchCat) return false;
         }
-      >
-        {report.inventory.lowStock.length ? (
-          <View className="overflow-hidden rounded-xl border border-slate-200">
-            {report.inventory.lowStock.map((item, index) => (
-              <View
-                key={`${item.id}-${item.branchName}`}
-                className={`flex-row flex-wrap items-center gap-3 p-4 ${
-                  index ? 'border-t border-slate-100' : ''
-                } ${item.quantity <= 0 ? 'bg-red-50' : 'bg-white'}`}
+        return true;
+      })
+      .sort((a, b) => {
+        let valA: any = a[stockSortKey as keyof typeof a];
+        let valB: any = b[stockSortKey as keyof typeof b];
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        if (valA < valB) return stockSortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return stockSortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [combinedStockItems, stockCategoryFilter, stockRoleFilter, stockLowOnly, stockSearch, stockSortKey, stockSortDir]);
+
+  // Movement logs data — handles arrays, { data: [...] }, or report.inventory.movements
+  const movementLogs = useMemo(() => {
+    let raw: any[] = [];
+    if (Array.isArray(inventoryMovements) && inventoryMovements.length > 0) {
+      raw = inventoryMovements;
+    } else if (Array.isArray((inventoryMovements as any)?.data) && (inventoryMovements as any).data.length > 0) {
+      raw = (inventoryMovements as any).data;
+    } else if (Array.isArray(report?.inventory?.movements) && report.inventory.movements.length > 0) {
+      raw = report.inventory.movements;
+    }
+    return raw.map((m: any, idx: number) => ({
+      id: m.id || `mov-${idx}`,
+      createdAt: m.createdAt || m.created_at || new Date().toISOString(),
+      productName: m.productName || m.product_name || m.name || m.label || 'Stock Item',
+      sku: m.sku || 'N/A',
+      unit: m.unit || 'pcs',
+      type: m.type || m.movement_type || 'adjustment',
+      quantityDelta: Number(m.quantityDelta ?? m.quantity_delta ?? m.quantity ?? 0),
+      quantityAfter: Number(m.quantityAfter ?? m.quantity_after ?? 0),
+      reason: m.reason || m.note || 'Standard movement',
+      createdBy: m.createdBy || m.created_by || m.performedBy || 'System',
+    }));
+  }, [inventoryMovements, report]);
+
+  const filteredMovements = useMemo(() => {
+    return movementLogs
+      .filter((m) => {
+        if (movementTypeFilter !== 'all' && m.type !== movementTypeFilter) return false;
+        if (movementSearch.trim()) {
+          const q = movementSearch.toLowerCase().trim();
+          const matchName = (m.productName ?? '').toLowerCase().includes(q);
+          const matchSku = (m.sku ?? '').toLowerCase().includes(q);
+          const matchReason = (m.reason ?? '').toLowerCase().includes(q);
+          const matchBy = (m.createdBy ?? '').toLowerCase().includes(q);
+          if (!matchName && !matchSku && !matchReason && !matchBy) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const key =
+          movementSortKey === 'date'
+            ? 'createdAt'
+            : movementSortKey === 'name'
+            ? 'productName'
+            : movementSortKey === 'delta'
+            ? 'quantityDelta'
+            : movementSortKey === 'after'
+            ? 'quantityAfter'
+            : movementSortKey === 'by'
+            ? 'createdBy'
+            : movementSortKey;
+        let valA: any = (a as Record<string, any>)[key];
+        let valB: any = (b as Record<string, any>)[key];
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        if (valA < valB) return movementSortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return movementSortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [movementLogs, movementTypeFilter, movementSearch, movementSortKey, movementSortDir]);
+
+  // Conversions & Repacking data
+  const conversionRows = useMemo(() => {
+    const list: any[] = [];
+    for (const p of productionProducts) {
+      for (const ing of p.ingredients ?? []) {
+        list.push({
+          id: `${p.id}-${ing.productId}`,
+          targetName: p.name,
+          targetUnit: p.unit,
+          targetStock: p.quantity ?? 0,
+          sourceName: ing.name,
+          sourceUnit: ing.baseUnit,
+          sourceStock: ing.availableQuantity ?? 0,
+          quantityRequired: ing.quantityRequired,
+          recipeUnit: ing.recipeUnit,
+          unitsPerBase: ing.unitsPerBase ?? 1,
+          ratioDisplay:
+            ing.unitsPerBase && ing.containerUnit
+              ? `1 ${ing.containerUnit} = ${ing.unitsPerBase} ${ing.baseUnit}`
+              : `1 ${p.unit} = ${ing.quantityRequired} ${ing.baseUnit}`,
+          status: (ing.availableQuantity ?? 0) >= ing.quantityRequired ? 'Ready to Repack' : 'Low Source Stock',
+        });
+      }
+    }
+    for (const item of combinedStockItems) {
+      if (item.unitsPerBase && item.containerName && item.containerUnit) {
+        const exists = list.some((c) => c.targetName === item.name);
+        if (!exists) {
+          list.push({
+            id: `portion-${item.id}`,
+            targetName: item.name,
+            targetUnit: item.unit,
+            targetStock: item.quantity,
+            sourceName: item.containerName,
+            sourceUnit: item.containerUnit,
+            sourceStock: Math.floor(item.quantity / item.unitsPerBase),
+            quantityRequired: 1,
+            recipeUnit: item.containerUnit,
+            unitsPerBase: item.unitsPerBase,
+            ratioDisplay: `1 ${item.containerUnit} = ${item.unitsPerBase} ${item.unit}`,
+            status: item.quantity > 0 ? 'Active Conversion' : 'No Stock',
+          });
+        }
+      }
+    }
+    return list;
+  }, [productionProducts, combinedStockItems]);
+
+  const filteredConversions = useMemo(() => {
+    return conversionRows
+      .filter((c) => {
+        if (conversionStatusFilter !== 'all') {
+          if (conversionStatusFilter === 'ready' && !c.status.includes('Ready')) return false;
+          if (conversionStatusFilter === 'low' && !c.status.includes('Low')) return false;
+          if (conversionStatusFilter === 'active' && !c.status.includes('Active')) return false;
+        }
+        if (conversionSearch.trim()) {
+          const q = conversionSearch.toLowerCase().trim();
+          const matchSource = c.sourceName.toLowerCase().includes(q);
+          const matchTarget = c.targetName.toLowerCase().includes(q);
+          if (!matchSource && !matchTarget) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const key =
+          conversionSortKey === 'source'
+            ? 'sourceName'
+            : conversionSortKey === 'target'
+            ? 'targetName'
+            : conversionSortKey === 'ratio'
+            ? 'ratioDisplay'
+            : conversionSortKey === 'sourceStock'
+            ? 'sourceStock'
+            : conversionSortKey === 'targetStock'
+            ? 'targetStock'
+            : conversionSortKey === 'status'
+            ? 'status'
+            : conversionSortKey;
+        let valA: any = a[key];
+        let valB: any = b[key];
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        if (valA < valB) return conversionSortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return conversionSortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [conversionRows, conversionStatusFilter, conversionSearch, conversionSortKey, conversionSortDir]);
+
+  if (exportRef) {
+    exportRef.current = () => ({
+      stockItems: filteredStockItems,
+      movements: filteredMovements,
+      conversions: filteredConversions,
+      filters: {
+        subTab,
+        category: stockCategoryFilter,
+        role: stockRoleFilter,
+        movementType: movementTypeFilter,
+        lowStockOnly: stockLowOnly,
+        search: stockSearch || movementSearch || conversionSearch,
+      },
+    });
+  }
+
+  const handleStockSort = (key: string) => {
+    if (stockSortKey === key) {
+      setStockSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setStockSortKey(key);
+      setStockSortDir('asc');
+    }
+  };
+
+  const handleMovementSort = (key: string) => {
+    if (movementSortKey === key) {
+      setMovementSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setMovementSortKey(key);
+      setMovementSortDir('asc');
+    }
+  };
+
+  const handleConversionSort = (key: string) => {
+    if (conversionSortKey === key) {
+      setConversionSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setConversionSortKey(key);
+      setConversionSortDir('asc');
+    }
+  };
+
+  return (
+    <View className="w-full gap-5">
+      {/* Sub-Tab Navigation Bar */}
+      <View className="flex-row flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+        <View className="flex-row items-center gap-2">
+          <Pressable
+            onPress={() => setSubTab('stock')}
+            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
+              subTab === 'stock' ? 'bg-brand-700 shadow-xs' : 'bg-slate-50 hover:bg-slate-100'
+            }`}
+          >
+            <Feather name="package" size={16} color={subTab === 'stock' ? '#FFFFFF' : '#475569'} />
+            <Text className={`text-xs font-semibold ${subTab === 'stock' ? 'text-white' : 'text-slate-700'}`}>
+              Current Stock ({filteredStockItems.length})
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setSubTab('movements')}
+            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
+              subTab === 'movements' ? 'bg-brand-700 shadow-xs' : 'bg-slate-50 hover:bg-slate-100'
+            }`}
+          >
+            <Feather name="activity" size={16} color={subTab === 'movements' ? '#FFFFFF' : '#475569'} />
+            <Text className={`text-xs font-semibold ${subTab === 'movements' ? 'text-white' : 'text-slate-700'}`}>
+              Stock Movement ({filteredMovements.length})
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setSubTab('conversions')}
+            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
+              subTab === 'conversions' ? 'bg-brand-700 shadow-xs' : 'bg-slate-50 hover:bg-slate-100'
+            }`}
+          >
+            <Feather name="repeat" size={16} color={subTab === 'conversions' ? '#FFFFFF' : '#475569'} />
+            <Text className={`text-xs font-semibold ${subTab === 'conversions' ? 'text-white' : 'text-slate-700'}`}>
+              Conversion (Repacking) ({filteredConversions.length})
+            </Text>
+          </Pressable>
+        </View>
+
+        <Pressable
+          onPress={() => router.push('/(tabs)/inventory')}
+          className="flex-row items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2"
+        >
+          <Text className="text-xs font-semibold text-brand-700">Manage Inventory</Text>
+          <Feather name="external-link" size={14} color="#1A593B" />
+        </Pressable>
+      </View>
+
+      {/* Sub-Tab 1: Current Stock */}
+      {subTab === 'stock' ? (
+        <View className="relative z-40 rounded-2xl border border-slate-200 bg-white shadow-xs">
+          <View className="relative z-50 flex-row flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
+            <View className="flex-1 min-w-[240px] flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <Feather name="search" size={16} color="#94A3B8" />
+              <TextInput
+                value={stockSearch}
+                onChangeText={setStockSearch}
+                placeholder="Search product, SKU, category..."
+                className="ml-2 flex-1 text-xs text-slate-900 outline-none"
+                placeholderTextColor="#94A3B8"
+              />
+              {stockSearch ? (
+                <Pressable onPress={() => setStockSearch('')}>
+                  <Feather name="x-circle" size={14} color="#94A3B8" />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <View className="flex-row items-center gap-2.5">
+              <SelectDropdown
+                label="Category"
+                icon="grid"
+                value={stockCategoryFilter}
+                options={categoriesList.map((cat) => ({
+                  label: cat === 'all' ? 'All Categories' : cat,
+                  value: cat,
+                }))}
+                onChange={setStockCategoryFilter}
+              />
+
+              <SelectDropdown
+                label="Role"
+                icon="tag"
+                value={stockRoleFilter}
+                options={[
+                  { label: 'All Roles', value: 'all' },
+                  { label: 'Sellable Only', value: 'sellable' },
+                  { label: 'Raw Material (Ingredient)', value: 'ingredient' },
+                  { label: 'Both', value: 'both' },
+                ]}
+                onChange={(val) => setStockRoleFilter(val as any)}
+              />
+
+              <Pressable
+                onPress={() => setStockLowOnly((prev) => !prev)}
+                className={`flex-row items-center gap-1.5 rounded-xl border px-3 py-2 ${
+                  stockLowOnly ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'
+                }`}
               >
-                <View className="min-w-52 flex-1">
-                  <Text className="text-sm font-medium text-slate-800">{item.name}</Text>
-                  <Text className="mt-1 text-xs text-slate-500">
-                    {item.sku} · {item.branchName}
+                <Feather name="alert-triangle" size={14} color={stockLowOnly ? '#B45309' : '#64748B'} />
+                <Text className={`text-xs font-medium ${stockLowOnly ? 'text-amber-900 font-semibold' : 'text-slate-700'}`}>
+                  Low Stock Only
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={true} className="w-full">
+            <View className="min-w-[900px] w-full">
+              <View className="flex-row border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <Pressable onPress={() => handleStockSort('name')} className="w-56 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Product Name</Text>
+                  {stockSortKey === 'name' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : (
+                    <Feather name="chevron-down" size={12} color="#94A3B8" />
+                  )}
+                </Pressable>
+
+                <Pressable onPress={() => handleStockSort('sku')} className="w-32 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">SKU</Text>
+                  {stockSortKey === 'sku' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleStockSort('category')} className="w-36 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Category</Text>
+                  {stockSortKey === 'category' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleStockSort('role')} className="w-28 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Role</Text>
+                  {stockSortKey === 'role' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleStockSort('unit')} className="w-44 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Unit / Conversion</Text>
+                  {stockSortKey === 'unit' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleStockSort('quantity')} className="w-36 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Stock Qty</Text>
+                  {stockSortKey === 'quantity' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleStockSort('cost')} className="w-32 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Avg Cost</Text>
+                  {stockSortKey === 'cost' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleStockSort('value')} className="w-36 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Valuation</Text>
+                  {stockSortKey === 'value' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleStockSort('status')} className="w-28 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Status</Text>
+                  {stockSortKey === 'status' ? (
+                    <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+              </View>
+
+              {filteredStockItems.length > 0 ? (
+                filteredStockItems.map((item, index) => (
+                  <View
+                    key={item.id}
+                    className={`flex-row items-center px-4 py-3.5 ${
+                      index % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
+                    } border-b border-slate-100 transition-colors hover:bg-emerald-50/30`}
+                  >
+                    <View className="w-56 pr-2">
+                      <Text className="text-xs font-semibold text-slate-900" numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      {item.containerName ? (
+                        <Text className="mt-0.5 text-[10px] text-slate-500">
+                          Container: {item.containerName}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <View className="w-32 pr-2">
+                      <Text className="font-mono text-xs text-slate-600">{item.sku}</Text>
+                    </View>
+
+                    <View className="w-36 pr-2">
+                      <Text className="text-xs text-slate-600">{item.category}</Text>
+                    </View>
+
+                    <View className="w-28 pr-2">
+                      <View
+                        className={`self-start rounded-full px-2 py-0.5 ${
+                          item.role === 'ingredient'
+                            ? 'bg-amber-100'
+                            : item.role === 'both'
+                            ? 'bg-purple-100'
+                            : 'bg-blue-100'
+                        }`}
+                      >
+                        <Text
+                          className={`text-[10px] font-semibold capitalize ${
+                            item.role === 'ingredient'
+                              ? 'text-amber-800'
+                              : item.role === 'both'
+                              ? 'text-purple-800'
+                              : 'text-blue-800'
+                          }`}
+                        >
+                          {item.role === 'ingredient' ? 'Raw Mat.' : item.role}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View className="w-44 pr-2">
+                      <Text className="text-xs text-slate-700">
+                        {item.unit}
+                        {item.containerUnit && item.unitsPerBase
+                          ? ` (1 ${item.containerUnit} = ${item.unitsPerBase} ${item.unit})`
+                          : ''}
+                      </Text>
+                    </View>
+
+                    <View className="w-36 items-end pr-2">
+                      <Text
+                        className={`text-xs font-bold ${
+                          item.quantity <= 0
+                            ? 'text-red-700'
+                            : item.quantity <= item.lowStockLevel
+                            ? 'text-amber-700'
+                            : 'text-slate-900'
+                        }`}
+                      >
+                        {item.quantity.toLocaleString()} {item.unit}
+                      </Text>
+                    </View>
+
+                    <View className="w-32 items-end pr-2">
+                      <Text className="font-mono text-xs text-slate-600">
+                        {formatMoney(String(item.cost))}
+                      </Text>
+                    </View>
+
+                    <View className="w-36 items-end pr-2">
+                      <Text className="text-xs font-semibold text-slate-900">
+                        {formatMoney(String(item.value))}
+                      </Text>
+                    </View>
+
+                    <View className="w-28 items-end">
+                      <View
+                        className={`rounded-full px-2 py-0.5 ${
+                          item.status === 'out_of_stock'
+                            ? 'bg-red-100'
+                            : item.status === 'low_stock'
+                            ? 'bg-amber-100'
+                            : 'bg-emerald-100'
+                        }`}
+                      >
+                        <Text
+                          className={`text-[10px] font-bold ${
+                            item.status === 'out_of_stock'
+                              ? 'text-red-800'
+                              : item.status === 'low_stock'
+                              ? 'text-amber-800'
+                              : 'text-emerald-800'
+                          }`}
+                        >
+                          {item.status === 'out_of_stock'
+                            ? 'Out of Stock'
+                            : item.status === 'low_stock'
+                            ? 'Low Stock'
+                            : 'In Stock'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View className="items-center justify-center p-8">
+                  <Feather name="package" size={24} color="#94A3B8" />
+                  <Text className="mt-2 text-xs font-medium text-slate-500">
+                    No stock records match the selected filters.
                   </Text>
                 </View>
-                <Text className={item.quantity <= 0 ? 'text-red-700' : 'text-amber-700'}>
-                  {item.quantity} {item.unit} / alert at {item.lowStockLevel}
-                </Text>
-                <Text className="w-28 text-right text-sm font-medium text-slate-700">
-                  {formatMoney(item.inventoryValue)}
-                </Text>
-              </View>
-            ))}
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* Sub-Tab 2: Stock Movement */}
+      {subTab === 'movements' ? (
+        <View className="relative z-40 rounded-2xl border border-slate-200 bg-white shadow-xs">
+          <View className="relative z-50 flex-row flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
+            <View className="flex-1 min-w-[240px] flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <Feather name="search" size={16} color="#94A3B8" />
+              <TextInput
+                value={movementSearch}
+                onChangeText={setMovementSearch}
+                placeholder="Search product, SKU, reason, or performed by..."
+                className="ml-2 flex-1 text-xs text-slate-900 outline-none"
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <SelectDropdown
+                label="Movement Type"
+                icon="sliders"
+                value={movementTypeFilter}
+                options={[
+                  { label: 'All Movement Types', value: 'all' },
+                  { label: 'Adjustments', value: 'adjustment' },
+                  { label: 'Sales', value: 'sale' },
+                  { label: 'Returns', value: 'return' },
+                  { label: 'Repacking (Production)', value: 'production' },
+                  { label: 'Transfers', value: 'transfer' },
+                ]}
+                onChange={setMovementTypeFilter}
+              />
+            </View>
           </View>
-        ) : (
-          <Text className="rounded-xl bg-brand-50 p-4 text-sm text-brand-700">
-            All tracked products are above their alert levels.
-          </Text>
-        )}
-      </ReportCard>
-    </>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={true} className="w-full">
+            <View className="min-w-[850px] w-full">
+              <View className="flex-row border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <Pressable onPress={() => handleMovementSort('date')} className="w-44 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Date & Time</Text>
+                  {movementSortKey === 'date' ? (
+                    <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleMovementSort('name')} className="w-56 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Product Name</Text>
+                  {movementSortKey === 'name' ? (
+                    <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleMovementSort('type')} className="w-36 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Movement Type</Text>
+                  {movementSortKey === 'type' ? (
+                    <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleMovementSort('delta')} className="w-32 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Qty Change</Text>
+                  {movementSortKey === 'delta' ? (
+                    <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleMovementSort('after')} className="w-32 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Qty After</Text>
+                  {movementSortKey === 'after' ? (
+                    <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleMovementSort('reason')} className="w-48 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Reason / Ref</Text>
+                </Pressable>
+
+                <Pressable onPress={() => handleMovementSort('by')} className="w-36 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Performed By</Text>
+                </Pressable>
+              </View>
+
+              {filteredMovements.length > 0 ? (
+                filteredMovements.map((m, index) => (
+                  <View
+                    key={m.id || index}
+                    className={`flex-row items-center px-4 py-3.5 ${
+                      index % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
+                    } border-b border-slate-100 transition-colors hover:bg-emerald-50/30`}
+                  >
+                    <View className="w-44 pr-2">
+                      <Text className="text-xs font-medium text-slate-800">
+                        {m.createdAt ? new Date(m.createdAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : 'Recent'}
+                      </Text>
+                    </View>
+
+                    <View className="w-56 pr-2">
+                      <Text className="text-xs font-semibold text-slate-900" numberOfLines={1}>
+                        {m.productName}
+                      </Text>
+                      {m.sku ? <Text className="text-[10px] text-slate-500">{m.sku}</Text> : null}
+                    </View>
+
+                    <View className="w-36 pr-2">
+                      <View
+                        className={`self-start rounded-full px-2 py-0.5 ${
+                          m.type === 'sale'
+                            ? 'bg-blue-100'
+                            : m.type === 'return'
+                            ? 'bg-emerald-100'
+                            : m.type === 'production'
+                            ? 'bg-purple-100'
+                            : 'bg-amber-100'
+                        }`}
+                      >
+                        <Text
+                          className={`text-[10px] font-semibold capitalize ${
+                            m.type === 'sale'
+                              ? 'text-blue-800'
+                              : m.type === 'return'
+                              ? 'text-emerald-800'
+                              : m.type === 'production'
+                              ? 'text-purple-800'
+                              : 'text-amber-800'
+                          }`}
+                        >
+                          {m.type?.replaceAll('_', ' ') ?? 'adjustment'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View className="w-32 items-end pr-2">
+                      <Text
+                        className={`text-xs font-bold ${
+                          (m.quantityDelta ?? 0) > 0
+                            ? 'text-emerald-700'
+                            : (m.quantityDelta ?? 0) < 0
+                            ? 'text-red-700'
+                            : 'text-slate-700'
+                        }`}
+                      >
+                        {(m.quantityDelta ?? 0) > 0 ? `+${m.quantityDelta}` : m.quantityDelta}{' '}
+                        {m.unit ?? 'pcs'}
+                      </Text>
+                    </View>
+
+                    <View className="w-32 items-end pr-2">
+                      <Text className="text-xs font-semibold text-slate-900">
+                        {m.quantityAfter ?? '-'} {m.unit ?? 'pcs'}
+                      </Text>
+                    </View>
+
+                    <View className="w-48 pr-2">
+                      <Text className="text-xs text-slate-600" numberOfLines={1}>
+                        {m.reason ?? 'Standard adjustment'}
+                      </Text>
+                    </View>
+
+                    <View className="w-36 pr-2">
+                      <Text className="text-xs font-medium text-slate-700" numberOfLines={1}>
+                        {m.createdBy ?? 'System'}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View className="items-center justify-center p-8">
+                  <Feather name="activity" size={24} color="#94A3B8" />
+                  <Text className="mt-2 text-xs font-medium text-slate-500">
+                    No movement logs available for this branch.
+                  </Text>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* Sub-Tab 3: Conversions & Repacking */}
+      {subTab === 'conversions' ? (
+        <View className="relative z-40 rounded-2xl border border-slate-200 bg-white shadow-xs">
+          <View className="relative z-50 flex-row flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
+            <View className="flex-1 min-w-[240px] flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <Feather name="search" size={16} color="#94A3B8" />
+              <TextInput
+                value={conversionSearch}
+                onChangeText={setConversionSearch}
+                placeholder="Search raw material or repacked product..."
+                className="ml-2 flex-1 text-xs text-slate-900 outline-none"
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <SelectDropdown
+                label="Status"
+                icon="check-circle"
+                value={conversionStatusFilter}
+                options={[
+                  { label: 'All Statuses', value: 'all' },
+                  { label: 'Ready to Repack', value: 'ready' },
+                  { label: 'Low Source Stock', value: 'low' },
+                  { label: 'Active Conversion', value: 'active' },
+                ]}
+                onChange={setConversionStatusFilter}
+              />
+            </View>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={true} className="w-full">
+            <View className="min-w-[850px] w-full">
+              <View className="flex-row border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <Pressable onPress={() => handleConversionSort('source')} className="w-56 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Bulk Source Raw Material</Text>
+                  {conversionSortKey === 'source' ? (
+                    <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleConversionSort('target')} className="w-56 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Repacked Target Product</Text>
+                  {conversionSortKey === 'target' ? (
+                    <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleConversionSort('ratio')} className="w-48 flex-row items-center gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Conversion Ratio</Text>
+                  {conversionSortKey === 'ratio' ? (
+                    <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleConversionSort('sourceStock')} className="w-36 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Source Stock</Text>
+                  {conversionSortKey === 'sourceStock' ? (
+                    <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleConversionSort('targetStock')} className="w-36 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Repacked Stock</Text>
+                  {conversionSortKey === 'targetStock' ? (
+                    <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+
+                <Pressable onPress={() => handleConversionSort('status')} className="w-36 flex-row items-center justify-end gap-1.5">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Repack Status</Text>
+                  {conversionSortKey === 'status' ? (
+                    <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
+                  ) : null}
+                </Pressable>
+              </View>
+
+              {filteredConversions.length > 0 ? (
+                filteredConversions.map((c, index) => (
+                  <View
+                    key={c.id || index}
+                    className={`flex-row items-center px-4 py-3.5 ${
+                      index % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
+                    } border-b border-slate-100 transition-colors hover:bg-emerald-50/30`}
+                  >
+                    <View className="w-56 pr-2">
+                      <Text className="text-xs font-semibold text-slate-900">{c.sourceName}</Text>
+                      <Text className="text-[10px] text-slate-500">Unit: {c.sourceUnit}</Text>
+                    </View>
+
+                    <View className="w-56 pr-2">
+                      <Text className="text-xs font-semibold text-emerald-800">{c.targetName}</Text>
+                      <Text className="text-[10px] text-slate-500">Target Unit: {c.targetUnit}</Text>
+                    </View>
+
+                    <View className="w-48 pr-2">
+                      <Text className="font-mono text-xs font-medium text-slate-800">{c.ratioDisplay}</Text>
+                    </View>
+
+                    <View className="w-36 items-end pr-2">
+                      <Text className="text-xs font-bold text-slate-800">
+                        {c.sourceStock.toLocaleString()} {c.sourceUnit}
+                      </Text>
+                    </View>
+
+                    <View className="w-36 items-end pr-2">
+                      <Text className="text-xs font-bold text-emerald-700">
+                        {c.targetStock.toLocaleString()} {c.targetUnit}
+                      </Text>
+                    </View>
+
+                    <View className="w-36 items-end">
+                      <View
+                        className={`rounded-full px-2.5 py-0.5 ${
+                          c.status.includes('Ready') || c.status.includes('Active')
+                            ? 'bg-emerald-100'
+                            : 'bg-amber-100'
+                        }`}
+                      >
+                        <Text
+                          className={`text-[10px] font-bold ${
+                            c.status.includes('Ready') || c.status.includes('Active')
+                              ? 'text-emerald-800'
+                              : 'text-amber-800'
+                          }`}
+                        >
+                          {c.status}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View className="items-center justify-center p-8">
+                  <Feather name="repeat" size={24} color="#94A3B8" />
+                  <Text className="mt-2 text-xs font-medium text-slate-500">
+                    No conversion or repacking recipes configured yet.
+                  </Text>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -4664,14 +5439,25 @@ function ReportsContent({ initialSection = 'sales' }: { initialSection?: ReportS
       ),
   });
 
+  const inventoryExportRef = useRef<(() => InventoryExportData) | null>(null);
+
   const handleWorkspaceExport = async (format: 'xlsx' | 'pdf') => {
     if (!query.data || exporting) return;
     setExporting(true);
     try {
-      const output =
-        format === 'xlsx'
-          ? buildReportsExcel(query.data, exportMetadata)
-          : await buildReportsPdf(query.data, exportMetadata);
+      let output: { bytes: Uint8Array; fileName: string };
+      if (section === 'inventory' && inventoryExportRef.current) {
+        const invData = inventoryExportRef.current();
+        output =
+          format === 'xlsx'
+            ? buildInventoryExportExcel(invData, exportMetadata)
+            : await buildInventoryExportPdf(invData, exportMetadata);
+      } else {
+        output =
+          format === 'xlsx'
+            ? buildReportsExcel(query.data, exportMetadata, section)
+            : await buildReportsPdf(query.data, exportMetadata);
+      }
       await saveReportExport(output.bytes, output.fileName, format);
       setExportMenuVisible(false);
       showAlert({
@@ -4695,6 +5481,27 @@ function ReportsContent({ initialSection = 'sales' }: { initialSection?: ReportS
     enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(branch?.id),
     queryFn: () =>
       api<any[]>(`/products?branchId=${branch!.id}&includeInactive=true&pageSize=100`),
+  });
+
+  const inventoryItemsQuery = useQuery({
+    queryKey: ['reports-inventory-items', branch?.id, session?.user?.id],
+    enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(branch?.id) && section === 'inventory',
+    queryFn: () =>
+      api<any>(`/inventory?branchId=${branch!.id}&pageSize=100`).catch(() => ({ data: [] })),
+  });
+
+  const inventoryMovementsQuery = useQuery({
+    queryKey: ['reports-inventory-movements', branch?.id, session?.user?.id],
+    enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(branch?.id) && section === 'inventory',
+    queryFn: () =>
+      api<any>(`/inventory/history?branchId=${branch!.id}&pageSize=100`).catch(() => ({ data: [] })),
+  });
+
+  const productionProductsQuery = useQuery({
+    queryKey: ['reports-production-products', branch?.id, session?.user?.id],
+    enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(branch?.id) && section === 'inventory',
+    queryFn: () =>
+      api<any[]>(`/inventory/production-products?branchId=${branch!.id}`).catch(() => []),
   });
 
   const productPerformanceQuery = useQuery({
@@ -4723,7 +5530,6 @@ function ReportsContent({ initialSection = 'sales' }: { initialSection?: ReportS
       );
     },
   });
-
 
   return (
     <Screen>
@@ -4928,9 +5734,22 @@ function ReportsContent({ initialSection = 'sales' }: { initialSection?: ReportS
                   ) : null}
                   {section === 'inventory' ? (
                     <InventoryReport
-                      report={query.data}
+                      report={query.data!}
                       productsList={productsQuery.data ?? []}
+                      inventoryItems={
+                        Array.isArray(inventoryItemsQuery.data)
+                          ? inventoryItemsQuery.data
+                          : inventoryItemsQuery.data?.data ?? []
+                      }
+                      inventoryMovements={
+                        Array.isArray(inventoryMovementsQuery.data)
+                          ? inventoryMovementsQuery.data
+                          : inventoryMovementsQuery.data?.data ?? []
+                      }
+                      productionProducts={productionProductsQuery.data ?? []}
+                      isLoadingMovements={inventoryMovementsQuery.isLoading}
                       onOpenDetail={handleOpenDetail}
+                      exportRef={inventoryExportRef}
                     />
                   ) : null}
                   {section === 'purchasing' ? (

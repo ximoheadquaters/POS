@@ -108,7 +108,10 @@ const sidebarSections: SidebarSection[] = [
         id: 'reports',
         title: 'Income & Reports',
         icon: 'trending-up',
-        children: [{ title: 'Overview', href: '/reports/overview', module: 'reports' }],
+        children: [
+          { title: 'Overview', href: '/reports/overview', module: 'reports' },
+          { title: 'Inventory', href: '/reports/inventory' as Href, module: 'reports' },
+        ],
       },
       {
         id: 'settings',
@@ -152,23 +155,24 @@ export function filterSectionsByProfile(user: any): SidebarSection[] {
   return sidebarSections;
 }
 
-function isPathActive(pathname: string, href: Href): boolean {
-  const target = String(href).replace('/(tabs)', '') || '/';
-  if (target === '/' || target === '') {
-    return pathname === '/' || pathname === '';
-  }
-  if (target === '/pos') return pathname === '/pos';
-  if (target === '/products' && (pathname === '/products' || pathname.startsWith('/product') || pathname === '/catalogue')) return true;
-  if (target === '/purchasing' && (pathname === '/purchasing' || pathname.startsWith('/purchase') || pathname.startsWith('/supplier'))) return true;
-  if (pathname === target) return true;
-  if (
-    target !== '/pos' &&
-    target !== '/more' &&
-    target !== '/' &&
-    pathname.startsWith(target.replace(/\/$/, ''))
-  ) {
+export function isPathActive(pathname: string, href: Href): boolean {
+  const current = (pathname || '').split('?')[0].replace(/\/$/, '') || '/';
+  const target = String(href).split('?')[0].replace('/(tabs)', '').replace(/\/$/, '') || '/';
+
+  // Exact match
+  if (current === target) return true;
+
+  // Dashboard / root only matches exact root
+  if (target === '/' || current === '/') return false;
+
+  // Sub-routes must match with slash delimiter (e.g. /products/new matches /products, but NOT /product-variants or /production)
+  if (current.startsWith(`${target}/`)) return true;
+
+  // Specific alias routes where details pages belong exclusively to a parent group
+  if (target === '/purchasing' && (current.startsWith('/purchase/') || current.startsWith('/supplier/'))) {
     return true;
   }
+
   return false;
 }
 
