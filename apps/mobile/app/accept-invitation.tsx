@@ -113,7 +113,7 @@ export default function AcceptInvitationScreen() {
   if (page.kind === 'loading') {
     return (
       <Screen>
-        <LoadingState label="Verifying your secure invitation…" />
+        <LoadingState label="Verifying your secure invitation..." />
       </Screen>
     );
   }
@@ -133,9 +133,9 @@ export default function AcceptInvitationScreen() {
               <View className="mb-5">
                 <BrandLogo size={56} />
               </View>
-              <Text className="text-3xl font-black text-white">Set up your POS access</Text>
+              <Text className="text-3xl font-black text-white">Welcome to Ximo POS</Text>
               <Text className="mt-2 text-base leading-6 text-brand-100">
-                Create your owner password to securely manage your branches and team.
+                Complete your owner account setup to manage your business securely.
               </Text>
             </View>
 
@@ -144,7 +144,7 @@ export default function AcceptInvitationScreen() {
                 <View accessibilityRole="alert">
                   <Text className="text-2xl font-black text-brand-900">Password created</Text>
                   <Text className="mt-3 leading-6 text-slate-600">
-                    Your owner account is ready. Taking you to branch selection…
+                    Your owner account is ready. Taking you to branch selection...
                   </Text>
                   <View className="mt-5">
                     <Button
@@ -155,8 +155,14 @@ export default function AcceptInvitationScreen() {
                 </View>
               ) : page.kind === 'error' ? (
                 <View accessibilityRole="alert">
-                  <Text className="text-2xl font-black text-brand-900">Invitation unavailable</Text>
+                  <Text className="text-2xl font-black text-brand-900">Setup link unavailable</Text>
                   <Text className="mt-3 leading-6 text-red-700">{page.message}</Text>
+                  <View className="mt-4 rounded-2xl bg-amber-50 p-4">
+                    <Text className="text-sm leading-5 text-amber-900">
+                      For your security, setup links are single-use. If an email security scanner
+                      opened the link before you did, ask the Ximo administrator to resend it.
+                    </Text>
+                  </View>
                   <View className="mt-5">
                     <Button title="Back to sign in" variant="secondary" onPress={returnToLogin} />
                   </View>
@@ -194,7 +200,7 @@ export default function AcceptInvitationScreen() {
                     </View>
                   ) : null}
                   <Button
-                    title={submitting ? 'Saving password…' : 'Create password'}
+                    title={submitting ? 'Saving password...' : 'Create password'}
                     accessibilityLabel="Create password"
                     disabled={submitting}
                     onPress={submit}

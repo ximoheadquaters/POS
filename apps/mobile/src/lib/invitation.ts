@@ -1,7 +1,7 @@
 import type { CurrentUser } from '@ximo/shared';
 
 export const INVALID_INVITATION_MESSAGE =
-  'This invitation link is invalid or has expired. Request a new invitation from your administrator.';
+  'This secure setup link is no longer valid. Each link can be used only once. Ask your Ximo administrator to send a new setup link.';
 
 export type InvitationCallback =
   | { kind: 'pkce'; code: string }

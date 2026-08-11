@@ -16,13 +16,25 @@ Replace `YOUR_POS_WEB_DOMAIN` with the deployed Expo web host. The API's product
 web URL for invitation emails unless verified universal/app links are configured; the custom
 `ximopos` scheme is an additional native option, not the only email destination.
 
-Under **Authentication → Email Templates**, keep both the **Invite user** and **Reset password**
-templates enabled and ensure their action points to `{{ .ConfirmationURL }}`. Initial invitations
-use Supabase Invite User. Resends use Reset Password because Supabase does not re-invite an existing
-Auth user.
+Under **Authentication → Email Templates**, customize both **Invite user** and **Reset password**.
+Do not use `{{ .ConfirmationURL }}` for the button URL. That URL verifies and consumes the one-time
+token before redirecting, so automated email-security scanners can use the link before the owner
+clicks it. Use the scanner-safe callback format instead:
 
-Configure production SMTP under **Project Settings → Authentication → SMTP Settings**. Without
-production SMTP, delivery is subject to Supabase's development email restrictions and limits.
+```text
+{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite
+{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery
+```
+
+The POS page performs verification only after it receives the token hash. Initial invitations use
+the Invite User template. Resends use Reset Password because Supabase does not re-invite an
+existing Auth user. The canonical branded HTML is stored in
+`supabase/templates/owner-invite.html` and `supabase/templates/owner-recovery.html`.
+
+Configure production SMTP under **Authentication → Emails → SMTP Settings**. Hosted Supabase
+projects do not allow custom subject/body editing until custom SMTP is enabled. Without production
+SMTP, delivery uses the generic Supabase template, remains subject to development email limits,
+and cannot use the scanner-safe link above.
 
 These dashboard and SMTP changes are external settings and cannot be applied from this repository.
 
