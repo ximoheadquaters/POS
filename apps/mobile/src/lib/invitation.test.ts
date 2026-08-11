@@ -1,7 +1,6 @@
 import type { CurrentUser } from '@ximo/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  completeInvitationVerification,
   completeInvitationPassword,
   establishInvitationSession,
   finishInvitationSetup,
@@ -21,7 +20,6 @@ function authFixture(
   options: {
     exchangeError?: { message: string; status?: number };
     updateError?: { message: string; status?: number };
-    existingSession?: { access_token: string } | null;
   } = {},
 ) {
   const auth: InvitationAuthClient = {
@@ -34,12 +32,7 @@ function authFixture(
       data: {},
       error: options.updateError ?? null,
     })),
-    getSession: vi.fn(async () => ({
-      data: {
-        session: options.existingSession === undefined ? session : options.existingSession,
-      },
-      error: null,
-    })),
+    getSession: vi.fn(async () => success),
     signOut: vi.fn(async () => undefined),
   };
   return auth;
@@ -64,22 +57,6 @@ const owner: CurrentUser = {
 };
 
 describe('POS owner invitation flow', () => {
-  it('ends the one-time callback session after verifying the email', async () => {
-    const auth = authFixture();
-
-    await establishInvitationSession(auth, {
-      kind: 'token-hash',
-      tokenHash: 'verification-token',
-      otpType: 'invite',
-    });
-    expect(isInvitationSetupActive()).toBe(true);
-
-    await completeInvitationVerification(auth);
-
-    expect(auth.signOut).toHaveBeenCalledOnce();
-    expect(isInvitationSetupActive()).toBe(false);
-  });
-
   it('parses and exchanges a valid PKCE invitation callback', async () => {
     const callback = parseInvitationCallback(
       'https://pos.example.com/accept-invitation?code=pkce-code-value',
@@ -120,9 +97,7 @@ describe('POS owner invitation flow', () => {
       reason: 'invalid',
       message: INVALID_INVITATION_MESSAGE,
     });
-    await expect(
-      establishInvitationSession(authFixture({ existingSession: null }), invalid),
-    ).rejects.toMatchObject({
+    await expect(establishInvitationSession(authFixture(), invalid)).rejects.toMatchObject({
       kind: 'invalid',
       message: INVALID_INVITATION_MESSAGE,
     });
@@ -131,19 +106,14 @@ describe('POS owner invitation flow', () => {
       'https://pos.example.com/accept-invitation?error=access_denied&error_description=Email+link+is+invalid+or+has+expired',
     );
     expect(expired.kind).toBe('invalid');
-    await expect(
-      establishInvitationSession(authFixture({ existingSession: null }), expired),
-    ).rejects.toMatchObject({
+    await expect(establishInvitationSession(authFixture(), expired)).rejects.toMatchObject({
       kind: 'expired',
       message: INVALID_INVITATION_MESSAGE,
     });
 
     await expect(
       establishInvitationSession(
-        authFixture({
-          exchangeError: { message: 'fetch failed', status: 503 },
-          existingSession: null,
-        }),
+        authFixture({ exchangeError: { message: 'fetch failed', status: 503 } }),
         { kind: 'pkce', code: 'valid-format-code' },
       ),
     ).rejects.toMatchObject({
@@ -151,33 +121,6 @@ describe('POS owner invitation flow', () => {
       message:
         'Could not verify the invitation. Check your connection and try opening the link again.',
     });
-  });
-
-  it('continues with a recovery session already established by the browser', async () => {
-    const auth = authFixture({
-      exchangeError: { message: 'PKCE code verifier not found', status: 400 },
-      existingSession: { access_token: 'already-established-access-token' },
-    });
-
-    await expect(
-      establishInvitationSession(auth, { kind: 'pkce', code: 'already-consumed-code' }),
-    ).resolves.toBe('already-established-access-token');
-    expect(auth.getSession).toHaveBeenCalledOnce();
-  });
-
-  it('resumes password setup after the callback URL has already been cleared', async () => {
-    const auth = authFixture({
-      existingSession: { access_token: 'persisted-recovery-access-token' },
-    });
-
-    await expect(
-      establishInvitationSession(auth, {
-        kind: 'invalid',
-        reason: 'invalid',
-        message: INVALID_INVITATION_MESSAGE,
-      }),
-    ).resolves.toBe('persisted-recovery-access-token');
-    expect(auth.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
   it('validates weak and mismatched passwords', () => {

@@ -20,11 +20,7 @@ export interface AuthActions {
     displayName: string;
   }): Promise<VerifiedAuthUser>;
   inviteUser(input: { email: string; displayName: string }): Promise<VerifiedAuthUser>;
-  resendOwnerInvitation(input: {
-    id: string;
-    email: string;
-    displayName: string;
-  }): Promise<void>;
+  resendOwnerInvitation(email: string): Promise<void>;
   changePassword?(userId: string, password: string): Promise<void>;
   getUser(userId: string): Promise<AuthUserDetails | null>;
   deleteUser(userId: string): Promise<void>;

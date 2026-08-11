@@ -26,10 +26,13 @@ clicks it. Use the scanner-safe callback format instead:
 {{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery
 ```
 
-The POS page performs verification only after it receives the token hash. Initial invitations use
-the Invite User template. Resends use Reset Password because Supabase does not re-invite an
-existing Auth user. The canonical branded HTML is stored in
+The POS page verifies the one-time token, then shows **Create your password**. No temporary
+password is emailed. Initial invitations use the Invite User template. Resends use Reset Password
+because Supabase does not re-invite an existing Auth user. The canonical branded HTML is stored in
 `supabase/templates/owner-invite.html` and `supabase/templates/owner-recovery.html`.
+
+Paste those templates into the Supabase dashboard (Invite user + Reset password). Do not include
+`{{ .Data.temporary_password }}` — owners set their own password on the accept-invitation page.
 
 Configure production SMTP under **Authentication → Emails → SMTP Settings**. Hosted Supabase
 projects do not allow custom subject/body editing until custom SMTP is enabled. Without production

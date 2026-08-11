@@ -34,16 +34,12 @@
             <tr>
               <td style="padding: 36px 32px">
                 <h1 style="margin: 0; font-size: 28px; line-height: 1.25">
-                  Verify your Ximo POS email
+                  Complete your account setup
                 </h1>
                 <p style="margin: 18px 0 0; color: #526057; font-size: 16px; line-height: 1.65">
-                  A new owner setup email was requested. Verify this email, then sign in with the
-                  newly generated temporary password below.
+                  A new secure setup link was requested for your Ximo POS owner account. Use it to
+                  create or replace your password.
                 </p>
-                <div style="margin: 22px 0; border: 1px solid #cbd8d0; border-radius: 12px; background: #f4f8f5; padding: 16px">
-                  <div style="color: #526057; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase">Temporary password</div>
-                  <code style="display: block; margin-top: 8px; color: #17241c; font-size: 19px; font-weight: 700; word-break: break-all">{{ .Data.temporary_password }}</code>
-                </div>
                 <p style="margin: 28px 0">
                   <a
                     href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=recovery"
@@ -57,12 +53,12 @@
                       font-weight: 700;
                       text-decoration: none;
                     "
-                    >Verify my email</a
+                    >Set my password</a
                   >
                 </p>
                 <p style="margin: 0; color: #6a756e; font-size: 13px; line-height: 1.6">
-                  This verification link can be used once. After signing in, Ximo will require you
-                  to replace the temporary password. If you did not request it, ignore this email.
+                  This secure link can be used once. If you did not request it, you can safely
+                  ignore this email.
                 </p>
               </td>
             </tr>
