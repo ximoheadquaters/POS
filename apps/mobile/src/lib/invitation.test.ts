@@ -6,6 +6,7 @@ import {
   finishInvitationSetup,
   INVALID_INVITATION_MESSAGE,
   InvitationFlowError,
+  isInvitationSetupActive,
   parseInvitationCallback,
   runInvitationSubmission,
   validateInvitationPassword,
@@ -86,6 +87,7 @@ describe('POS owner invitation flow', () => {
       token_hash: 'hash-value',
       type: 'recovery',
     });
+    expect(isInvitationSetupActive()).toBe(true);
   });
 
   it('rejects missing callback credentials and expired provider callbacks', async () => {
@@ -145,6 +147,7 @@ describe('POS owner invitation flow', () => {
     expect(auth.updateUser).toHaveBeenCalledWith({ password: 'SecurePass1' });
     expect(refreshUser).toHaveBeenCalledWith('session-access-token');
     expect(events).toEqual(['profile', 'redirect:/branch-select']);
+    expect(isInvitationSetupActive()).toBe(false);
   });
 
   it('signs out and reports a clear error when the POS profile refresh fails', async () => {

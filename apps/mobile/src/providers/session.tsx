@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import type { CurrentUser } from '@ximo/shared';
 import { api, ApiError } from '@/lib/api';
+import { isInvitationSetupActive } from '@/lib/invitation';
 import { supabase } from '@/lib/supabase';
 
 interface SessionContextValue {
@@ -15,6 +16,17 @@ interface SessionContextValue {
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
+
+function isInvitationRoute(): boolean {
+  return (
+    typeof globalThis.location !== 'undefined' &&
+    globalThis.location.pathname.includes('/accept-invitation')
+  );
+}
+
+function shouldDeferProfileHydration(): boolean {
+  return isInvitationSetupActive() || isInvitationRoute();
+}
 
 export function SessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
@@ -30,7 +42,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
-      if (data.session) {
+      if (data.session && !shouldDeferProfileHydration()) {
         try {
           await refreshUser();
         } catch (error) {
@@ -48,6 +60,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return;
       }
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+        if (shouldDeferProfileHydration()) return;
         void refreshUser(nextSession.access_token).catch(async (error) => {
           if (error instanceof ApiError && error.status === 401) {
             await supabase.auth.signOut();
@@ -59,7 +72,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }, [refreshUser]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || shouldDeferProfileHydration()) return;
     let cancelled = false;
     let inFlight = false;
     let backoffMs = 0;

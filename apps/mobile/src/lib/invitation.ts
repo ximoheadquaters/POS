@@ -3,6 +3,19 @@ import type { CurrentUser } from '@ximo/shared';
 export const INVALID_INVITATION_MESSAGE =
   'This secure setup link is no longer valid. Each link can be used only once. Ask your Ximo administrator to send a new setup link.';
 
+// A recovery/invitation session is intentionally authenticated before its POS
+// profile is loaded. SessionProvider must not treat that temporary state as a
+// failed normal login and sign it out before updateUser can save the password.
+let invitationSetupActive = false;
+
+export function setInvitationSetupActive(active: boolean): void {
+  invitationSetupActive = active;
+}
+
+export function isInvitationSetupActive(): boolean {
+  return invitationSetupActive;
+}
+
 export type InvitationCallback =
   | { kind: 'pkce'; code: string }
   | { kind: 'session'; accessToken: string; refreshToken: string }
@@ -105,20 +118,35 @@ export async function establishInvitationSession(
   callback: InvitationCallback,
 ): Promise<string> {
   if (callback.kind === 'invalid') {
+    setInvitationSetupActive(false);
     throw new InvitationFlowError(callback.reason, callback.message);
   }
 
-  const result =
-    callback.kind === 'pkce'
-      ? await auth.exchangeCodeForSession(callback.code)
-      : callback.kind === 'session'
-        ? await auth.setSession({
-            access_token: callback.accessToken,
-            refresh_token: callback.refreshToken,
-          })
-        : await auth.verifyOtp({ token_hash: callback.tokenHash, type: callback.type });
+  setInvitationSetupActive(true);
 
-  if (result.error || !result.data.session) throw providerFailure(result.error);
+  let result: AuthResponse;
+  try {
+    result =
+      callback.kind === 'pkce'
+        ? await auth.exchangeCodeForSession(callback.code)
+        : callback.kind === 'session'
+          ? await auth.setSession({
+              access_token: callback.accessToken,
+              refresh_token: callback.refreshToken,
+            })
+          : await auth.verifyOtp({ token_hash: callback.tokenHash, type: callback.type });
+  } catch {
+    setInvitationSetupActive(false);
+    throw new InvitationFlowError(
+      'network',
+      'Could not verify the invitation. Check your connection and try opening the link again.',
+    );
+  }
+
+  if (result.error || !result.data.session) {
+    setInvitationSetupActive(false);
+    throw providerFailure(result.error);
+  }
   return result.data.session.access_token;
 }
 
@@ -168,8 +196,10 @@ export async function completeInvitationPassword(
     if (user.role !== 'owner') {
       throw new Error('The invited account is not an organization owner');
     }
+    setInvitationSetupActive(false);
     return user;
   } catch {
+    setInvitationSetupActive(false);
     await auth.signOut();
     throw new InvitationFlowError(
       'profile',
