@@ -18,6 +18,7 @@ export default function SplashScreen() {
   useEffect(() => {
     if (loading || !hydrated) return;
     if (!session) router.replace('/(auth)/login');
+    else if (currentUser?.mustChangePassword) router.replace('/change-password');
     else if (!currentUser || !activeBranch) router.replace('/branch-select');
     else router.replace('/(tabs)');
   }, [activeBranch, currentUser, hydrated, loading, session]);

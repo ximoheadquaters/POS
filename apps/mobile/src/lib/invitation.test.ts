@@ -1,6 +1,7 @@
 import type { CurrentUser } from '@ximo/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  completeInvitationVerification,
   completeInvitationPassword,
   establishInvitationSession,
   finishInvitationSetup,
@@ -63,6 +64,22 @@ const owner: CurrentUser = {
 };
 
 describe('POS owner invitation flow', () => {
+  it('ends the one-time callback session after verifying the email', async () => {
+    const auth = authFixture();
+
+    await establishInvitationSession(auth, {
+      kind: 'token-hash',
+      tokenHash: 'verification-token',
+      otpType: 'invite',
+    });
+    expect(isInvitationSetupActive()).toBe(true);
+
+    await completeInvitationVerification(auth);
+
+    expect(auth.signOut).toHaveBeenCalledOnce();
+    expect(isInvitationSetupActive()).toBe(false);
+  });
+
   it('parses and exchanges a valid PKCE invitation callback', async () => {
     const callback = parseInvitationCallback(
       'https://pos.example.com/accept-invitation?code=pkce-code-value',

@@ -39,6 +39,8 @@ export interface CurrentUser {
   permissions: Permission[];
   modules: ModuleCode[];
   branches: Array<{ id: string; name: string; code: string }>;
+  /** True while an owner is still using an administrator-generated password. */
+  mustChangePassword?: boolean;
 }
 
 export interface Paginated<T> {

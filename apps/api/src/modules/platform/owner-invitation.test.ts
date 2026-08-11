@@ -107,14 +107,14 @@ function authFixture(options: { providerFailure?: boolean } = {}) {
     resetPassword: async () => undefined,
     createUser: async (input) => ({ id: OWNER_ID, email: input.email }),
     inviteUser: async (input) => ({ id: OWNER_ID, email: input.email }),
-    resendOwnerInvitation: async (email) => {
+    resendOwnerInvitation: async (input) => {
       if (options.providerFailure) {
         throw serviceUnavailable(
           'OWNER_INVITATION_UNAVAILABLE',
           'The owner invitation service is temporarily unavailable',
         );
       }
-      resends.push(email);
+      resends.push(input.email);
     },
     getUser: async () => ({
       id: OWNER_ID,

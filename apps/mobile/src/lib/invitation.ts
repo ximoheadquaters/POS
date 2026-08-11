@@ -39,6 +39,16 @@ export interface InvitationAuthClient {
   signOut(): Promise<unknown>;
 }
 
+export async function completeInvitationVerification(
+  auth: Pick<InvitationAuthClient, 'signOut'>,
+): Promise<void> {
+  // OTP exchange proves control of the inbox. End the short-lived callback
+  // session immediately so the verification button can never act as a login
+  // or password-change shortcut.
+  await auth.signOut();
+  setInvitationSetupActive(false);
+}
+
 export class InvitationFlowError extends Error {
   constructor(
     public readonly kind: 'invalid' | 'expired' | 'network' | 'profile',

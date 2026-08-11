@@ -30,8 +30,8 @@ export default function LoginScreen() {
       return;
     }
     try {
-      await refreshUser(data.session.access_token);
-      router.replace('/branch-select');
+      const user = await refreshUser(data.session.access_token);
+      router.replace(user.mustChangePassword ? '/change-password' : '/branch-select');
     } catch (error) {
       await supabase.auth.signOut();
       setServerError(
