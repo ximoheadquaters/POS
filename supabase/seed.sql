@@ -64,10 +64,13 @@ insert into public.organizations (id, name, slug, currency, timezone)
 values ('10000000-0000-4000-8000-000000000001','Ximo Demo Retail','ximo-demo','PHP','Asia/Manila')
 on conflict (id) do nothing;
 
-insert into public.subscriptions (organization_id, plan_id, status, current_period_ends_at)
-select '10000000-0000-4000-8000-000000000001', id, 'active', now() + interval '1 year'
+insert into public.subscriptions (
+  organization_id, application_id, plan_id, status, current_period_ends_at
+)
+select '10000000-0000-4000-8000-000000000001', application_id, id,
+  'active', now() + interval '1 year'
 from public.plans where code = 'business'
-on conflict (organization_id) do nothing;
+on conflict (organization_id, application_id) do nothing;
 
 insert into public.organization_settings (
   organization_id, business_name, tax_rate, receipt_header, receipt_footer,

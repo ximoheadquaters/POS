@@ -55,12 +55,25 @@ export default function CartScreen() {
   );
   const hasStockConflict = hasCartStockConflict(items);
 
+  const heldSalesQuery = useQuery({
+    queryKey: ['pos-held-sales-count', branch?.id],
+    queryFn: async () => {
+      if (!branch?.id) return [];
+      const res = await api<any[]>(`/sales/held?branchId=${branch.id}`);
+      return Array.isArray(res) ? res : (res as any)?.data ?? [];
+    },
+    enabled: Boolean(branch?.id),
+  });
+  const heldCount = heldSalesQuery.data?.length ?? 0;
+
   const holdMutation = useMutation({
     mutationFn: () =>
       api<{ receiptNumber: string }>('/sales/hold', {
         method: 'POST',
+        idempotencyKey: `hold-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         body: JSON.stringify({
           branchId: branch?.id,
+          registerId: activeShift?.registerId,
           shiftId: activeShift?.id,
           customerId: useCartStore.getState().customerId,
           note: holdNote.trim() || undefined,
@@ -220,19 +233,17 @@ export default function CartScreen() {
         </View>
 
         <View className="flex-row items-center gap-2">
-          {items.length > 0 ? (
-            <Pressable
-              onPress={() => setHoldModalVisible(true)}
-              disabled={holdMutation.isPending}
-              className={`flex-row items-center justify-center rounded-xl bg-amber-600 px-3.5 py-3 ${
-                holdMutation.isPending ? 'opacity-50' : 'active:bg-amber-700'
-              }`}
-            >
-              <Feather name="pause-circle" size={16} color="#FFFFFF" />
-              <Text className="ml-1 font-bold text-white text-xs">Hold</Text>
-            </Pressable>
-          ) : null}
-
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open parked sales${heldCount ? `, ${heldCount} parked` : ''}`}
+            onPress={() => router.push('/food/parked-sales')}
+            className="min-h-11 flex-row items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 active:bg-amber-100"
+          >
+            <Feather name="pause-circle" size={16} color="#B45309" />
+            <Text className="ml-1 text-xs font-bold text-amber-900">
+              Parked{heldCount > 0 ? ` (${heldCount})` : ''}
+            </Text>
+          </Pressable>
           <View className="flex-1">
             <Button
               title="Continue to payment"
@@ -241,26 +252,35 @@ export default function CartScreen() {
             />
           </View>
 
-          {items.length > 0 ? (
+        </View>
+
+        {items.length > 0 ? (
+          <View className="flex-row items-center gap-2">
             <Pressable
+              onPress={() => setHoldModalVisible(true)}
+              disabled={holdMutation.isPending}
+              className={`min-h-10 flex-1 flex-row items-center justify-center rounded-xl bg-amber-600 px-3.5 ${
+                holdMutation.isPending ? 'opacity-50' : 'active:bg-amber-700'
+              }`}
+            >
+              <Feather name="pause-circle" size={15} color="#FFFFFF" />
+              <Text className="ml-1.5 text-xs font-bold text-white">
+                {holdMutation.isPending ? 'Holding…' : 'Hold current sale'}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Clear current order"
               onPress={() => {
                 clearCart();
                 router.back();
               }}
-              className="flex-row items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-3 active:bg-red-100"
+              className="min-h-10 flex-row items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 active:bg-red-100"
             >
-              <Feather name="trash-2" size={16} color="#DC2626" />
+              <Feather name="trash-2" size={15} color="#DC2626" />
+              <Text className="ml-1.5 text-xs font-bold text-red-700">Clear</Text>
             </Pressable>
-          ) : null}
-        </View>
-
-        <Pressable
-          onPress={() => router.push('/food/parked-sales')}
-          className="flex-row items-center justify-center gap-1 pt-0.5 pb-1"
-        >
-          <Feather name="pause-circle" size={13} color="#B45309" />
-          <Text className="text-[11px] font-bold text-amber-800">View Parked Sales & Held Carts</Text>
-        </Pressable>
+          </View>
+        ) : null}
       </View>
 
       <Modal visible={holdModalVisible} transparent animationType="fade">

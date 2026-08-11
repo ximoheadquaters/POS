@@ -41,6 +41,8 @@ export function organizationsRouter(database: Database, assetStorage?: AssetStor
        left join lateral (
          select sub.plan_id, sub.status
          from subscriptions sub
+         join applications application
+           on application.id=sub.application_id and application.code='ximo_pos'
          where sub.organization_id = o.id
            and sub.status in ('trialing', 'active')
          order by sub.created_at desc, sub.id desc

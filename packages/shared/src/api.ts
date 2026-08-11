@@ -23,6 +23,26 @@ export interface ApiFailure {
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
+export type ApplicationCode = 'ximo_pos' | (string & {});
+export type EntitlementValue = boolean | number | string | null | Record<string, unknown>;
+
+export interface ApplicationAccess {
+  id: string;
+  code: ApplicationCode;
+  name: string;
+  subscriptionStatus: string;
+  planCode: string | null;
+  planName: string | null;
+  role: RoleCode | string | null;
+  entitlements: Record<string, EntitlementValue>;
+}
+
+export interface OrganizationMembershipSummary {
+  id: string;
+  organizationId: string;
+  status: 'invited' | 'active' | 'suspended' | 'removed';
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
@@ -39,6 +59,10 @@ export interface CurrentUser {
   permissions: Permission[];
   modules: ModuleCode[];
   branches: Array<{ id: string; name: string; code: string }>;
+  /** Platform membership. Optional until migration 0032 is deployed everywhere. */
+  membership?: OrganizationMembershipSummary;
+  /** Access to Ximo POS and any future Ximo applications for this organization. */
+  applications?: ApplicationAccess[];
 }
 
 export interface Paginated<T> {

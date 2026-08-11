@@ -20,13 +20,14 @@ async function allPages(path: string): Promise<unknown[]> {
 }
 
 async function downloadBranchSnapshot(branchId: string) {
-  const [products, inventory, customers, categories, brands, units, registers, settings] =
+  const [products, posProducts, inventory, customers, categories, brands, units, registers, settings] =
     await Promise.all([
       allPages(`/products?branchId=${branchId}`),
+      allPages(`/products?usage=pos&branchId=${branchId}`),
       allPages(`/inventory?branchId=${branchId}`),
-      allPages('/customers?search='),
-      api<unknown[]>('/categories'),
-      api<unknown[]>('/brands'),
+      allPages(`/customers?branchId=${branchId}&search=`),
+      api<unknown[]>(`/categories?branchId=${branchId}`),
+      api<unknown[]>(`/brands?branchId=${branchId}`),
       api<unknown[]>('/product-units'),
       api<unknown[]>(`/registers?branchId=${branchId}`),
       api<unknown>('/settings'),
@@ -35,6 +36,7 @@ async function downloadBranchSnapshot(branchId: string) {
     branchId,
     syncedAt: new Date().toISOString(),
     products,
+    posProducts,
     inventory,
     customers,
     categories,

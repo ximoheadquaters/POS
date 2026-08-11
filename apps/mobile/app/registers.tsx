@@ -94,7 +94,7 @@ function RegistersContent() {
 
   const shiftDetailQuery = useQuery({
     queryKey: ['shift-report', shift?.id],
-    queryFn: () => api<ActiveShiftDetail>(`/reports/shifts/${shift!.id}`),
+    queryFn: () => api<ActiveShiftDetail>(`/reports/shifts/${shift!.id}?branchId=${branch!.id}`),
     enabled: Boolean(shift?.id),
     refetchInterval: 5000,
   });

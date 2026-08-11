@@ -368,12 +368,14 @@ function ProductFormContent() {
   const [recipeUnitInput, setRecipeUnitInput] = useState('piece');
 
   const categories = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => api<CatalogueItem[]>('/categories'),
+    queryKey: ['categories', branch?.id],
+    enabled: Boolean(branch),
+    queryFn: () => api<CatalogueItem[]>(`/categories?branchId=${branch!.id}`),
   });
   const brands = useQuery({
-    queryKey: ['brands'],
-    queryFn: () => api<CatalogueItem[]>('/brands'),
+    queryKey: ['brands', branch?.id],
+    enabled: Boolean(branch),
+    queryFn: () => api<CatalogueItem[]>(`/brands?branchId=${branch!.id}`),
   });
   const units = useQuery({
     queryKey: ['product-units'],

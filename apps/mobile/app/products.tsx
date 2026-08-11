@@ -229,7 +229,10 @@ function RecipeModal({
                 </Text>
               </View>
             </View>
-            <Pressable onPress={onClose} className="h-8 w-8 items-center justify-center rounded-full bg-slate-800">
+            <Pressable
+              onPress={onClose}
+              className="h-8 w-8 items-center justify-center rounded-full bg-slate-800"
+            >
               <Feather name="x" size={18} color="#94A3B8" />
             </Pressable>
           </View>
@@ -239,7 +242,9 @@ function RecipeModal({
               Add Raw Ingredient
             </Text>
             <View className="mb-4 rounded-2xl bg-slate-800/80 p-4 border border-slate-700">
-              <Text className="text-xs font-medium text-slate-300 mb-2">Select Ingredient Product</Text>
+              <Text className="text-xs font-medium text-slate-300 mb-2">
+                Select Ingredient Product
+              </Text>
               {availableIngredients.length > 3 ? (
                 <View className="mb-3 flex-row items-center rounded-xl bg-slate-900 px-3 h-9 border border-slate-700">
                   <Feather name="search" size={13} color="#94A3B8" />
@@ -274,7 +279,9 @@ function RecipeModal({
                             : 'bg-slate-800 border-slate-700'
                         }`}
                       >
-                        <Text className={`text-xs font-medium ${selected ? 'text-emerald-400' : 'text-slate-300'}`}>
+                        <Text
+                          className={`text-xs font-medium ${selected ? 'text-emerald-400' : 'text-slate-300'}`}
+                        >
                           {ing.name}
                         </Text>
                       </Pressable>
@@ -299,7 +306,9 @@ function RecipeModal({
                             : 'bg-slate-800 border-slate-700'
                         } ${!selectedIngredient ? 'opacity-40' : ''}`}
                       >
-                        <Text className={`text-xs font-medium ${selected ? 'text-emerald-400' : 'text-slate-300'}`}>
+                        <Text
+                          className={`text-xs font-medium ${selected ? 'text-emerald-400' : 'text-slate-300'}`}
+                        >
                           {u.label}
                         </Text>
                       </Pressable>
@@ -338,7 +347,9 @@ function RecipeModal({
 
             {items.length === 0 ? (
               <View className="rounded-2xl border border-dashed border-slate-800 p-6 items-center">
-                <Text className="text-xs text-slate-500">No ingredients added to this recipe yet.</Text>
+                <Text className="text-xs text-slate-500">
+                  No ingredients added to this recipe yet.
+                </Text>
               </View>
             ) : (
               <View className="gap-2">
@@ -366,8 +377,12 @@ function RecipeModal({
 
             {items.length > 0 ? (
               <View className="mt-4 flex-row items-center justify-between rounded-2xl bg-emerald-950/40 p-4 border border-emerald-800/40">
-                <Text className="text-xs font-semibold text-emerald-300">Estimated Ingredient Cost</Text>
-                <Text className="text-sm font-bold text-emerald-400">{formatMoney(totalRecipeCost.toFixed(2))}</Text>
+                <Text className="text-xs font-semibold text-emerald-300">
+                  Estimated Ingredient Cost
+                </Text>
+                <Text className="text-sm font-bold text-emerald-400">
+                  {formatMoney(totalRecipeCost.toFixed(2))}
+                </Text>
               </View>
             ) : null}
           </ScrollView>
@@ -435,17 +450,16 @@ function ProductsContent() {
       api<Product[]>(
         `/products?branchId=${branch!.id}&includeInactive=true&page=${pageParam}&pageSize=30${
           productFilter === 'all' ? '' : `&inventoryRole=${productFilter}`
-        }${
-          search ? `&search=${encodeURIComponent(search)}` : ''
-        }`,
+        }${search ? `&search=${encodeURIComponent(search)}` : ''}`,
       ),
     getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
   });
   const summaryQuery = useQuery({
-    queryKey: ['product-summary'],
+    queryKey: ['product-summary', branch?.id],
+    enabled: Boolean(branch),
     queryFn: () =>
       api<{ all: number; sellable: number; ingredient: number; both: number }>(
-        '/products/summary',
+        `/products/summary?branchId=${branch!.id}`,
       ),
   });
   const products = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
@@ -620,33 +634,48 @@ function ProductsContent() {
                 }`}
               >
                 {/* Header Row */}
-                <View className="flex-row flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <View className="flex-row flex-wrap items-center gap-2">
-                    <Text className="text-base font-bold text-slate-900">{item.name}</Text>
-                    <View className="rounded-md bg-slate-100 px-2 py-0.5">
-                      <Text className="text-[11px] font-mono font-medium text-slate-600">
+                <View className="gap-3 border-b border-slate-100 pb-3 md:flex-row md:items-center md:justify-between">
+                  <View className="min-w-0 flex-row flex-wrap items-center gap-2 md:flex-1">
+                    <Text
+                      numberOfLines={2}
+                      className="max-w-full text-base font-bold text-slate-900"
+                    >
+                      {item.name}
+                    </Text>
+                    <View className="max-w-full rounded-md bg-slate-100 px-2 py-0.5">
+                      <Text
+                        numberOfLines={1}
+                        className="max-w-full text-[11px] font-mono font-medium text-slate-600"
+                      >
                         {item.sku}
                       </Text>
                     </View>
-                    <View className="rounded-md bg-brand-50 px-2 py-0.5">
-                      <Text className="text-[11px] font-semibold text-brand-800">
+                    <View className="max-w-full rounded-md bg-brand-50 px-2 py-0.5">
+                      <Text
+                        numberOfLines={1}
+                        className="max-w-full text-[11px] font-semibold text-brand-800"
+                      >
                         {item.categoryName ?? 'Uncategorized'}
                         {item.brandName ? ` · ${item.brandName}` : ''}
                       </Text>
                     </View>
                   </View>
 
-                  <View className="flex-row items-center gap-2">
-                    <Text className="text-lg font-extrabold text-brand-700">
+                  <View className="min-w-0 flex-row flex-wrap items-center gap-2 md:justify-end">
+                    <Text numberOfLines={1} className="text-lg font-extrabold text-brand-700">
                       {formatCatalogUnitPrice(item.sellingPrice, item.unit)}
                     </Text>
                     {item.status === 'active' ? (
                       <View className="rounded-full bg-emerald-50 px-2.5 py-1">
-                        <Text className="text-xs font-semibold text-emerald-700">Active (On POS)</Text>
+                        <Text className="text-xs font-semibold text-emerald-700">
+                          Active (On POS)
+                        </Text>
                       </View>
                     ) : (
                       <View className="rounded-full bg-slate-100 px-2.5 py-1">
-                        <Text className="text-xs font-semibold text-slate-600">Hidden from POS</Text>
+                        <Text className="text-xs font-semibold text-slate-600">
+                          Hidden from POS
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -660,9 +689,7 @@ function ProductsContent() {
                         key={badge.key}
                         className="rounded-lg border border-brand-200 bg-brand-50/80 px-2.5 py-1"
                       >
-                        <Text className="text-xs font-semibold text-brand-800">
-                          {badge.label}
-                        </Text>
+                        <Text className="text-xs font-semibold text-brand-800">{badge.label}</Text>
                       </View>
                     ))}
                     {legacyCheck.isInvalid ? (

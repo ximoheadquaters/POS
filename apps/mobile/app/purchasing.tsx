@@ -48,8 +48,9 @@ function PurchasingContent() {
       ),
   });
   const suppliers = useQuery({
-    queryKey: ['suppliers'],
-    queryFn: () => api<Supplier[]>('/suppliers'),
+    queryKey: ['suppliers', branch?.id],
+    enabled: Boolean(branch),
+    queryFn: () => api<Supplier[]>(`/suppliers?branchId=${branch!.id}`),
   });
   const returns = useQuery({
     queryKey: ['purchase-returns', branch?.id],

@@ -190,14 +190,18 @@ export function buildReportsExcel(
       [],
       ['KPI', 'Value'],
       ['Gross sales', amount(report.kpis.grossSales)],
-      ['Net sales', amount(report.kpis.netSales)],
+      ['Total discounts', amount(report.kpis.discounts)],
       ['Customer refunds', amount(report.kpis.customerRefunds)],
+      ['Net sales', amount(report.kpis.netSales)],
+      ['Taxes collected', amount(report.kpis.taxes)],
       ['Transactions', report.kpis.transactions],
       ['Average transaction', amount(report.kpis.averageTransaction)],
+      ['Average items per transaction', amount(report.kpis.averageItemsPerTransaction)],
       ['Items sold', report.kpis.itemsSold],
       ['Gross profit', amount(report.kpis.grossProfit)],
       ['Gross margin (%)', amount(report.kpis.grossMarginPercent)],
       ['Inventory value', amount(report.inventory.inventoryValue)],
+      ['Inventory retail value', amount(report.inventory.retailValue)],
       ['Outstanding payables', amount(report.purchasing.outstandingPayables)],
       ['Cash variance', amount(report.cash.variance)],
     ],
@@ -252,6 +256,9 @@ export function buildReportsExcel(
       ['Stock records', report.inventory.stockRecords],
       ['Units on hand', report.inventory.unitsOnHand],
       ['Inventory value', amount(report.inventory.inventoryValue)],
+      ['Inventory retail value', amount(report.inventory.retailValue)],
+      ['Stock turnover', amount(report.inventory.stockTurnover)],
+      ['Dead stock products', report.inventory.deadStockCount ?? 0],
       ['Low stock records', report.inventory.lowStockCount],
       ['Out of stock records', report.inventory.outOfStockCount],
       [],
@@ -296,6 +303,8 @@ export function buildReportsExcel(
       ['Supplier payments', amount(report.purchasing.supplierPayments)],
       ['Supplier refunds', amount(report.purchasing.supplierRefunds)],
       ['Outstanding payables', amount(report.purchasing.outstandingPayables)],
+      ['Receiving accuracy (%)', amount(report.purchasing.receivingAccuracy)],
+      ['Supplier fulfillment rate (%)', amount(report.purchasing.supplierFulfillmentRate)],
       [],
       ['Order status', 'Orders', 'Value'],
       ...report.purchasing.orderStatuses.map((item) => [
@@ -345,9 +354,64 @@ export function buildReportsExcel(
       ['Cash in', amount(report.cash.cashIn)],
       ['Cash out', amount(report.cash.cashOut)],
       ['Counted cash', amount(report.cash.countedCash)],
+      ['Expected cash', amount(report.cash.expectedCash)],
+      ['Drawer balance', amount(report.cash.drawerBalance)],
       ['Variance', amount(report.cash.variance)],
     ],
     [30, 22],
+  );
+
+  addSheet(
+    workbook,
+    'Audit',
+    [
+      ['Audit KPI', 'Value'],
+      ['Voided sales', report.audit?.voidedSales ?? 0],
+      ['Refund transactions', report.audit?.refundTransactions ?? 0],
+      ['Refund amount', amount(report.audit?.refundAmount)],
+      ['Inventory adjustments', report.audit?.inventoryAdjustments ?? 0],
+      ['Cash adjustments', report.audit?.cashAdjustments ?? 0],
+      [],
+      ['Date', 'Type', 'Record', 'Details', 'Amount', 'Employee', 'Branch'],
+      ...(report.audit?.events ?? []).map((event) => [
+        event.createdAt,
+        event.type,
+        event.title,
+        event.detail,
+        amount(event.amount),
+        event.actorName ?? '',
+        event.branchName,
+      ]),
+    ],
+    [22, 16, 24, 38, 18, 22, 22],
+  );
+
+  addSheet(
+    workbook,
+    'Repacking',
+    [
+      ['Repacking KPI', 'Value'],
+      ['Production batches', report.repacking?.batches ?? 0],
+      ['Output quantity', report.repacking?.outputQuantity ?? 0],
+      ['Input quantity', report.repacking?.inputQuantity ?? 0],
+      ['Total production cost', amount(report.repacking?.totalCost)],
+      ['Average cost per output', amount(report.repacking?.averageCostPerOutput)],
+      ['Yield (%)', amount(report.repacking?.yieldPercent)],
+      ['Loss (%)', amount(report.repacking?.lossPercent)],
+      [],
+      ['Batch', 'Product', 'Produced', 'Input', 'Unit cost', 'Total cost', 'Yield (%)', 'Date'],
+      ...(report.repacking?.batchRows ?? []).map((batch) => [
+        batch.batchNumber,
+        batch.productName,
+        batch.quantityProduced,
+        batch.inputQuantity,
+        amount(batch.unitCost),
+        amount(batch.totalCost),
+        amount(batch.yieldPercent),
+        batch.createdAt,
+      ]),
+    ],
+    [22, 28, 14, 14, 18, 18, 14, 22],
   );
 
   const output = XLSX.write(workbook, {
@@ -357,6 +421,101 @@ export function buildReportsExcel(
     cellDates: true,
   }) as ArrayBuffer;
   return { bytes: new Uint8Array(output), fileName: `${reportFileStem(metadata)}.xlsx` };
+}
+
+function csvCell(value: string | number | null | undefined): string {
+  const normalized = value === null || value === undefined ? '' : String(value);
+  return /[",\r\n]/.test(normalized) ? `"${normalized.replaceAll('"', '""')}"` : normalized;
+}
+
+export function buildReportsCsv(
+  report: ReportsWorkspace,
+  metadata: ReportExportMetadata,
+  activeSection = 'overview',
+): { bytes: Uint8Array; fileName: string } {
+  const common: Array<Array<string | number>> = [
+    ['Organization', metadata.organizationName],
+    ['Branch', metadata.branchName],
+    ['Date range', metadata.rangeLabel],
+    ['Generated', (metadata.generatedAt ?? new Date()).toISOString()],
+    ['Report', activeSection],
+    [],
+  ];
+  let rows: Array<Array<string | number>>;
+  if (activeSection === 'inventory') {
+    rows = [
+      ['Metric', 'Value'],
+      ['Inventory Value (Cost)', amount(report.inventory.inventoryValue)],
+      ['Inventory Value (Retail)', amount(report.inventory.retailValue)],
+      ['Inventory Quantity', report.inventory.unitsOnHand],
+      ['Stock Turnover', amount(report.inventory.stockTurnover)],
+      ['Dead Stock', report.inventory.deadStockCount ?? 0],
+      [],
+      ['Product', 'SKU', 'Branch', 'Unit', 'On hand', 'Low stock level', 'Cost value'],
+      ...report.inventory.lowStock.map((item) => [item.name, item.sku, item.branchName, item.unit, item.quantity, item.lowStockLevel, amount(item.inventoryValue)]),
+    ];
+  } else if (activeSection === 'purchasing') {
+    rows = [
+      ['Metric', 'Value'],
+      ['Purchase Value', amount(report.purchasing.orderedValue)],
+      ['Receiving Accuracy (%)', amount(report.purchasing.receivingAccuracy)],
+      ['Supplier Fulfillment Rate (%)', amount(report.purchasing.supplierFulfillmentRate)],
+      ['Outstanding Payables', amount(report.purchasing.outstandingPayables)],
+      [],
+      ['Supplier', 'Orders', 'Value'],
+      ...report.purchasing.topSuppliers.map((supplier) => [supplier.name, supplier.orders, amount(supplier.value)]),
+    ];
+  } else if (activeSection === 'cash') {
+    rows = [
+      ['Metric', 'Value'],
+      ['Cash Drawer Balance', amount(report.cash.drawerBalance)],
+      ['Expected Cash', amount(report.cash.expectedCash)],
+      ['Counted Cash', amount(report.cash.countedCash)],
+      ['Cash Variance', amount(report.cash.variance)],
+      [],
+      ['Cashier', 'Branch', 'Opened', 'Closed', 'Status', 'Expected', 'Counted', 'Variance'],
+      ...(report.cash.shiftLogs ?? []).map((shift) => [shift.cashierName ?? '', shift.branchName ?? '', shift.openedAt ?? '', shift.closedAt ?? '', shift.status, amount(shift.expectedCash), amount(shift.countedCash), amount(shift.variance)]),
+    ];
+  } else if (activeSection === 'audit') {
+    rows = [
+      ['Date', 'Type', 'Record', 'Details', 'Amount', 'Employee', 'Branch'],
+      ...(report.audit?.events ?? []).map((event) => [event.createdAt, event.type, event.title, event.detail, amount(event.amount), event.actorName ?? '', event.branchName]),
+    ];
+  } else if (activeSection === 'repacking') {
+    rows = [
+      ['Batch', 'Product', 'Produced', 'Input', 'Unit Cost', 'Total Cost', 'Yield (%)', 'Date'],
+      ...(report.repacking?.batchRows ?? []).map((batch) => [batch.batchNumber, batch.productName, batch.quantityProduced, batch.inputQuantity, amount(batch.unitCost), amount(batch.totalCost), amount(batch.yieldPercent), batch.createdAt]),
+    ];
+  } else if (activeSection === 'products') {
+    rows = [
+      ['Product', 'SKU', 'Category', 'Unit', 'Quantity', 'Gross Sales', 'COGS', 'Gross Profit'],
+      ...report.sales.topProducts.map((item) => [item.name, item.sku, item.category ?? 'Uncategorized', item.unit, item.quantity, amount(item.sales), amount(item.cost), amount(item.profit)]),
+    ];
+  } else {
+    rows = [
+      ['Metric', 'Value'],
+      ['Gross Sales', amount(report.kpis.grossSales)],
+      ['Total Discounts', amount(report.kpis.discounts)],
+      ['Refund Amount', amount(report.kpis.customerRefunds)],
+      ['Net Sales', amount(report.kpis.netSales)],
+      ['Completed Transactions', report.kpis.transactions],
+      ['Average Transaction Value', amount(report.kpis.averageTransaction)],
+      ['Average Items per Transaction', amount(report.kpis.averageItemsPerTransaction)],
+      ['COGS', amount(report.kpis.netCost)],
+      ['Gross Profit', amount(report.kpis.grossProfit)],
+      ['Profit Margin (%)', amount(report.kpis.grossMarginPercent)],
+      [],
+      ['Date', 'Sales', 'Transactions'],
+      ...report.sales.trend.map((item) => [item.date, amount(item.sales), item.transactions]),
+    ];
+  }
+  const csv = [...common, ...rows]
+    .map((row) => row.map((value) => csvCell(value)).join(','))
+    .join('\r\n');
+  return {
+    bytes: new TextEncoder().encode(`\uFEFF${csv}`),
+    fileName: `${reportFileStem(metadata)}-${activeSection}.csv`,
+  };
 }
 
 interface PdfContext {
@@ -525,12 +684,17 @@ export async function buildReportsPdf(
   sectionTitle(context, 'Business report', 'Consolidated KPIs and detailed operational reports');
   kpiTable(context, [
     ['Gross sales', money(report.kpis.grossSales)],
+    ['Total discounts', money(report.kpis.discounts)],
+    ['Customer refunds', money(report.kpis.customerRefunds)],
     ['Net sales', money(report.kpis.netSales)],
+    ['Taxes collected', money(report.kpis.taxes)],
     ['Transactions', report.kpis.transactions.toLocaleString()],
     ['Average transaction', money(report.kpis.averageTransaction)],
+    ['Average items / transaction', amount(report.kpis.averageItemsPerTransaction).toFixed(2)],
     ['Gross profit', money(report.kpis.grossProfit)],
     ['Gross margin', `${amount(report.kpis.grossMarginPercent).toFixed(2)}%`],
     ['Inventory value', money(report.inventory.inventoryValue)],
+    ['Inventory retail value', money(report.inventory.retailValue)],
     ['Outstanding payables', money(report.purchasing.outstandingPayables)],
     ['Cash variance', money(report.cash.variance)],
   ]);
@@ -538,6 +702,7 @@ export async function buildReportsPdf(
   sectionTitle(context, 'Sales');
   kpiTable(context, [
     ['Gross sales', money(report.kpis.grossSales)],
+    ['Total discounts', money(report.kpis.discounts)],
     ['Customer refunds', money(report.kpis.customerRefunds)],
     ['Net sales', money(report.kpis.netSales)],
     ['Items sold', report.kpis.itemsSold.toLocaleString()],
@@ -588,6 +753,9 @@ export async function buildReportsPdf(
     ['Active products', String(report.inventory.activeProducts)],
     ['Units on hand', report.inventory.unitsOnHand.toLocaleString()],
     ['Inventory value', money(report.inventory.inventoryValue)],
+    ['Inventory retail value', money(report.inventory.retailValue)],
+    ['Stock turnover', amount(report.inventory.stockTurnover).toFixed(2)],
+    ['Dead stock products', String(report.inventory.deadStockCount ?? 0)],
     ['Low stock records', String(report.inventory.lowStockCount)],
     ['Out of stock records', String(report.inventory.outOfStockCount)],
   ]);
@@ -633,6 +801,8 @@ export async function buildReportsPdf(
     ['Supplier returns', money(report.purchasing.supplierReturns)],
     ['Supplier payments', money(report.purchasing.supplierPayments)],
     ['Outstanding payables', money(report.purchasing.outstandingPayables)],
+    ['Receiving accuracy', `${amount(report.purchasing.receivingAccuracy).toFixed(1)}%`],
+    ['Supplier fulfillment', `${amount(report.purchasing.supplierFulfillmentRate).toFixed(1)}%`],
   ]);
   pdfTable(
     context,
@@ -685,8 +855,52 @@ export async function buildReportsPdf(
     ['Cash in', money(report.cash.cashIn)],
     ['Cash out', money(report.cash.cashOut)],
     ['Counted cash', money(report.cash.countedCash)],
+    ['Expected cash', money(report.cash.expectedCash)],
+    ['Drawer balance', money(report.cash.drawerBalance)],
     ['Variance', money(report.cash.variance)],
   ]);
+
+  sectionTitle(context, 'Audit activity');
+  kpiTable(context, [
+    ['Voided sales', String(report.audit?.voidedSales ?? 0)],
+    ['Refund transactions', String(report.audit?.refundTransactions ?? 0)],
+    ['Refund amount', money(report.audit?.refundAmount)],
+    ['Inventory adjustments', String(report.audit?.inventoryAdjustments ?? 0)],
+    ['Cash adjustments', String(report.audit?.cashAdjustments ?? 0)],
+  ]);
+  pdfTable(
+    context,
+    ['Date', 'Type', 'Record', 'Amount'],
+    (report.audit?.events ?? []).map((event) => [
+      event.createdAt,
+      event.type,
+      event.title,
+      event.amount ? money(event.amount) : '-',
+    ]),
+    [155, 85, 180, 95],
+  );
+
+  sectionTitle(context, 'Production and repacking');
+  kpiTable(context, [
+    ['Batches', String(report.repacking?.batches ?? 0)],
+    ['Output quantity', String(report.repacking?.outputQuantity ?? 0)],
+    ['Input quantity', String(report.repacking?.inputQuantity ?? 0)],
+    ['Total cost', money(report.repacking?.totalCost)],
+    ['Average cost / output', money(report.repacking?.averageCostPerOutput)],
+    ['Yield', report.repacking?.yieldPercent == null ? 'Not comparable' : `${amount(report.repacking.yieldPercent).toFixed(1)}%`],
+    ['Loss', report.repacking?.lossPercent == null ? 'Not comparable' : `${amount(report.repacking.lossPercent).toFixed(1)}%`],
+  ]);
+  pdfTable(
+    context,
+    ['Batch', 'Product', 'Output', 'Cost'],
+    (report.repacking?.batchRows ?? []).map((batch) => [
+      batch.batchNumber,
+      batch.productName,
+      String(batch.quantityProduced),
+      money(batch.totalCost),
+    ]),
+    [145, 210, 65, 95],
+  );
 
   const generatedAt = metadata.generatedAt ?? new Date();
   for (const page of document.getPages()) {

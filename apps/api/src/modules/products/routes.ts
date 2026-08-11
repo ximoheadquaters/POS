@@ -22,6 +22,7 @@ import { sendData, sendPage } from '../../shared/http.js';
 async function validateProductMasters(
   database: Queryable,
   organizationId: string,
+  branchId: string,
   input: { categoryId?: string | null; brandId?: string | null; unit: string },
 ) {
   const result = await database.query<{
@@ -33,12 +34,12 @@ async function validateProductMasters(
       exists(select 1 from product_units where organization_id=$1 and code=$2 and is_active)
         as "unitValid",
       ($3::uuid is null or exists(
-        select 1 from categories where organization_id=$1 and id=$3 and is_active
+        select 1 from categories where organization_id=$1 and branch_id=$5 and id=$3 and is_active
       )) as "categoryValid",
       ($4::uuid is null or exists(
-        select 1 from brands where organization_id=$1 and id=$4 and is_active
+        select 1 from brands where organization_id=$1 and branch_id=$5 and id=$4 and is_active
       )) as "brandValid"`,
-    [organizationId, input.unit, input.categoryId ?? null, input.brandId ?? null],
+    [organizationId, input.unit, input.categoryId ?? null, input.brandId ?? null, branchId],
   );
   const state = result.rows[0];
   if (!state?.unitValid) throw badRequest('INVALID_PRODUCT_UNIT', 'Select an active product unit');
@@ -82,20 +83,17 @@ export function productsRouter(database: Database): Router {
     requirePermission('products:read'),
     validateQuery(
       productLookupSchema.extend({
-        branchId: uuidSchema.optional(),
+        branchId: uuidSchema,
         usage: z.enum(['pos', 'bom']).optional(),
       }),
     ),
     async (request, response) => {
       const { code, branchId, usage } = request.query as unknown as {
         code: string;
-        branchId?: string;
+        branchId: string;
         usage?: 'pos' | 'bom';
       };
-      if (
-        branchId &&
-        !request.authUser!.branches.some((assignedBranch) => assignedBranch.id === branchId)
-      ) {
+      if (!request.authUser!.branches.some((assignedBranch) => assignedBranch.id === branchId)) {
         throw forbidden('BRANCH_ACCESS_DENIED', 'You do not have access to this branch');
       }
       const result = await database.query(
@@ -133,10 +131,20 @@ export function productsRouter(database: Database): Router {
           ),'[]') as "sellingUnits"
          from products p
          join product_units pu on pu.organization_id=p.organization_id and pu.code=p.unit
-         where p.organization_id=$1 and ($3::uuid is null or p.status='active')
+         where p.organization_id=$1 and p.branch_id=$3 and p.status='active'
            and ($4::text is null
              or ($4='pos' and p.inventory_role in ('sellable','both'))
              or ($4='bom' and p.track_inventory))
+           and ($4::text is distinct from 'pos'
+            or not p.track_inventory
+             or exists (
+               select 1 from branch_inventory branch_stock
+               where branch_stock.organization_id=p.organization_id
+                 and branch_stock.branch_id=$3
+                 and branch_stock.product_id=p.id
+                 and branch_stock.variant_id is null
+                 and branch_stock.quantity>0
+             ))
            and (
            p.sku=$2 or exists (
              select 1 from product_variants sv
@@ -158,7 +166,7 @@ export function productsRouter(database: Database): Router {
     requirePermission('products:read'),
     validateQuery(
       paginationSchema.extend({
-        branchId: uuidSchema.optional(),
+        branchId: uuidSchema,
         includeIncoming: z
           .enum(['true', 'false'])
           .optional()
@@ -220,7 +228,7 @@ export function productsRouter(database: Database): Router {
         page: number;
         pageSize: number;
         search?: string;
-        branchId?: string;
+        branchId: string;
         includeIncoming: boolean;
         includeInactive: boolean;
         usage?: 'pos' | 'bom';
@@ -228,10 +236,7 @@ export function productsRouter(database: Database): Router {
         preparationBehavior?: string[];
         hasRecipe?: boolean;
       };
-      if (
-        branchId &&
-        !request.authUser!.branches.some((assignedBranch) => assignedBranch.id === branchId)
-      ) {
+      if (!request.authUser!.branches.some((assignedBranch) => assignedBranch.id === branchId)) {
         throw forbidden('BRANCH_ACCESS_DENIED', 'You do not have access to this branch');
       }
       const offset = (page - 1) * pageSize;
@@ -299,20 +304,23 @@ export function productsRouter(database: Database): Router {
          ) effective
          left join categories c on c.id=p.category_id
          left join brands br on br.id=p.brand_id
-          where p.organization_id=$1 and (
-            ($5::uuid is null and (
-              p.status='active'
-              or ($6::boolean and p.status='pending_receipt')
-              or ($7::boolean and p.status='inactive')
-            ))
-            or ($5::uuid is not null and (
-              p.status='active'
-              or ($6::boolean and p.status='pending_receipt')
-              or ($7::boolean and p.status='inactive')
-            ))
+          where p.organization_id=$1 and p.branch_id=$5 and (
+            p.status='active'
+            or ($6::boolean and p.status='pending_receipt')
+            or ($7::boolean and p.status='inactive')
           ) and ($8::text is null
             or ($8='pos' and p.inventory_role in ('sellable','both'))
             or ($8='bom' and p.track_inventory))
+          and ($8::text is distinct from 'pos'
+            or not p.track_inventory
+            or exists (
+              select 1 from branch_inventory branch_stock
+              where branch_stock.organization_id=p.organization_id
+                and branch_stock.branch_id=$5
+                and branch_stock.product_id=p.id
+                and branch_stock.variant_id is null
+                and branch_stock.quantity>0
+            ))
           and ($2::text is null or
            p.name ilike '%'||$2||'%' or p.sku ilike '%'||$2||'%' or exists (
              select 1 from product_barcodes pb where pb.product_id=p.id and pb.barcode=$2
@@ -349,7 +357,13 @@ export function productsRouter(database: Database): Router {
       );
     },
   );
-  router.get('/summary', requirePermission('products:read'), async (request, response) => {
+  router.get(
+    '/summary',
+    requirePermission('products:read'),
+    validateQuery(z.object({ branchId: uuidSchema })),
+    requireBranchAccess('query'),
+    async (request, response) => {
+    const { branchId } = request.query as { branchId: string };
     const result = await database.query<{
       all: number;
       sellable: number;
@@ -360,11 +374,12 @@ export function productsRouter(database: Database): Router {
         count(*) filter (where inventory_role='sellable')::int as sellable,
         count(*) filter (where inventory_role='ingredient')::int as ingredient,
         count(*) filter (where inventory_role='both')::int as both
-       from products where organization_id=$1`,
-      [request.authUser!.organization.id],
+       from products where organization_id=$1 and branch_id=$2`,
+      [request.authUser!.organization.id, branchId],
     );
     sendData(response, result.rows[0] ?? { all: 0, sellable: 0, ingredient: 0, both: 0 });
-  });
+    },
+  );
   router.post(
     '/',
     requirePermission('products:manage'),
@@ -413,7 +428,7 @@ export function productsRouter(database: Database): Router {
       }
 
       const product = await database.transaction(async (tx) => {
-        await validateProductMasters(tx, organizationId, input);
+        await validateProductMasters(tx, organizationId, branchId, input);
         const created = await tx.query<{
           id: string;
           name: string;
@@ -428,15 +443,16 @@ export function productsRouter(database: Database): Router {
           status: string;
         }>(
           `insert into products (
-            organization_id,category_id,brand_id,name,sku,unit,inventory_role,preparation_behavior,
+            organization_id,branch_id,category_id,brand_id,name,sku,unit,inventory_role,preparation_behavior,
             track_inventory,description,cost,selling_price,tax_rate,is_tax_inclusive,status,image_path
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
            returning id,name,sku,unit,inventory_role as "inventoryRole",
              preparation_behavior as "preparationBehavior",track_inventory as "trackInventory",
              selling_price::text as "sellingPrice",tax_rate::text as "taxRate",
              is_tax_inclusive as "isTaxInclusive",status`,
           [
             organizationId,
+            branchId,
             input.categoryId ?? null,
             input.brandId ?? null,
             input.name,
@@ -456,20 +472,21 @@ export function productsRouter(database: Database): Router {
         );
         if (input.barcode) {
           await tx.query(
-            `insert into product_barcodes (organization_id,product_id,barcode) values ($1,$2,$3)`,
-            [organizationId, created.rows[0]!.id, input.barcode],
+            `insert into product_barcodes (organization_id,branch_id,product_id,barcode) values ($1,$2,$3,$4)`,
+            [organizationId, branchId, created.rows[0]!.id, input.barcode],
           );
         }
         let portioningContainer: { id: string; unitsPerBase: number } | null = null;
         for (const sellingUnit of sellingUnits) {
-          await validateProductMasters(tx, organizationId, { unit: sellingUnit.unit });
+          await validateProductMasters(tx, organizationId, branchId, { unit: sellingUnit.unit });
           const variant = await tx.query<{ id: string }>(
             `insert into product_variants (
-              organization_id,product_id,name,sku,unit,units_per_base,cost,selling_price,
+              organization_id,branch_id,product_id,name,sku,unit,units_per_base,cost,selling_price,
               is_active,is_portioning_container
-             ) values ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) returning id`,
+             ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10) returning id`,
             [
               organizationId,
+              branchId,
               created.rows[0]!.id,
               sellingUnit.name,
               sellingUnit.sku,
@@ -489,9 +506,9 @@ export function productsRouter(database: Database): Router {
           if (sellingUnit.barcode) {
             await tx.query(
               `insert into product_barcodes (
-                organization_id,product_id,variant_id,barcode
-               ) values ($1,$2,$3,$4)`,
-              [organizationId, created.rows[0]!.id, variant.rows[0]!.id, sellingUnit.barcode],
+                organization_id,branch_id,product_id,variant_id,barcode
+               ) values ($1,$2,$3,$4,$5)`,
+              [organizationId, branchId, created.rows[0]!.id, variant.rows[0]!.id, sellingUnit.barcode],
             );
           }
         }
@@ -505,14 +522,9 @@ export function productsRouter(database: Database): Router {
             organization_id,branch_id,product_id,variant_id,quantity,inventory_value,average_cost,
             sealed_quantity,opened_quantity
            )
-           select $1,b.id,$2,null,
-             case when b.id=$3 then $4 else 0 end,
-             case when b.id=$3 then round($4::numeric*$5::numeric,4) else 0 end,
+           values ($1,$3,$2,null,$4,round($4::numeric*$5::numeric,4),
              round($5::numeric,4),
-             case when b.id=$3 then $6 else 0 end,
-             case when b.id=$3 then $7 else 0 end
-           from branches b
-           where b.organization_id=$1 and b.is_active`,
+             $6,$7)`,
           [
             organizationId,
             created.rows[0]!.id,
@@ -593,8 +605,9 @@ export function productsRouter(database: Database): Router {
         (select pb.barcode from product_barcodes pb
           where pb.organization_id=p.organization_id and pb.product_id=p.id
             and pb.variant_id is null order by pb.created_at limit 1) as barcode
-       from products p where p.id=$1 and p.organization_id=$2`,
-      [id, request.authUser!.organization.id],
+       from products p where p.id=$1 and p.organization_id=$2
+         and p.branch_id=any($3::uuid[])`,
+      [id, request.authUser!.organization.id, request.authUser!.branches.map((branch) => branch.id)],
     );
     if (!result.rows[0]) throw notFound('Product');
     sendData(response, result.rows[0]);
@@ -611,15 +624,15 @@ export function productsRouter(database: Database): Router {
           inventory_role as "inventoryRole",track_inventory as "trackInventory",
           is_tax_inclusive as "isTaxInclusive",
           category_id as "categoryId",brand_id as "brandId",image_path as "imagePath"
-         from products where id=$1 and organization_id=$2`,
-        [id, organizationId],
+         from products where id=$1 and organization_id=$2 and branch_id=any($3::uuid[])`,
+        [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
       );
       if (!existing.rows[0]) throw notFound('Product');
       const input = { ...existing.rows[0], ...request.body };
       // Barcode omission means "leave unchanged"; null means "remove it".
       const barcodeWasProvided = Object.prototype.hasOwnProperty.call(request.body, 'barcode');
       const updated = await database.transaction(async (tx) => {
-        await validateProductMasters(tx, organizationId, input);
+        await validateProductMasters(tx, organizationId, existing.rows[0].branch_id, input);
         const row = await tx.query(
           `update products set category_id=$3,brand_id=$4,name=$5,sku=$6,unit=$7,
             inventory_role=$8,track_inventory=$9,description=$10,cost=$11,selling_price=$12,
@@ -655,9 +668,9 @@ export function productsRouter(database: Database): Router {
           );
           if (input.barcode) {
             await tx.query(
-              `insert into product_barcodes (organization_id,product_id,barcode)
-               values ($1,$2,$3)`,
-              [organizationId, id, input.barcode],
+          `insert into product_barcodes (organization_id,branch_id,product_id,barcode)
+               values ($1,$2,$3,$4)`,
+              [organizationId, existing.rows[0].branch_id, id, input.barcode],
             );
           }
         }
@@ -687,8 +700,14 @@ export function productsRouter(database: Database): Router {
         coalesce((select jsonb_agg(pb.barcode) from product_barcodes pb where pb.variant_id=v.id),'[]') as barcodes
        from product_variants v
        join product_units pu on pu.organization_id=v.organization_id and pu.code=v.unit
-       where v.product_id=$1 and v.organization_id=$2 order by v.name`,
-      [uuidSchema.parse(request.params.id), request.authUser!.organization.id],
+       join products parent on parent.id=v.product_id and parent.organization_id=v.organization_id
+       where v.product_id=$1 and v.organization_id=$2
+         and parent.branch_id=any($3::uuid[]) order by v.name`,
+      [
+        uuidSchema.parse(request.params.id),
+        request.authUser!.organization.id,
+        request.authUser!.branches.map((branch) => branch.id),
+      ],
     );
     sendData(response, result.rows);
   });
@@ -708,9 +727,11 @@ export function productsRouter(database: Database): Router {
          p.name as "ingredientName", p.sku as "ingredientSku", p.cost::text as "ingredientCost"
        from product_recipes pr
        join products p on p.id = pr.ingredient_product_id and p.organization_id = pr.organization_id
+       join products parent on parent.id=pr.parent_product_id
        where pr.parent_product_id = $1 and pr.organization_id = $2
+         and parent.branch_id=any($3::uuid[])
        order by p.name`,
-      [parentProductId, organizationId],
+      [parentProductId, organizationId, request.authUser!.branches.map((branch) => branch.id)],
     );
 
     sendData(response, result.rows);
@@ -733,6 +754,17 @@ export function productsRouter(database: Database): Router {
       const input = request.body;
 
       await database.transaction(async (tx) => {
+        const parent = await tx.query<{ branchId: string }>(
+          `select branch_id as "branchId" from products
+           where id=$1 and organization_id=$2 and branch_id=any($3::uuid[])`,
+          [
+            parentProductId,
+            organizationId,
+            request.authUser!.branches.map((branch) => branch.id),
+          ],
+        );
+        if (!parent.rows[0]) throw notFound('Product');
+        const parentBranchId = parent.rows[0].branchId;
         // Delete existing recipe items
         await tx.query(
           `delete from product_recipes where parent_product_id = $1 and organization_id = $2`,
@@ -747,8 +779,8 @@ export function productsRouter(database: Database): Router {
             trackInventory: boolean;
           }>(
             `select unit,inventory_role as "inventoryRole",track_inventory as "trackInventory"
-             from products where id=$1 and organization_id=$2`,
-            [item.ingredientProductId, organizationId],
+             from products where id=$1 and organization_id=$2 and branch_id=$3`,
+            [item.ingredientProductId, organizationId, parentBranchId],
           );
           const ingredientProduct = ingredient.rows[0];
           if (!ingredientProduct)
@@ -844,9 +876,10 @@ export function productsRouter(database: Database): Router {
       const productId = uuidSchema.parse(request.params.id);
       const input = request.body;
       const created = await database.transaction(async (tx) => {
-        const parentRes = await tx.query<{ unit: string }>(
-          `select unit from products where id=$1 and organization_id=$2`,
-          [productId, organizationId],
+        const parentRes = await tx.query<{ unit: string; branchId: string }>(
+          `select unit,branch_id as "branchId" from products
+           where id=$1 and organization_id=$2 and branch_id=any($3::uuid[])`,
+          [productId, organizationId, request.authUser!.branches.map((branch) => branch.id)],
         );
         const parentUnit = parentRes.rows[0]?.unit;
         if (!parentUnit) throw notFound('Product');
@@ -856,7 +889,7 @@ export function productsRouter(database: Database): Router {
           throw badRequest('INVALID_UNIT_CONVERSION', conversionCheck.reason || 'Invalid unit conversion');
         }
 
-        await validateProductMasters(tx, organizationId, { unit: input.unit });
+        await validateProductMasters(tx, organizationId, parentRes.rows[0]!.branchId, { unit: input.unit });
         if (input.isPortioningContainer && input.unitsPerBase <= 1) {
           throw badRequest(
             'INVALID_PORTIONING_CONTAINER',
@@ -878,10 +911,10 @@ export function productsRouter(database: Database): Router {
         }
         const result = await tx.query<{ id: string }>(
           `insert into product_variants (
-            organization_id,product_id,name,sku,unit,units_per_base,cost,selling_price,
+            organization_id,branch_id,product_id,name,sku,unit,units_per_base,cost,selling_price,
             is_active,is_portioning_container
-           ) select $1,p.id,$3,$4,$5,$6,$7,$8,$9,$10 from products p
-             where p.id=$2 and p.organization_id=$1 returning id`,
+           ) select $1,p.branch_id,p.id,$3,$4,$5,$6,$7,$8,$9,$10 from products p
+             where p.id=$2 and p.organization_id=$1 and p.branch_id=any($11::uuid[]) returning id`,
           [
             organizationId,
             productId,
@@ -893,6 +926,7 @@ export function productsRouter(database: Database): Router {
             input.sellingPrice ?? null,
             input.isActive,
             input.isPortioningContainer,
+            request.authUser!.branches.map((branch) => branch.id),
           ],
         );
         if (!result.rows[0]) throw notFound('Product');
@@ -908,9 +942,9 @@ export function productsRouter(database: Database): Router {
         }
         if (input.barcode) {
           await tx.query(
-            `insert into product_barcodes (organization_id,product_id,variant_id,barcode)
-             values ($1,$2,$3,$4)`,
-            [organizationId, productId, result.rows[0].id, input.barcode],
+            `insert into product_barcodes (organization_id,branch_id,product_id,variant_id,barcode)
+             values ($1,$2,$3,$4,$5)`,
+            [organizationId, parentRes.rows[0]!.branchId, productId, result.rows[0].id, input.barcode],
           );
         }
         await tx.query(
@@ -950,9 +984,10 @@ export function productsRouter(database: Database): Router {
         if (!existing.rows[0]) throw notFound('Product variant');
         const input = { ...existing.rows[0], ...request.body };
 
-        const parentRes = await tx.query<{ unit: string }>(
-          `select unit from products where id=$1 and organization_id=$2`,
-          [productId, organizationId],
+        const parentRes = await tx.query<{ unit: string; branchId: string }>(
+          `select unit,branch_id as "branchId" from products
+           where id=$1 and organization_id=$2 and branch_id=any($3::uuid[])`,
+          [productId, organizationId, request.authUser!.branches.map((branch) => branch.id)],
         );
         const parentUnit = parentRes.rows[0]?.unit;
         if (parentUnit) {
@@ -961,7 +996,7 @@ export function productsRouter(database: Database): Router {
             throw badRequest('INVALID_UNIT_CONVERSION', conversionCheck.reason || 'Invalid unit conversion');
           }
         }
-        await validateProductMasters(tx, organizationId, { unit: input.unit });
+        await validateProductMasters(tx, organizationId, parentRes.rows[0]!.branchId, { unit: input.unit });
         const wasPortioningContainer = Boolean(existing.rows[0].isPortioningContainer);
         const willBePortioningContainer = Boolean(input.isPortioningContainer);
         const conversionChanged =
@@ -1045,9 +1080,9 @@ export function productsRouter(database: Database): Router {
           );
           if (request.body.barcode) {
             await tx.query(
-              `insert into product_barcodes (organization_id,product_id,variant_id,barcode)
-               values ($1,$2,$3,$4)`,
-              [organizationId, productId, variantId, request.body.barcode],
+              `insert into product_barcodes (organization_id,branch_id,product_id,variant_id,barcode)
+               values ($1,$2,$3,$4,$5)`,
+              [organizationId, parentRes.rows[0]!.branchId, productId, variantId, request.body.barcode],
             );
           }
         }
@@ -1077,24 +1112,32 @@ export function productsRouter(database: Database): Router {
 export function categoriesRouter(database: Database): Router {
   const router = Router();
   router.use(requireModule('products'));
-  router.get('/', requirePermission('products:read'), async (request, response) => {
+  router.get(
+    '/',
+    requirePermission('products:read'),
+    validateQuery(z.object({ branchId: uuidSchema })),
+    requireBranchAccess('query'),
+    async (request, response) => {
+    const { branchId } = request.query as { branchId: string };
     const result = await database.query(
       `select id,name,description,is_active as "isActive" from categories
-       where organization_id=$1 order by name`,
-      [request.authUser!.organization.id],
+       where organization_id=$1 and branch_id=$2 order by name`,
+      [request.authUser!.organization.id, branchId],
     );
     sendData(response, result.rows);
-  });
+    },
+  );
   router.post(
     '/',
     requirePermission('products:manage'),
     validateBody(categorySchema),
+    requireBranchAccess('body'),
     async (request, response) => {
       const input = request.body;
       const result = await database.query(
-        `insert into categories (organization_id,name,description,is_active)
-         values ($1,$2,$3,$4) returning id,name,description,is_active as "isActive"`,
-        [request.authUser!.organization.id, input.name, input.description ?? null, input.isActive],
+        `insert into categories (organization_id,branch_id,name,description,is_active)
+         values ($1,$2,$3,$4,$5) returning id,name,description,is_active as "isActive"`,
+        [request.authUser!.organization.id, input.branchId, input.name, input.description ?? null, input.isActive],
       );
       sendData(response, result.rows[0], 201);
     },
@@ -1107,8 +1150,8 @@ export function categoriesRouter(database: Database): Router {
       const id = uuidSchema.parse(request.params.id);
       const organizationId = request.authUser!.organization.id;
       const existing = await database.query<any>(
-        'select * from categories where id=$1 and organization_id=$2',
-        [id, organizationId],
+        'select * from categories where id=$1 and organization_id=$2 and branch_id=any($3::uuid[])',
+        [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
       );
       if (!existing.rows[0]) throw notFound('Category');
       const input = { ...existing.rows[0], ...request.body };
@@ -1133,25 +1176,33 @@ export function categoriesRouter(database: Database): Router {
 export function brandsRouter(database: Database): Router {
   const router = Router();
   router.use(requireModule('products'));
-  router.get('/', requirePermission('products:read'), async (request, response) => {
+  router.get(
+    '/',
+    requirePermission('products:read'),
+    validateQuery(z.object({ branchId: uuidSchema })),
+    requireBranchAccess('query'),
+    async (request, response) => {
+    const { branchId } = request.query as { branchId: string };
     const result = await database.query(
       `select id,name,description,is_active as "isActive" from brands
-       where organization_id=$1 order by name`,
-      [request.authUser!.organization.id],
+       where organization_id=$1 and branch_id=$2 order by name`,
+      [request.authUser!.organization.id, branchId],
     );
     sendData(response, result.rows);
-  });
+    },
+  );
   router.post(
     '/',
     requirePermission('products:manage'),
     validateBody(brandSchema),
+    requireBranchAccess('body'),
     async (request, response) => {
       const input = request.body;
       const result = await database.query(
-        `insert into brands (organization_id,name,description,is_active)
-         values ($1,$2,$3,$4)
+        `insert into brands (organization_id,branch_id,name,description,is_active)
+         values ($1,$2,$3,$4,$5)
          returning id,name,description,is_active as "isActive"`,
-        [request.authUser!.organization.id, input.name, input.description ?? null, input.isActive],
+        [request.authUser!.organization.id, input.branchId, input.name, input.description ?? null, input.isActive],
       );
       sendData(response, result.rows[0], 201);
     },
@@ -1164,8 +1215,8 @@ export function brandsRouter(database: Database): Router {
       const id = uuidSchema.parse(request.params.id);
       const organizationId = request.authUser!.organization.id;
       const existing = await database.query<any>(
-        'select * from brands where id=$1 and organization_id=$2',
-        [id, organizationId],
+        'select * from brands where id=$1 and organization_id=$2 and branch_id=any($3::uuid[])',
+        [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
       );
       if (!existing.rows[0]) throw notFound('Brand');
       const input = { ...existing.rows[0], ...request.body };

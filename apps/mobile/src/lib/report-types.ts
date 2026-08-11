@@ -52,6 +52,14 @@ export interface ShiftLogDetail {
 
 export interface ReportsWorkspace {
   range?: { from: string; to: string; branchId: string | null };
+  metadata?: {
+    generatedAt: string;
+    timezone: string;
+    currency: string;
+    branchName: string;
+    status: 'ready' | 'refreshing' | 'processing';
+    version: string;
+  };
   kpis: {
     grossSales: string;
     netSales: string;
@@ -61,6 +69,7 @@ export interface ReportsWorkspace {
     transactions: number;
     uniqueCustomers: number;
     averageTransaction: string;
+    averageItemsPerTransaction?: string;
     itemsSold: number;
     netCost: string | null;
     grossProfit: string | null;
@@ -89,9 +98,12 @@ export interface ReportsWorkspace {
     activeProducts: number;
     unitsOnHand: number;
     inventoryValue: string | null;
+    retailValue?: string;
     stockValue: string;
     lowStockCount: number;
     outOfStockCount: number;
+    deadStockCount?: number;
+    stockTurnover?: string | null;
     lowStock: Array<{
       id: string;
       name: string;
@@ -114,6 +126,8 @@ export interface ReportsWorkspace {
     outstandingPayables: string;
     supplierPayments: string;
     supplierRefunds: string;
+    receivingAccuracy?: string;
+    supplierFulfillmentRate?: string;
     orderStatuses: Array<{ status: string; orders: number; value: string }>;
     topSuppliers: Array<{ id: string; name: string; orders: number; value: string }>;
     payablesInvoices?: PayablesInvoiceDetail[];
@@ -137,7 +151,46 @@ export interface ReportsWorkspace {
     variance: string;
     cashIn: string;
     cashOut: string;
+    expectedCash?: string;
+    drawerBalance?: string;
     shiftLogs?: ShiftLogDetail[];
+  };
+  audit?: {
+    voidedSales: number;
+    refundTransactions: number;
+    refundAmount: string;
+    inventoryAdjustments: number;
+    cashAdjustments: number;
+    events: Array<{
+      id: string;
+      type: 'void' | 'refund' | 'inventory' | 'cash';
+      title: string;
+      detail: string;
+      amount: string | null;
+      actorName: string | null;
+      branchName: string;
+      createdAt: string;
+    }>;
+  };
+  repacking?: {
+    batches: number;
+    outputQuantity: number;
+    inputQuantity: number;
+    totalCost: string;
+    averageCostPerOutput: string;
+    yieldPercent: string | null;
+    lossPercent: string | null;
+    batchRows: Array<{
+      id: string;
+      batchNumber: string;
+      productName: string;
+      quantityProduced: number;
+      inputQuantity: number;
+      totalCost: string;
+      unitCost: string;
+      yieldPercent: string | null;
+      createdAt: string;
+    }>;
   };
 }
 

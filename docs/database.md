@@ -8,7 +8,10 @@ Timestamps are `timestamptz` in UTC; clients display them using `organizations.t
 erDiagram
   ORGANIZATIONS ||--o{ BRANCHES : owns
   ORGANIZATIONS ||--o{ PROFILES : employs
-  ORGANIZATIONS ||--|| SUBSCRIPTIONS : has
+  APPLICATIONS ||--o{ PLANS : offers
+  APPLICATIONS ||--o{ SUBSCRIPTIONS : scopes
+  ORGANIZATIONS ||--o{ SUBSCRIPTIONS : has
+  ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERSHIPS : has
   PLANS ||--o{ SUBSCRIPTIONS : selected
   PLANS ||--o{ PLAN_MODULES : enables
   MODULES ||--o{ PLAN_MODULES : included
@@ -59,6 +62,10 @@ The API resolves each module as:
 2. otherwise check the active/trialing subscription's `plan_modules`.
 
 Starter, Business, Professional, and Enterprise mappings are in `supabase/seed.sql`.
+
+Migration `0032_multi_product_platform_foundation.sql` assigns these legacy modules and plans to
+the `ximo_pos` application and mirrors them into normalized application entitlements. See
+[platform-foundation.md](platform-foundation.md) for the ownership model and rollout order.
 
 ## Migration order
 

@@ -5,6 +5,7 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { useBranchStore } from '@/store/branch';
 
 interface ShiftDetail {
   id: string;
@@ -53,9 +54,11 @@ interface ShiftDetail {
 
 function ShiftReportDetailContent() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const branch = useBranchStore((state) => state.activeBranch);
   const query = useQuery({
-    queryKey: ['shift-report', id],
-    queryFn: () => api<ShiftDetail>(`/reports/shifts/${id}`),
+    queryKey: ['shift-report', branch?.id, id],
+    enabled: Boolean(branch),
+    queryFn: () => api<ShiftDetail>(`/reports/shifts/${id}?branchId=${branch!.id}`),
   });
   if (query.isLoading) return <LoadingState />;
   if (query.isError)

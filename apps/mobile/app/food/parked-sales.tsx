@@ -17,6 +17,9 @@ interface HeldSaleItem {
   unitPrice: string;
   quantity: number;
   unit?: string;
+  unitsPerBase?: number;
+  taxRate?: string;
+  isTaxInclusive?: boolean;
   sku?: string;
   image?: string | null;
 }
@@ -57,7 +60,7 @@ export default function ParkedSalesScreen() {
         customerId: string | null;
         note: string | null;
         items: HeldSaleItem[];
-      }>(`/sales/held/${id}/resume`, { method: 'POST' });
+      }>(`/sales/held/${id}/resume?branchId=${activeBranchId}`, { method: 'POST' });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['food-parked-sales'] });
@@ -71,8 +74,9 @@ export default function ParkedSalesScreen() {
           sku: item.sku || 'N/A',
           sellingPrice: item.unitPrice,
           unit: (item.unit as any) || 'piece',
-          taxRate: '0.12',
-          isTaxInclusive: true,
+          unitsPerBase: item.unitsPerBase ?? 1,
+          taxRate: item.taxRate ?? '0.00',
+          isTaxInclusive: item.isTaxInclusive ?? false,
         },
         quantity: item.quantity,
       }));
@@ -97,7 +101,7 @@ export default function ParkedSalesScreen() {
 
   const discardMutation = useMutation({
     mutationFn: async (id: string) => {
-      return api(`/sales/held/${id}`, { method: 'DELETE' });
+      return api(`/sales/held/${id}?branchId=${activeBranchId}`, { method: 'DELETE' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['food-parked-sales'] });

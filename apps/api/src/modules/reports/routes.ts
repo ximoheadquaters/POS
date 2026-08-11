@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { Queryable } from '../../database/types.js';
 import { requireAnyModule, requirePermission } from '../../middleware/auth.js';
 import { validateQuery } from '../../middleware/validation.js';
-import { notFound } from '../../shared/errors.js';
+import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { sendData } from '../../shared/http.js';
 
 const dateFilter = z.object({
@@ -19,11 +19,11 @@ const workspaceReportFilter = dateFilter.extend({
 const shiftReportFilter = paginationSchema.extend({
   from: z.iso.datetime({ offset: true }),
   to: z.iso.datetime({ offset: true }),
-  branchId: uuidSchema.optional(),
+  branchId: uuidSchema,
   status: z.enum(['open', 'closed']).optional(),
 });
 
-import { REPORT_CATALOG, reportQueryFilterSchema } from '@ximo/shared';
+import { REPORT_CATALOG } from '@ximo/shared';
 import { resolveReportScope } from './report-permission-resolver.js';
 import { SalesSummaryReportService } from './services/sales-summary-service.js';
 import { OverviewReportService } from './services/overview-report-service.js';
@@ -55,6 +55,22 @@ export function reportsRouter(database: Queryable): Router {
       return hasModules && hasCaps;
     });
     sendData(response, { catalog: filteredCatalog });
+  });
+
+  router.use((request, _response, next) => {
+    const branchId = typeof request.query.branchId === 'string' ? request.query.branchId : '';
+    if (!branchId) {
+      const canViewAllBranches =
+        request.authUser!.permissions.includes('reports:view_all_branches') ||
+        request.authUser!.permissions.includes('sales:read_all');
+      return canViewAllBranches
+        ? next()
+        : next(badRequest('BRANCH_REQUIRED', 'Select a branch to view this report'));
+    }
+    if (!request.authUser!.branches.some((branch) => branch.id === branchId)) {
+      return next(forbidden('BRANCH_ACCESS_DENIED', 'You do not have access to this branch'));
+    }
+    next();
   });
 
   router.get('/overview', async (request, response) => {
@@ -141,7 +157,11 @@ export function reportsRouter(database: Queryable): Router {
   });
 
   router.get('/transactions/:id', async (request, response) => {
-    const scope = resolveReportScope(request.authUser!, { from: '2000-01-01', to: '2099-12-31' });
+    const scope = resolveReportScope(request.authUser!, {
+      from: '2000-01-01',
+      to: '2099-12-31',
+      branchId: String(request.query.branchId),
+    });
     const saleId = uuidSchema.parse(request.params.id);
     const result = await transactionDetailService.getTransactionDetail(scope, saleId);
     sendData(response, result);
@@ -165,7 +185,9 @@ export function reportsRouter(database: Queryable): Router {
   router.get('/workspace', validateQuery(workspaceReportFilter), async (request, response) => {
     const { from, to, branchId } = request.query as z.infer<typeof workspaceReportFilter>;
     const organizationId = request.authUser!.organization.id;
-    const allBranches = request.authUser!.permissions.includes('sales:read_all');
+    const allBranches =
+      request.authUser!.permissions.includes('reports:view_all_branches') ||
+      request.authUser!.permissions.includes('sales:read_all');
     const allowedBranchIds = request.authUser!.branches.map((branch) => branch.id);
     if (
       branchId &&
@@ -215,6 +237,10 @@ export function reportsRouter(database: Queryable): Router {
       purchaseOrdersList,
       salesReceipts,
       shiftLogs,
+      auditKpis,
+      auditEvents,
+      repackingKpis,
+      repackingBatches,
     ] = await Promise.all([
       database.query(
         `with scoped_sales as (
@@ -239,8 +265,12 @@ export function reportsRouter(database: Queryable): Router {
            join sale_items si on si.id=ri.sale_item_id
          )
          select
-           coalesce(sum(s.total),0)::text as "grossSales",
-           (coalesce(sum(s.total),0)-
+           coalesce((select sum(si.unit_price * si.quantity)
+             from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)::text
+             as "grossSales",
+           (coalesce((select sum(si.unit_price * si.quantity)
+              from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)-
+             coalesce(sum(s.discount_total),0)-
              coalesce((select sum(refund_total) from scoped_returns),0))::text as "netSales",
            coalesce((select sum(refund_total) from scoped_returns),0)::text as "customerRefunds",
            coalesce(sum(s.discount_total),0)::text as discounts,
@@ -248,24 +278,43 @@ export function reportsRouter(database: Queryable): Router {
            count(s.id)::int as transactions,
            count(distinct s.customer_id) filter (where s.customer_id is not null)::int
              as "uniqueCustomers",
-           coalesce(avg(s.total),0)::numeric(14,2)::text as "averageTransaction",
+           case when count(s.id)>0 then round((
+             coalesce((select sum(si.unit_price * si.quantity)
+               from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)-
+             coalesce(sum(s.discount_total),0)-
+             coalesce((select sum(refund_total) from scoped_returns),0))/count(s.id),2)
+             else 0 end::text as "averageTransaction",
            coalesce((select sum(si.quantity) from sale_items si
              join scoped_sales sold on sold.id=si.sale_id),0)::float8 as "itemsSold",
+           case when count(s.id)>0 then round(coalesce((select sum(si.quantity)
+             from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)/count(s.id),2)
+             else 0 end::text as "averageItemsPerTransaction",
            ((select total from sale_cost)-(select total from return_cost))::text as "netCost",
-           (coalesce(sum(s.total),0)-
+           (coalesce((select sum(si.unit_price * si.quantity)
+              from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)-
+             coalesce(sum(s.discount_total),0)-
              coalesce((select sum(refund_total) from scoped_returns),0)-
              ((select total from sale_cost)-(select total from return_cost)))::text
              as "grossProfit",
-           case when coalesce(sum(s.total),0)-
+           case when coalesce((select sum(si.unit_price * si.quantity)
+               from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)-
+             coalesce(sum(s.discount_total),0)-
              coalesce((select sum(refund_total) from scoped_returns),0) > 0
-             then round(100*(coalesce(sum(s.total),0)-
+             then round(100*(coalesce((select sum(si.unit_price * si.quantity)
+                 from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)-
+               coalesce(sum(s.discount_total),0)-
                coalesce((select sum(refund_total) from scoped_returns),0)-
                ((select total from sale_cost)-(select total from return_cost)))/
-               (coalesce(sum(s.total),0)-
+               (coalesce((select sum(si.unit_price * si.quantity)
+                  from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)-
+               coalesce(sum(s.discount_total),0)-
                coalesce((select sum(refund_total) from scoped_returns),0)),2)
              else 0 end::text as "grossMarginPercent",
-           case when coalesce(sum(s.total),0)>0 then round(100*
-             coalesce((select sum(refund_total) from scoped_returns),0)/sum(s.total),2)
+           case when coalesce((select sum(si.unit_price * si.quantity)
+               from sale_items si join scoped_sales sold on sold.id=si.sale_id),0)>0 then round(100*
+             coalesce((select sum(refund_total) from scoped_returns),0)/
+             (select sum(si.unit_price * si.quantity)
+               from sale_items si join scoped_sales sold on sold.id=si.sale_id),2)
              else 0 end::text as "refundRatePercent"
          from scoped_sales s`,
         values,
@@ -285,9 +334,10 @@ export function reportsRouter(database: Queryable): Router {
         `select si.product_name as name,si.sku,p.unit,
           coalesce(c.name,'Uncategorized') as category,
           coalesce(sum(si.quantity),0)::float8 as quantity,
-          coalesce(sum(si.line_total),0)::text as sales,
+          coalesce(sum(si.unit_price*si.quantity),0)::text as sales,
           coalesce(sum(si.quantity*si.unit_cost),0)::text as cost,
-          (coalesce(sum(si.line_total),0)-coalesce(sum(si.quantity*si.unit_cost),0))::text
+          (coalesce(sum(si.unit_price*si.quantity-si.discount_total),0)-
+            coalesce(sum(si.quantity*si.unit_cost),0))::text
             as profit
          from sale_items si
          join sales s on s.id=si.sale_id
@@ -301,7 +351,7 @@ export function reportsRouter(database: Queryable): Router {
       ),
       database.query(
         `select coalesce(c.name,'Uncategorized') as name,
-          coalesce(sum(si.line_total),0)::text as sales,
+          coalesce(sum(si.unit_price*si.quantity),0)::text as sales,
           coalesce(sum(si.quantity),0)::float8 as quantity
          from sale_items si
          join sales s on s.id=si.sale_id
@@ -314,7 +364,12 @@ export function reportsRouter(database: Queryable): Router {
         values,
       ),
       database.query(
-        `select b.id,b.name,coalesce(sum(s.total),0)::text as sales,
+        `select b.id,b.name,coalesce(sum(
+            coalesce((select sum(si.unit_price*si.quantity) from sale_items si where si.sale_id=s.id),0)
+            - s.discount_total
+            - coalesce((select sum(r.refund_total) from returns r where r.sale_id=s.id
+                and r.created_at >= $2 and r.created_at < $3),0)
+          ),0)::text as sales,
           count(s.id)::int as transactions
          from branches b
          left join sales s on s.branch_id=b.id and s.completed_at >= $2
@@ -328,8 +383,10 @@ export function reportsRouter(database: Queryable): Router {
       ),
       database.query(
         `select to_char(date_trunc('day',s.completed_at),'YYYY-MM-DD') as date,
-          coalesce(sum(s.total),0)::text as sales,count(*)::int as transactions
-         from sales s where s.organization_id=$1 and s.completed_at >= $2
+          coalesce(sum(si.unit_price*si.quantity),0)::text as sales,
+          count(distinct s.id)::int as transactions
+         from sales s join sale_items si on si.sale_id=s.id
+         where s.organization_id=$1 and s.completed_at >= $2
            and s.completed_at < $3 and s.status in ('completed','partially_refunded','refunded')
            and ${branchScope('s')}
          group by date_trunc('day',s.completed_at)
@@ -344,6 +401,13 @@ export function reportsRouter(database: Queryable): Router {
           count(distinct p.id) filter (where p.status='active')::int as "activeProducts",
           coalesce(sum(bi.quantity),0)::float8 as "unitsOnHand",
           coalesce(sum(bi.inventory_value),0)::text as "inventoryValue",
+          coalesce(sum(greatest(bi.quantity,0)*p.selling_price),0)::text as "retailValue",
+          count(*) filter (where bi.quantity>0 and not exists (
+            select 1 from sale_items dead_si join sales dead_s on dead_s.id=dead_si.sale_id
+            where dead_si.product_id=p.id and dead_s.branch_id=bi.branch_id
+              and dead_s.status in ('completed','partially_refunded','refunded')
+              and dead_s.completed_at >= now() - interval '90 days'
+          ))::int as "deadStockCount",
           coalesce(sum(case when bi.quantity>0 then bi.inventory_value else 0 end),0)::text
             as "stockValue"
          from branch_inventory bi join products p on p.id=bi.product_id
@@ -402,7 +466,30 @@ export function reportsRouter(database: Queryable): Router {
               and ${branchScope('sp')}),0)::text as "supplierPayments",
           coalesce((select sum(sr.amount) from supplier_refunds sr
             where sr.organization_id=$1 and sr.received_at >= $2 and sr.received_at < $3
-              and ${branchScope('sr')}),0)::text as "supplierRefunds"
+              and ${branchScope('sr')}),0)::text as "supplierRefunds",
+          case when coalesce((select sum(poi.ordered_quantity)
+              from purchase_order_items poi join purchase_orders accuracy_po
+                on accuracy_po.id=poi.purchase_order_id
+              where accuracy_po.organization_id=$1 and accuracy_po.created_at >= $2
+                and accuracy_po.created_at < $3 and accuracy_po.status not in ('draft','cancelled')
+                and ${branchScope('accuracy_po')}),0)>0
+            then round(100*coalesce((select sum(poi.received_quantity)
+              from purchase_order_items poi join purchase_orders accuracy_po
+                on accuracy_po.id=poi.purchase_order_id
+              where accuracy_po.organization_id=$1 and accuracy_po.created_at >= $2
+                and accuracy_po.created_at < $3 and accuracy_po.status not in ('draft','cancelled')
+                and ${branchScope('accuracy_po')}),0)/
+              (select sum(poi.ordered_quantity)
+                from purchase_order_items poi join purchase_orders accuracy_po
+                  on accuracy_po.id=poi.purchase_order_id
+                where accuracy_po.organization_id=$1 and accuracy_po.created_at >= $2
+                  and accuracy_po.created_at < $3 and accuracy_po.status not in ('draft','cancelled')
+                  and ${branchScope('accuracy_po')}),1)
+            else 0 end::text as "receivingAccuracy",
+          case when count(po.id) filter (where po.status not in ('draft','cancelled'))>0
+            then round(100.0*count(po.id) filter (where po.status='received')/
+              count(po.id) filter (where po.status not in ('draft','cancelled')),1)
+            else 0 end::text as "supplierFulfillmentRate"
          from purchase_orders po where po.organization_id=$1
            and po.created_at >= $2 and po.created_at < $3 and ${branchScope('po')}`,
         values,
@@ -426,7 +513,9 @@ export function reportsRouter(database: Queryable): Router {
       ),
       database.query(
         `with daily_sales as (
-           select date_trunc('day',s.completed_at)::date as day,sum(s.total) as sales,
+           select date_trunc('day',s.completed_at)::date as day,
+             sum(coalesce((select sum(si.unit_price*si.quantity)
+               from sale_items si where si.sale_id=s.id),0)-s.discount_total) as sales,
              sum(s.cost_total) as cost
            from sales s where s.organization_id=$1 and s.completed_at >= $2
              and s.completed_at < $3 and s.status in
@@ -464,6 +553,11 @@ export function reportsRouter(database: Queryable): Router {
           coalesce(sum(rs.cash_refunds),0)::text as "cashRefunds",
           coalesce(sum(case when rs.status='closed' then rs.actual_cash else 0 end),0)::text
             as "countedCash",
+          coalesce(sum(coalesce(rs.expected_cash,
+            rs.starting_cash+rs.cash_sales-rs.cash_refunds+cm.cash_in-cm.cash_out)),0)::text
+            as "expectedCash",
+          coalesce(sum(rs.starting_cash+rs.cash_sales-rs.cash_refunds+cm.cash_in-cm.cash_out),0)::text
+            as "drawerBalance",
           coalesce(sum(case when rs.status='closed' then rs.variance else 0 end),0)::text
             as variance,
           coalesce(sum(cm.cash_in),0)::text as "cashIn",
@@ -565,11 +659,123 @@ export function reportsRouter(database: Queryable): Router {
          order by rs.opened_at desc limit 50`,
         values,
       ),
+      database.query(
+        `select
+          (select count(*) from sales s where s.organization_id=$1
+            and s.status='voided' and s.updated_at >= $2 and s.updated_at < $3
+            and ${branchScope('s')})::int as "voidedSales",
+          (select count(*) from returns r where r.organization_id=$1
+            and r.created_at >= $2 and r.created_at < $3
+            and ${branchScope('r')})::int as "refundTransactions",
+          coalesce((select sum(r.refund_total) from returns r where r.organization_id=$1
+            and r.created_at >= $2 and r.created_at < $3
+            and ${branchScope('r')}),0)::text as "refundAmount",
+          (select count(*) from inventory_movements im where im.organization_id=$1
+            and im.created_at >= $2 and im.created_at < $3
+            and im.movement_type::text in ('adjustment','open_container')
+            and ${branchScope('im')})::int as "inventoryAdjustments",
+          (select count(*) from cash_movements cm where cm.organization_id=$1
+            and cm.created_at >= $2 and cm.created_at < $3
+            and ${branchScope('cm')})::int as "cashAdjustments"`,
+        values,
+      ),
+      database.query(
+        `select * from (
+          select s.id,'void'::text as type,
+            ('Receipt '||s.receipt_number)::text as title,
+            coalesce(nullif(s.note,''),'Voided sale')::text as detail,
+            s.total::text as amount,coalesce(p.display_name,'Staff') as "actorName",
+            b.name as "branchName",s.updated_at::text as "createdAt"
+          from sales s join branches b on b.id=s.branch_id
+          left join profiles p on p.id=s.cashier_id
+          where s.organization_id=$1 and s.status='voided'
+            and s.updated_at >= $2 and s.updated_at < $3 and ${branchScope('s')}
+          union all
+          select r.id,'refund'::text,('Return '||r.return_number)::text,r.reason,
+            r.refund_total::text,coalesce(p.display_name,'Staff'),b.name,r.created_at::text
+          from returns r join branches b on b.id=r.branch_id
+          left join profiles p on p.id=r.created_by
+          where r.organization_id=$1 and r.created_at >= $2 and r.created_at < $3
+            and ${branchScope('r')}
+          union all
+          select im.id,'inventory'::text,
+            replace(initcap(im.movement_type::text),'_',' ')::text,
+            (p.name||' · '||im.reason)::text,null::text,
+            coalesce(actor.display_name,'Staff'),b.name,im.created_at::text
+          from inventory_movements im join products p on p.id=im.product_id
+          join branches b on b.id=im.branch_id left join profiles actor on actor.id=im.created_by
+          where im.organization_id=$1 and im.created_at >= $2 and im.created_at < $3
+            and im.movement_type::text in ('adjustment','open_container') and ${branchScope('im')}
+          union all
+          select cm.id,'cash'::text,replace(initcap(cm.type),'_',' ')::text,cm.reason,
+            cm.amount::text,coalesce(actor.display_name,'Staff'),b.name,cm.created_at::text
+          from cash_movements cm join branches b on b.id=cm.branch_id
+          left join profiles actor on actor.id=cm.created_by
+          where cm.organization_id=$1 and cm.created_at >= $2 and cm.created_at < $3
+            and ${branchScope('cm')}
+        ) audit_events order by "createdAt" desc limit 100`,
+        values,
+      ),
+      database.query(
+        `with scoped_batches as (
+          select pb.* from production_batches pb
+          where pb.organization_id=$1 and pb.created_at >= $2 and pb.created_at < $3
+            and ${branchScope('pb')}
+        ), batch_inputs as (
+          select pbi.production_batch_id,sum(pbi.quantity_consumed) as input_quantity,
+            bool_and(input_product.unit=output_product.unit) as comparable
+          from production_batch_items pbi
+          join scoped_batches sb on sb.id=pbi.production_batch_id
+          join products input_product on input_product.id=pbi.ingredient_product_id
+          join products output_product on output_product.id=sb.product_id
+          group by pbi.production_batch_id
+        )
+        select count(sb.id)::int as batches,
+          coalesce(sum(sb.quantity_produced),0)::float8 as "outputQuantity",
+          coalesce(sum(bi.input_quantity),0)::float8 as "inputQuantity",
+          coalesce(sum(sb.total_cost),0)::text as "totalCost",
+          case when coalesce(sum(sb.quantity_produced),0)>0
+            then round(sum(sb.total_cost)/sum(sb.quantity_produced),4)::text else '0' end
+            as "averageCostPerOutput",
+          case when coalesce(sum(bi.input_quantity) filter (where bi.comparable),0)>0
+            then round(100*sum(sb.quantity_produced) filter (where bi.comparable)/
+              sum(bi.input_quantity) filter (where bi.comparable),1)::text else null end
+            as "yieldPercent"
+        from scoped_batches sb left join batch_inputs bi on bi.production_batch_id=sb.id`,
+        values,
+      ),
+      database.query(
+        `with batch_inputs as (
+          select pbi.production_batch_id,sum(pbi.quantity_consumed) as input_quantity,
+            bool_and(input_product.unit=output_product.unit) as comparable
+          from production_batch_items pbi
+          join production_batches pb on pb.id=pbi.production_batch_id
+          join products input_product on input_product.id=pbi.ingredient_product_id
+          join products output_product on output_product.id=pb.product_id
+          where pb.organization_id=$1 and pb.created_at >= $2 and pb.created_at < $3
+            and ${branchScope('pb')}
+          group by pbi.production_batch_id
+        )
+        select pb.id,pb.batch_number as "batchNumber",p.name as "productName",
+          pb.quantity_produced::float8 as "quantityProduced",
+          coalesce(bi.input_quantity,0)::float8 as "inputQuantity",pb.total_cost::text as "totalCost",
+          pb.unit_cost::text as "unitCost",
+          case when bi.comparable and bi.input_quantity>0
+            then round(100*pb.quantity_produced/bi.input_quantity,1)::text else null end
+            as "yieldPercent",pb.created_at::text as "createdAt"
+        from production_batches pb join products p on p.id=pb.product_id
+        left join batch_inputs bi on bi.production_batch_id=pb.id
+        where pb.organization_id=$1 and pb.created_at >= $2 and pb.created_at < $3
+          and ${branchScope('pb')}
+        order by pb.created_at desc limit 100`,
+        values,
+      ),
     ]);
 
     const permissions = request.authUser!.permissions || [];
     const canViewCost = permissions.includes('reports:view_cost');
     const canViewProfit = permissions.includes('reports:view_profit');
+    const canViewAudit = permissions.includes('audit:read');
     const kpis = { ...(salesKpis.rows[0] ?? {}) } as Record<string, unknown>;
     const sanitizedTopProducts = topProducts.rows.map((row) => {
       const product = { ...row } as Record<string, unknown>;
@@ -589,6 +795,11 @@ export function reportsRouter(database: Queryable): Router {
       byCategory: inventoryByCategory.rows,
       movements: inventoryMovements.rows,
     } as Record<string, unknown>;
+    const inventoryCostValue = Number(inventory.inventoryValue ?? 0);
+    inventory.stockTurnover =
+      canViewCost && inventoryCostValue > 0
+        ? (Number(kpis.netCost ?? 0) / inventoryCostValue).toFixed(2)
+        : null;
     if (!canViewCost) {
       kpis.netCost = null;
       inventory.inventoryValue = null;
@@ -599,8 +810,28 @@ export function reportsRouter(database: Queryable): Router {
       kpis.grossMarginPercent = null;
     }
 
+    const generatedAt = new Date().toISOString();
+    const branchName =
+      request.authUser!.branches.find((candidate) => candidate.id === branchId)?.name ??
+      'All Accessible Branches';
+    const repackingSummary = { ...(repackingKpis.rows[0] ?? {}) } as Record<string, unknown>;
+    const yieldPercent =
+      repackingSummary.yieldPercent === null || repackingSummary.yieldPercent === undefined
+        ? null
+        : String(repackingSummary.yieldPercent);
+    repackingSummary.lossPercent =
+      yieldPercent === null ? null : Math.max(0, 100 - Number(yieldPercent)).toFixed(1);
+
     sendData(response, {
       range: { from, to, branchId: branchId ?? null },
+      metadata: {
+        generatedAt,
+        timezone: request.authUser!.organization.timezone || 'Asia/Manila',
+        currency: request.authUser!.organization.currency || 'PHP',
+        branchName,
+        status: 'ready',
+        version: '1.0',
+      },
       kpis,
       sales: {
         paymentMethods: paymentMethods.rows,
@@ -630,6 +861,16 @@ export function reportsRouter(database: Queryable): Router {
       cash: {
         ...cashKpis.rows[0],
         shiftLogs: shiftLogs.rows,
+      },
+      audit: canViewAudit
+        ? {
+            ...(auditKpis.rows[0] ?? {}),
+            events: auditEvents.rows,
+          }
+        : undefined,
+      repacking: {
+        ...repackingSummary,
+        batchRows: repackingBatches.rows,
       },
     });
   });

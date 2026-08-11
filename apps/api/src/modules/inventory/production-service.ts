@@ -59,7 +59,7 @@ export class ProductionService {
          left join product_units pu on (pu.organization_id=p.organization_id or pu.organization_id is null) and pu.code=p.unit
          left join branch_inventory bi on bi.organization_id=p.organization_id
            and bi.branch_id=$2 and bi.product_id=p.id and bi.variant_id is null
-         where p.organization_id=$1 and p.id=$3 and p.status='active'
+         where p.organization_id=$1 and p.branch_id=$2 and p.id=$3 and p.status='active'
            and p.track_inventory and p.inventory_role in ('sellable','both')`,
         [actor.organizationId, input.branchId, input.productId],
       );
@@ -88,7 +88,7 @@ export class ProductionService {
           container.unit as "containerUnit",container.units_per_base::float8 as "unitsPerBase"
          from product_recipes pr
          join products ingredient on ingredient.organization_id=pr.organization_id
-           and ingredient.id=pr.ingredient_product_id
+           and ingredient.branch_id=$2 and ingredient.id=pr.ingredient_product_id
          left join branch_inventory bi on bi.organization_id=pr.organization_id
            and bi.branch_id=$2 and bi.product_id=pr.ingredient_product_id
            and bi.variant_id is not distinct from pr.ingredient_variant_id
@@ -397,7 +397,7 @@ export class ProductionService {
        left join product_units pu on (pu.organization_id=p.organization_id or pu.organization_id is null) and pu.code=p.unit
        left join branch_inventory bi on bi.organization_id=p.organization_id
          and bi.branch_id=$2 and bi.product_id=p.id and bi.variant_id is null
-       where p.organization_id=$1 and p.id=$3 and p.status='active'
+       where p.organization_id=$1 and p.branch_id=$2 and p.id=$3 and p.status='active'
          and p.track_inventory and p.inventory_role in ('sellable','both')`,
       [actor.organizationId, input.branchId, input.productId],
     );
@@ -420,7 +420,7 @@ export class ProductionService {
         container.unit as "containerUnit",container.units_per_base::float8 as "unitsPerBase"
        from product_recipes pr
        join products ingredient on ingredient.organization_id=pr.organization_id
-         and ingredient.id=pr.ingredient_product_id
+         and ingredient.branch_id=$2 and ingredient.id=pr.ingredient_product_id
        left join branch_inventory bi on bi.organization_id=pr.organization_id
          and bi.branch_id=$2 and bi.product_id=pr.ingredient_product_id
          and bi.variant_id is not distinct from pr.ingredient_variant_id

@@ -193,7 +193,7 @@ export function inventoryRouter(database: Database): Router {
          join product_recipes pr on pr.organization_id=parent.organization_id
            and pr.parent_product_id=parent.id
          join products ingredient on ingredient.organization_id=pr.organization_id
-           and ingredient.id=pr.ingredient_product_id
+           and ingredient.branch_id=$2 and ingredient.id=pr.ingredient_product_id
          left join branch_inventory ingredient_inventory on ingredient_inventory.organization_id=pr.organization_id
            and ingredient_inventory.branch_id=$2
            and ingredient_inventory.product_id=pr.ingredient_product_id
@@ -201,7 +201,8 @@ export function inventoryRouter(database: Database): Router {
          left join product_variants container on container.organization_id=ingredient.organization_id
            and container.product_id=ingredient.id and container.is_portioning_container
            and container.is_active
-         where parent.organization_id=$1 and parent.status='active' and parent.track_inventory
+         where parent.organization_id=$1 and parent.branch_id=$2
+           and parent.status='active' and parent.track_inventory
            and parent.inventory_role in ('sellable','both')
          order by parent.name,ingredient.name`,
         [request.authUser!.organization.id, branchId],
@@ -312,8 +313,8 @@ export function inventoryRouter(database: Database): Router {
            left join product_variants pv
              on pv.organization_id=p.organization_id and pv.product_id=p.id
              and pv.is_portioning_container
-           where p.organization_id=$1 and p.id=$2`,
-          [organizationId, input.productId],
+           where p.organization_id=$1 and p.branch_id=$2 and p.id=$3`,
+          [organizationId, input.branchId, input.productId],
         );
         const product = config.rows[0];
         if (!product?.trackInventory) throw notFound('Inventory-tracked product');
@@ -362,7 +363,8 @@ export function inventoryRouter(database: Database): Router {
            from products p
            where bi.organization_id=$1 and bi.branch_id=$2 and bi.product_id=$3
              and bi.variant_id is null
-             and p.id=bi.product_id and p.organization_id=bi.organization_id and p.track_inventory
+             and p.id=bi.product_id and p.organization_id=bi.organization_id
+             and p.branch_id=bi.branch_id and p.track_inventory
            returning bi.quantity::float8 as quantity,
              bi.sealed_quantity::float8 as "sealedQuantity",
              bi.opened_quantity::float8 as "openedQuantity"`,

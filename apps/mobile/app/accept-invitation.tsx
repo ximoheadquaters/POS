@@ -9,6 +9,7 @@ import {
   finishInvitationSetup,
   InvitationFlowError,
   INVALID_INVITATION_MESSAGE,
+  setInvitationSetupActive,
   parseInvitationCallback,
   runInvitationSubmission,
   validateInvitationPassword,
@@ -63,6 +64,7 @@ export default function AcceptInvitationScreen() {
         await establishInvitationSession(supabase.auth, callback);
         setPage({ kind: 'form' });
       } catch (error) {
+        setInvitationSetupActive(false);
         setPage({
           kind: 'error',
           message:
@@ -106,6 +108,7 @@ export default function AcceptInvitationScreen() {
 
   async function returnToLogin() {
     if (redirectTimer.current) clearTimeout(redirectTimer.current);
+    setInvitationSetupActive(false);
     await signOut();
     router.replace('/(auth)/login');
   }

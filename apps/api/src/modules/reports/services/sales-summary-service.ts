@@ -44,7 +44,9 @@ export class SalesSummaryReportService {
              and ${branchScopeSQL('s')}
          ),
          sale_cost as (
-           select coalesce(sum(si.quantity*si.unit_cost),0) as total
+           select coalesce(sum(si.quantity*si.unit_cost),0) as total,
+             coalesce(sum(si.quantity*si.unit_price),0) as gross_sales,
+             coalesce(sum(si.quantity),0) as items_sold
            from sale_items si join scoped_sales s on s.id=si.sale_id
          ),
          scoped_returns as (
@@ -59,19 +61,28 @@ export class SalesSummaryReportService {
            join sale_items si on si.id=ri.sale_item_id
          )
          select
-           coalesce(sum(s.total),0)::text as "grossSales",
+           (select gross_sales from sale_cost)::text as "grossSales",
            coalesce((select sum(refund_total) from scoped_returns),0)::text as "customerRefunds",
-           (coalesce(sum(s.total),0) - coalesce((select sum(refund_total) from scoped_returns),0))::text as "netSales",
+           ((select gross_sales from sale_cost) - coalesce(sum(s.discount_total),0) -
+             coalesce((select sum(refund_total) from scoped_returns),0))::text as "netSales",
            coalesce(sum(s.discount_total),0)::text as discounts,
            coalesce(sum(s.tax_total),0)::text as taxes,
            count(s.id)::int as transactions,
            case when count(s.id) > 0
-             then round((coalesce(sum(s.total),0) - coalesce((select sum(refund_total) from scoped_returns),0)) / count(s.id), 2)::text
+             then round(((select gross_sales from sale_cost) - coalesce(sum(s.discount_total),0) -
+               coalesce((select sum(refund_total) from scoped_returns),0)) / count(s.id), 2)::text
              else '0.00' end as "averageTransaction",
            ((select total from sale_cost) - (select total from return_cost))::text as "netCost",
-           (coalesce(sum(s.total),0) - coalesce((select sum(refund_total) from scoped_returns),0) - ((select total from sale_cost) - (select total from return_cost)))::text as "grossProfit",
-           case when (coalesce(sum(s.total),0) - coalesce((select sum(refund_total) from scoped_returns),0)) > 0
-             then round(100 * (coalesce(sum(s.total),0) - coalesce((select sum(refund_total) from scoped_returns),0) - ((select total from sale_cost) - (select total from return_cost))) / (coalesce(sum(s.total),0) - coalesce((select sum(refund_total) from scoped_returns),0)), 2)::text
+           ((select gross_sales from sale_cost) - coalesce(sum(s.discount_total),0) -
+             coalesce((select sum(refund_total) from scoped_returns),0) -
+             ((select total from sale_cost) - (select total from return_cost)))::text as "grossProfit",
+           case when ((select gross_sales from sale_cost) - coalesce(sum(s.discount_total),0) -
+             coalesce((select sum(refund_total) from scoped_returns),0)) > 0
+             then round(100 * ((select gross_sales from sale_cost) - coalesce(sum(s.discount_total),0) -
+               coalesce((select sum(refund_total) from scoped_returns),0) -
+               ((select total from sale_cost) - (select total from return_cost))) /
+               ((select gross_sales from sale_cost) - coalesce(sum(s.discount_total),0) -
+                coalesce((select sum(refund_total) from scoped_returns),0)), 2)::text
              else '0.00' end as "grossMarginPercent"
          from scoped_sales s`,
         values,
@@ -155,7 +166,7 @@ export class SalesSummaryReportService {
         formattedValue: formatMoney(kpis.grossSales),
         drillDownAvailable: true,
         exportAvailable: true,
-        formulaDescription: 'SUM(sales.total) before refunds and discounts',
+        formulaDescription: 'SUM(sale_items.unit_price × sale_items.quantity)',
       },
       {
         cardId: 'net_sales',
@@ -164,7 +175,7 @@ export class SalesSummaryReportService {
         formattedValue: formatMoney(kpis.netSales),
         drillDownAvailable: true,
         exportAvailable: true,
-        formulaDescription: 'Gross Sales minus Customer Refunds',
+        formulaDescription: 'Gross Sales − Total Discounts − Refund Amount',
       },
       {
         cardId: 'customer_refunds',

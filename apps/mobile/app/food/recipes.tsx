@@ -4,15 +4,18 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
+import { useBranchStore } from '@/store/branch';
 
 export default function RecipesOverviewScreen() {
   const router = useRouter();
+  const branch = useBranchStore((state) => state.activeBranch);
 
   const { data: items, isLoading, refetch } = useQuery({
-    queryKey: ['food-recipes-overview'],
+    queryKey: ['food-recipes-overview', branch?.id],
+    enabled: Boolean(branch),
     queryFn: async () => {
       const res = await api<any[]>(
-        `/products?preparationBehavior=cook_to_order,preproduced`,
+        `/products?branchId=${branch!.id}&preparationBehavior=cook_to_order,preproduced`,
       );
       return Array.isArray(res) ? res : (res as any)?.data ?? [];
     },

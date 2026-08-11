@@ -3,6 +3,7 @@ import { Alert, FlatList, Text, TextInput, View } from 'react-native';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button, EmptyState, Header, Screen } from '@/components/ui';
+import { useBranchStore } from '@/store/branch';
 
 interface Customer {
   id: string;
@@ -14,20 +15,25 @@ interface Customer {
 import { AppSidebarProvider } from '@/components/app-sidebar';
 
 function CustomersContent() {
+  const branch = useBranchStore((state) => state.activeBranch);
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const client = useQueryClient();
   const query = useInfiniteQuery({
-    queryKey: ['customers', search],
+    queryKey: ['customers', branch?.id, search],
+    enabled: Boolean(branch),
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
       api<Customer[]>(
-        `/customers?page=${pageParam}&pageSize=30&search=${encodeURIComponent(search)}`,
+        `/customers?branchId=${branch!.id}&page=${pageParam}&pageSize=30&search=${encodeURIComponent(search)}`,
       ),
     getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
   });
   const create = useMutation({
-    mutationFn: () => api('/customers', { method: 'POST', body: JSON.stringify({ name }) }),
+    mutationFn: () => api('/customers', {
+      method: 'POST',
+      body: JSON.stringify({ branchId: branch!.id, name }),
+    }),
     onSuccess: async () => {
       setName('');
       await client.invalidateQueries({ queryKey: ['customers'] });

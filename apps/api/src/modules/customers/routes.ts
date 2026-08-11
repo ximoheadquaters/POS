@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { customerSchema, paginationSchema, uuidSchema } from '@ximo/shared';
 import type { Queryable } from '../../database/types.js';
-import { requireModule, requirePermission } from '../../middleware/auth.js';
+import { requireBranchAccess, requireModule, requirePermission } from '../../middleware/auth.js';
 import { validateBody, validateQuery } from '../../middleware/validation.js';
 import { notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
@@ -12,13 +12,14 @@ export function customersRouter(database: Queryable): Router {
   router.get(
     '/',
     requirePermission('customers:read'),
-    validateQuery(paginationSchema),
+    validateQuery(paginationSchema.extend({ branchId: uuidSchema })),
+    requireBranchAccess('query'),
     async (request, response) => {
       const query = request.query as any;
       const result = await database.query(
         `select id,name,email,phone,address,notes,is_active as "isActive",
           count(*) over()::int as total
-         from customers where organization_id=$1 and is_active
+         from customers where organization_id=$1 and branch_id=$5 and is_active
           and ($2::text is null or name ilike '%'||$2||'%' or phone ilike '%'||$2||'%')
          order by name limit $3 offset $4`,
         [
@@ -26,6 +27,7 @@ export function customersRouter(database: Queryable): Router {
           query.search ?? null,
           query.pageSize,
           (query.page - 1) * query.pageSize,
+          query.branchId,
         ],
       );
       const total = result.rows[0]?.total ?? 0;
@@ -42,13 +44,15 @@ export function customersRouter(database: Queryable): Router {
     '/',
     requirePermission('customers:manage'),
     validateBody(customerSchema),
+    requireBranchAccess('body'),
     async (request, response) => {
       const input = request.body;
       const result = await database.query(
-        `insert into customers (organization_id,name,email,phone,address,notes)
-         values ($1,$2,$3,$4,$5,$6) returning id,name,email,phone,address,notes`,
+        `insert into customers (organization_id,branch_id,name,email,phone,address,notes)
+         values ($1,$2,$3,$4,$5,$6,$7) returning id,name,email,phone,address,notes`,
         [
           request.authUser!.organization.id,
+          input.branchId,
           input.name,
           input.email ?? null,
           input.phone ?? null,
@@ -66,8 +70,8 @@ export function customersRouter(database: Queryable): Router {
     async (request, response) => {
       const id = uuidSchema.parse(request.params.id);
       const current = await database.query<any>(
-        'select * from customers where id=$1 and organization_id=$2 and is_active',
-        [id, request.authUser!.organization.id],
+        'select * from customers where id=$1 and organization_id=$2 and branch_id=any($3::uuid[]) and is_active',
+        [id, request.authUser!.organization.id, request.authUser!.branches.map((branch) => branch.id)],
       );
       if (!current.rows[0]) throw notFound('Customer');
       const input = { ...current.rows[0], ...request.body };
@@ -93,14 +97,16 @@ export function customersRouter(database: Queryable): Router {
     const [sales, returns] = await Promise.all([
       database.query(
         `select id,receipt_number as "receiptNumber",total::text,status,completed_at as "completedAt"
-         from sales where customer_id=$1 and organization_id=$2 order by completed_at desc limit 100`,
-        [id, organizationId],
+         from sales where customer_id=$1 and organization_id=$2
+           and branch_id=any($3::uuid[]) order by completed_at desc limit 100`,
+        [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
       ),
       database.query(
         `select r.id,r.return_number as "returnNumber",r.refund_total::text as "refundTotal",r.created_at as "createdAt"
          from returns r join sales s on s.id=r.sale_id
-         where s.customer_id=$1 and r.organization_id=$2 order by r.created_at desc limit 100`,
-        [id, organizationId],
+         where s.customer_id=$1 and r.organization_id=$2
+           and r.branch_id=any($3::uuid[]) order by r.created_at desc limit 100`,
+        [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
       ),
     ]);
     sendData(response, { sales: sales.rows, returns: returns.rows });

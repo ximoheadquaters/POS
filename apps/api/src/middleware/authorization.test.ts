@@ -30,12 +30,12 @@ class ProductCreationDatabase extends AuthorizationDatabase {
       return result([
         {
           id: '55555555-5555-4555-8555-555555555555',
-          name: values?.[3],
-          sku: values?.[4],
-          sellingPrice: values?.[9],
-          taxRate: values?.[10],
-          isTaxInclusive: values?.[11],
-          status: values?.[12],
+          name: values?.[4],
+          sku: values?.[5],
+          sellingPrice: values?.[12],
+          taxRate: values?.[13],
+          isTaxInclusive: values?.[14],
+          status: values?.[15],
         } as unknown as T,
       ]);
     }
@@ -103,12 +103,13 @@ describe('API authorization boundaries', () => {
       authActions,
     });
     const response = await request(app)
-      .get('/api/v1/products?page=1&pageSize=20')
+      .get(`/api/v1/products?page=1&pageSize=20&branchId=${database.user.branches[0]!.id}`)
       .set('authorization', 'Bearer valid-token')
       .expect(200);
     expect(response.body.data[0].name).toBe('Tenant A Product');
     const productCall = database.calls.find((call) => call.text.includes('from products p'));
     expect(productCall?.values?.[0]).toBe(database.user.organization.id);
+    expect(productCall?.values?.[4]).toBe(database.user.branches[0]!.id);
     expect(productCall?.values).not.toContain('99999999-9999-4999-8999-999999999999');
   });
 
@@ -148,6 +149,46 @@ describe('API authorization boundaries', () => {
       .expect(403);
 
     expect(response.body.error.code).toBe('BRANCH_ACCESS_DENIED');
+  });
+
+  it('limits the POS catalogue to tracked products stocked at the selected branch', async () => {
+    const database = new AuthorizationDatabase();
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    await request(app)
+      .get(`/api/v1/products?usage=pos&branchId=${database.user.branches[0]!.id}`)
+      .set('authorization', 'Bearer valid-token')
+      .expect(200);
+
+    const productCall = database.calls.find(
+      (call) => call.text.includes('from products p') && call.values?.includes('pos'),
+    );
+    expect(productCall?.text).toContain("$8::text is distinct from 'pos'");
+    expect(productCall?.text).toContain('branch_stock.quantity>0');
+  });
+
+  it('limits combo promotions to branches with enough component stock', async () => {
+    const database = new AuthorizationDatabase(
+      testUser({ modules: ['products', 'pos', 'promotions'] }),
+    );
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    await request(app)
+      .get(`/api/v1/pos/promotions?branchId=${database.user.branches[0]!.id}`)
+      .set('authorization', 'Bearer valid-token')
+      .expect(200);
+
+    const comboCall = database.calls.find((call) => call.text.includes('from promotions p'));
+    expect(comboCall?.values?.[1]).toBe(database.user.branches[0]!.id);
+    expect(comboCall?.text).toContain('coalesce(stock.quantity, 0) < stock_item.required_quantity');
   });
 
   it('rejects routes for disabled modules', async () => {

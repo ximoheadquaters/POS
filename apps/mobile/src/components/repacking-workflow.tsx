@@ -67,7 +67,8 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
   const branch = useBranchStore((state) => state.activeBranch);
   const { currentUser } = useSession();
   const { showAlert } = useIosAlert();
-  const profile = currentUser?.organization?.businessProfile ?? (currentUser as any)?.businessProfile ?? 'retail';
+  const profile =
+    currentUser?.organization?.businessProfile ?? (currentUser as any)?.businessProfile ?? 'retail';
   const isRetail = isRetailProfile && profile === 'retail';
   const queryClient = useQueryClient();
 
@@ -79,8 +80,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
   const productsQuery = useQuery({
     queryKey: ['production-products', branch?.id],
     enabled: Boolean(branch?.id),
-    queryFn: () =>
-      api<RepackingProduct[]>(`/inventory/production-products?branchId=${branch!.id}`),
+    queryFn: () => api<RepackingProduct[]>(`/inventory/production-products?branchId=${branch!.id}`),
     ...liveDataQueryOptions,
   });
 
@@ -149,10 +149,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
     return (
       <Screen>
         <Header title={isRetail ? 'Retail Repacking' : 'Production'} showBack />
-        <ErrorState
-          message="Select an active branch to perform repacking."
-          retry={() => {}}
-        />
+        <ErrorState message="Select an active branch to perform repacking." retry={() => {}} />
       </Screen>
     );
   }
@@ -213,10 +210,13 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
               </View>
               <View className="mt-3 flex-row justify-between border-t border-emerald-200/60 pt-2.5">
                 <Text className="text-xs font-medium text-emerald-800">
-                  Total Cost: <Text className="font-bold">{formatMoney(lastSubmittedBatch.totalCost)}</Text>
+                  Total Cost:{' '}
+                  <Text className="font-bold">{formatMoney(lastSubmittedBatch.totalCost)}</Text>
                 </Text>
                 <Text className="text-xs font-medium text-emerald-800">
-                  Unit Cost: <Text className="font-bold">{formatMoney(lastSubmittedBatch.unitCost)}</Text> / pack
+                  Unit Cost:{' '}
+                  <Text className="font-bold">{formatMoney(lastSubmittedBatch.unitCost)}</Text> /
+                  pack
                 </Text>
               </View>
               <Button
@@ -234,12 +234,14 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
 
           {/* Step 1: Select Finished Product */}
           <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-3">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center gap-2">
+            <View className="flex-row flex-wrap items-center justify-between gap-2">
+              <View className="min-w-0 flex-1 flex-row items-center gap-2">
                 <View className="h-6 w-6 items-center justify-center rounded-full bg-brand-700">
                   <Text className="text-xs font-bold text-white">1</Text>
                 </View>
-                <Text className="text-sm font-bold text-slate-900">Select Finished Product</Text>
+                <Text numberOfLines={2} className="flex-1 text-sm font-bold text-slate-900">
+                  Select Finished Product
+                </Text>
               </View>
               <Text className="text-xs text-slate-500">
                 {productsList.length} recipe item{productsList.length === 1 ? '' : 's'}
@@ -305,36 +307,21 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
           {/* Step 2: Output Quantity & Recipe Requirements */}
           {selectedProduct ? (
             <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-4">
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-2">
+              <View className="flex-row flex-wrap items-center justify-between gap-2">
+                <View className="min-w-0 flex-1 flex-row items-center gap-2">
                   <View className="h-6 w-6 items-center justify-center rounded-full bg-brand-700">
                     <Text className="text-xs font-bold text-white">2</Text>
                   </View>
-                  <Text className="text-sm font-bold text-slate-900">Packs to Produce</Text>
+                  <Text numberOfLines={2} className="flex-1 text-sm font-bold text-slate-900">
+                    Packs to Produce
+                  </Text>
                 </View>
-                <Text className="text-xs text-slate-500">{selectedProduct.unit}s output</Text>
+                <Text numberOfLines={1} className="max-w-32 text-xs text-slate-500">
+                  {selectedProduct.unit}s output
+                </Text>
               </View>
 
-              <View className="flex-row items-center gap-2">
-                <Pressable
-                  onPress={() => {
-                    const next = Math.max(1, (numOutputQuantity || 1) - 5);
-                    setOutputQuantity(String(next));
-                  }}
-                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
-                >
-                  <Text className="text-sm font-bold text-slate-700">-5</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    const next = Math.max(1, (numOutputQuantity || 1) - 1);
-                    setOutputQuantity(String(next));
-                  }}
-                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
-                >
-                  <Feather name="minus" size={16} color="#334155" />
-                </Pressable>
-
+              <View className="gap-2">
                 <TextInput
                   value={outputQuantity}
                   onChangeText={setOutputQuantity}
@@ -342,27 +329,30 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                   placeholder="10"
                   placeholderTextColor="#94A3B8"
                   selectionColor="#1A593B"
-                  className="h-12 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-center text-base font-bold text-slate-900 focus:border-brand-600"
+                  accessibilityLabel="Packs to produce"
+                  className="h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-center text-base font-bold text-slate-900 focus:border-brand-600"
                 />
-
-                <Pressable
-                  onPress={() => {
-                    const next = (numOutputQuantity || 0) + 1;
-                    setOutputQuantity(String(next));
-                  }}
-                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
-                >
-                  <Feather name="plus" size={16} color="#334155" />
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    const next = (numOutputQuantity || 0) + 10;
-                    setOutputQuantity(String(next));
-                  }}
-                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
-                >
-                  <Text className="text-sm font-bold text-slate-700">+10</Text>
-                </Pressable>
+                <View className="flex-row gap-2">
+                  {[
+                    { label: '-5', change: -5 },
+                    { label: '-1', change: -1 },
+                    { label: '+1', change: 1 },
+                    { label: '+10', change: 10 },
+                  ].map((shortcut) => (
+                    <Pressable
+                      key={shortcut.label}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${shortcut.change > 0 ? 'Add' : 'Subtract'} ${Math.abs(shortcut.change)} packs`}
+                      onPress={() => {
+                        const next = Math.max(1, (numOutputQuantity || 1) + shortcut.change);
+                        setOutputQuantity(String(next));
+                      }}
+                      className="h-11 min-w-0 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100"
+                    >
+                      <Text className="text-sm font-bold text-slate-700">{shortcut.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
 
               <View className="gap-2 border-t border-slate-100 pt-3">
@@ -371,7 +361,11 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                 </Text>
 
                 {selectedProduct.ingredients.map((ing) => {
-                  const reqPerUnit = convertRecipeQuantity(ing.quantityRequired, ing.recipeUnit, ing.baseUnit);
+                  const reqPerUnit = convertRecipeQuantity(
+                    ing.quantityRequired,
+                    ing.recipeUnit,
+                    ing.baseUnit,
+                  );
                   const totalReq = reqPerUnit * (validOutputQuantity ? numOutputQuantity : 0);
                   const sufficient = ing.availableQuantity >= totalReq;
 
@@ -382,8 +376,13 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                         sufficient ? 'border-slate-200 bg-slate-50' : 'border-amber-300 bg-amber-50'
                       }`}
                     >
-                      <View className="flex-row items-center justify-between">
-                        <Text className="text-sm font-bold text-slate-900">{ing.name}</Text>
+                      <View className="flex-row flex-wrap items-center justify-between gap-2">
+                        <Text
+                          numberOfLines={2}
+                          className="min-w-0 flex-1 text-sm font-bold text-slate-900"
+                        >
+                          {ing.name}
+                        </Text>
                         <View
                           className={`rounded-full px-2 py-0.5 ${
                             sufficient ? 'bg-emerald-100' : 'bg-amber-100'
@@ -398,9 +397,13 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                           </Text>
                         </View>
                       </View>
-                      <View className="mt-1 flex-row items-center justify-between">
-                        <Text className="text-xs text-slate-600">
-                          Need: <Text className="font-semibold text-slate-900">{totalReq} {ing.baseUnit}</Text> ({ing.quantityRequired} {ing.recipeUnit}/pack)
+                      <View className="mt-1 flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                        <Text className="min-w-0 text-xs text-slate-600">
+                          Need:{' '}
+                          <Text className="font-semibold text-slate-900">
+                            {totalReq} {ing.baseUnit}
+                          </Text>{' '}
+                          ({ing.quantityRequired} {ing.recipeUnit}/pack)
                         </Text>
                         <Text className="text-xs text-slate-500">
                           In Stock: {ing.availableQuantity} {ing.baseUnit}
@@ -429,14 +432,14 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                 </Text>
               ) : preview ? (
                 <View className="gap-2.5">
-                  <View className="flex-row items-center justify-between rounded-xl bg-slate-50 p-3">
-                    <View>
+                  <View className="flex-row items-center justify-between gap-3 rounded-xl bg-slate-50 p-3">
+                    <View className="min-w-0 flex-1">
                       <Text className="text-xs text-slate-500">Estimated Total Cost</Text>
                       <Text className="mt-0.5 text-base font-black text-slate-900">
                         {formatMoney(preview.estimatedTotalCost)}
                       </Text>
                     </View>
-                    <View className="items-end">
+                    <View className="min-w-0 flex-1 items-end">
                       <Text className="text-xs text-slate-500">Cost per Pack</Text>
                       <Text className="mt-0.5 text-base font-black text-brand-700">
                         {formatMoney(preview.estimatedUnitCost)}
@@ -496,9 +499,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
         <Modal visible={showConfirmModal} transparent animationType="fade">
           <View className="flex-1 items-center justify-center bg-black/50 p-4">
             <View className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl gap-4">
-              <Text className="text-base font-bold text-slate-900">
-                Confirm Repacking Batch
-              </Text>
+              <Text className="text-base font-bold text-slate-900">Confirm Repacking Batch</Text>
               <Text className="text-xs text-slate-600">
                 Review the batch details before recording inventory consumption and finished output.
               </Text>
@@ -511,15 +512,21 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                   </View>
                   <View className="flex-row justify-between">
                     <Text className="text-xs text-slate-500">Output Quantity</Text>
-                    <Text className="text-xs font-bold text-brand-800">{numOutputQuantity} {selectedProduct.unit}s</Text>
+                    <Text className="text-xs font-bold text-brand-800">
+                      {numOutputQuantity} {selectedProduct.unit}s
+                    </Text>
                   </View>
                   <View className="flex-row justify-between border-t border-slate-200/60 pt-1.5">
                     <Text className="text-xs text-slate-500">Total Cost</Text>
-                    <Text className="text-xs font-bold text-slate-900">{formatMoney(preview.estimatedTotalCost)}</Text>
+                    <Text className="text-xs font-bold text-slate-900">
+                      {formatMoney(preview.estimatedTotalCost)}
+                    </Text>
                   </View>
                   <View className="flex-row justify-between">
                     <Text className="text-xs text-slate-500">Unit Cost</Text>
-                    <Text className="text-xs font-bold text-slate-900">{formatMoney(preview.estimatedUnitCost)}</Text>
+                    <Text className="text-xs font-bold text-slate-900">
+                      {formatMoney(preview.estimatedUnitCost)}
+                    </Text>
                   </View>
                 </View>
               ) : null}
@@ -531,9 +538,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                   onPress={() => setShowConfirmModal(false)}
                 />
                 <Button
-                  title={
-                    recordMutation.isPending ? 'Recording…' : 'Confirm & Record'
-                  }
+                  title={recordMutation.isPending ? 'Recording…' : 'Confirm & Record'}
                   disabled={recordMutation.isPending}
                   onPress={() => recordMutation.mutate()}
                 />

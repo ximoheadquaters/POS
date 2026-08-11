@@ -82,6 +82,7 @@ describe('fetchPosCombos', () => {
     });
 
     const combos = await fetchPosCombos('branch-1');
+    expect(api).toHaveBeenCalledWith(expect.stringContaining('/promotions?branchId=branch-1&'));
     expect(combos).toHaveLength(1);
     expect(combos[0]?.name).toBe('com1');
     expect(combos[0]?.components[0]?.sellingPrice).toBe('25.00');

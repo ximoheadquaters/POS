@@ -6,6 +6,7 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useSession } from '@/providers/session';
+import { useBranchStore } from '@/store/branch';
 
 type Section = 'categories' | 'brands' | 'units';
 
@@ -49,6 +50,7 @@ const sections: SectionDefinition[] = [
 ];
 
 function CatalogueContent() {
+  const branch = useBranchStore((state) => state.activeBranch);
   const { currentUser } = useSession();
   const editable = currentUser?.permissions.includes('products:manage') ?? false;
   const client = useQueryClient();
@@ -64,8 +66,9 @@ function CatalogueContent() {
   const selected = sections.find((item) => item.key === section)!;
 
   const query = useQuery({
-    queryKey: ['catalogue', section],
-    queryFn: () => api<MasterItem[]>(selected.endpoint),
+    queryKey: ['catalogue', branch?.id, section],
+    enabled: Boolean(branch),
+    queryFn: () => api<MasterItem[]>(`${selected.endpoint}?branchId=${branch!.id}`),
   });
 
   const clearForm = () => {
@@ -106,6 +109,7 @@ function CatalogueContent() {
   const save = useMutation({
     mutationFn: async () => {
       const body = {
+        branchId: branch!.id,
         name: name.trim(),
         description: description.trim() || undefined,
         isActive: editing?.isActive ?? true,

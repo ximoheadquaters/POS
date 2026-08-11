@@ -94,7 +94,7 @@ async function fetchCombosViaPromotionsApi(
   search?: string,
 ): Promise<PosComboPromotion[]> {
   const list = await api<PromotionSummary[]>(
-    `/promotions?page=1&pageSize=100${
+    `/promotions?branchId=${branchId}&page=1&pageSize=100${
       search ? `&search=${encodeURIComponent(search)}` : ''
     }`,
   );
@@ -115,6 +115,15 @@ async function fetchCombosViaPromotionsApi(
         ).filter((component): component is PosComboComponent => Boolean(component));
 
         if (!components.length) return null;
+        if (
+          components.some(
+            (component) =>
+              component.trackInventory !== false &&
+              (component.availableQuantity ?? 0) < component.requiredQuantity,
+          )
+        ) {
+          return null;
+        }
 
         return {
           id: promo.id,

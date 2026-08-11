@@ -116,11 +116,28 @@ export function posRouter(database: Database): Router {
           ), '[]'::jsonb) as components
          from promotions p
          where p.organization_id = $1
+           and p.branch_id = $2
            and p.is_active
            and p.type = 'combo_bundle'
            and p.combo_price is not null
            and (p.start_date is null or p.start_date <= now())
            and (p.end_date is null or p.end_date >= now())
+           and not exists (
+             select 1
+             from promotion_items stock_item
+             join products stock_product
+               on stock_product.id = stock_item.product_id
+               and stock_product.organization_id = stock_item.organization_id
+             left join branch_inventory stock
+               on stock.organization_id = stock_product.organization_id
+               and stock.branch_id = $2
+               and stock.product_id = stock_product.id
+               and stock.variant_id is null
+             where stock_item.promotion_id = p.id
+               and stock_item.organization_id = p.organization_id
+               and stock_product.track_inventory
+               and coalesce(stock.quantity, 0) < stock_item.required_quantity
+           )
            and ($3::text is null
              or p.name ilike '%' || $3 || '%'
              or coalesce(p.code, '') ilike '%' || $3 || '%')

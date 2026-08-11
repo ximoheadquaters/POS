@@ -154,9 +154,9 @@ function ShiftReportsContent() {
       api<ShiftReportResponse>(
         `/reports/shifts?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(
           range.to,
-        )}&page=1&pageSize=100${branch?.id ? `&branchId=${branch.id}` : ''}`,
+        )}&page=1&pageSize=100&branchId=${branch!.id}`,
       ),
-    enabled: Boolean(isModuleEnabled),
+    enabled: Boolean(isModuleEnabled && branch?.id),
   });
 
   if (!isModuleEnabled) {

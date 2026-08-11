@@ -3,10 +3,12 @@ import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, TextInput 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
+import { useBranchStore } from '@/store/branch';
 
 export default function RecipeEditorScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
   const router = useRouter();
+  const branch = useBranchStore((state) => state.activeBranch);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -17,10 +19,10 @@ export default function RecipeEditorScreen() {
   >([]);
 
   useEffect(() => {
-    if (productId) {
+    if (productId && branch?.id) {
       Promise.all([
         api<any>(`/products/${productId}`),
-        api<any[]>(`/products?inventoryRole=ingredient,both`),
+        api<any[]>(`/products?branchId=${branch.id}&inventoryRole=ingredient,both`),
         api<any[]>(`/products/${productId}/recipe`),
       ])
         .then(([prodRes, ingRes, recipeRes]) => {
@@ -43,7 +45,7 @@ export default function RecipeEditorScreen() {
         })
         .finally(() => setLoading(false));
     }
-  }, [productId]);
+  }, [branch?.id, productId]);
 
   const handleAddIngredient = (ing: any) => {
     if (recipeItems.some((item) => item.ingredientProductId === ing.id)) return;

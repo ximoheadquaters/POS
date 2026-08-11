@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib/cjs/index.js';
 import * as XLSX from 'xlsx-js-style';
 import { describe, expect, it } from 'vitest';
-import { buildReportsExcel, buildReportsPdf } from './report-export';
+import { buildReportsCsv, buildReportsExcel, buildReportsPdf } from './report-export';
 import type { ReportExportMetadata, ReportsWorkspace } from './report-types';
 
 const metadata: ReportExportMetadata = {
@@ -108,7 +108,7 @@ const report: ReportsWorkspace = {
 };
 
 describe('report exports', () => {
-  it('creates a valid six-sheet Excel workbook with numeric report values', async () => {
+  it('creates a valid eight-sheet Excel workbook with numeric report values', async () => {
     const output = buildReportsExcel(report, metadata);
     expect(output.fileName).toBe('ximo-reports-main-branch-2026-07-01-to-2026-07-31.xlsx');
     expect(Array.from(output.bytes.slice(0, 2))).toEqual([0x50, 0x4b]);
@@ -121,6 +121,8 @@ describe('report exports', () => {
       'Purchasing',
       'Profit',
       'Cash & Shifts',
+      'Audit',
+      'Repacking',
     ]);
     expect(workbook.Sheets.Summary?.B7?.v).toBe(12500);
     expect(workbook.Sheets.Sales?.A1?.v).toBe('Sales trend');
@@ -129,6 +131,16 @@ describe('report exports', () => {
       await mkdir(process.env.REPORT_EXPORT_FIXTURE_DIR, { recursive: true });
       await writeFile(`${process.env.REPORT_EXPORT_FIXTURE_DIR}/${output.fileName}`, output.bytes);
     }
+  });
+
+  it('creates a section-specific UTF-8 CSV export', () => {
+    const output = buildReportsCsv(report, metadata, 'sales');
+    const csv = new TextDecoder().decode(output.bytes);
+
+    expect(output.fileName).toBe('ximo-reports-main-branch-2026-07-01-to-2026-07-31-sales.csv');
+    expect(csv).toContain('Organization,Jethro Store');
+    expect(csv).toContain('Gross Sales,12500');
+    expect(csv).toContain('Date,Sales,Transactions');
   });
 
   it('creates a readable, paginated PDF report', async () => {

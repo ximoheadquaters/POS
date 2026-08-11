@@ -80,7 +80,8 @@ npx.cmd --yes pnpm@11.9.0 --filter @ximo/api platform:token:create --name "Main 
 
 Save the printed value as `XIMO_POS_API_TOKEN` only in the website server environment. The website
 server calls `/api/v1/platform`; the token must never be included in a browser bundle. See
-[api.md](docs/api.md#platform-api) for endpoint contracts.
+[api.md](docs/api.md#platform-api) for endpoint contracts and
+[platform-foundation.md](docs/platform-foundation.md) for the shared website/POS rollout.
 
 ## Workspaces
 

@@ -224,12 +224,12 @@ function PromotionsContent() {
   };
 
   const query = useInfiniteQuery({
-    queryKey: ['promotions', search],
+    queryKey: ['promotions', branch?.id, search],
     enabled: hasModule,
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
       api<PromotionSummary[]>(
-        `/promotions?page=${pageParam}&pageSize=30${
+        `/promotions?branchId=${branch!.id}&page=${pageParam}&pageSize=30${
           search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ''
         }`,
       ),
@@ -277,6 +277,7 @@ function PromotionsContent() {
   });
 
   const buildCreatePayload = () => {
+    if (!branch?.id) throw new Error('Select a branch before creating a promotion.');
     const trimmedName = name.trim();
     if (!trimmedName) throw new Error('Enter a promotion name before saving.');
 
@@ -321,6 +322,7 @@ function PromotionsContent() {
     }
 
     return {
+      branchId: branch.id,
       name: trimmedName,
       type,
       description: description.trim() || undefined,

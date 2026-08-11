@@ -6,6 +6,7 @@ export interface OfflineSnapshot {
   branchId: string;
   syncedAt: string;
   products: unknown[];
+  posProducts?: unknown[];
   inventory: unknown[];
   customers: unknown[];
   categories: unknown[];
@@ -83,7 +84,10 @@ export async function offlineSnapshotFallback<T>(path: string): Promise<T | unde
     });
   if (pathname === '/products/summary') return roleCounts(snapshot.products) as T;
   if (pathname === '/inventory/summary') return roleCounts(snapshot.inventory) as T;
-  if (pathname === '/products') return page(filtered(snapshot.products), parameters) as T;
+  if (pathname === '/products') {
+    const products = usage === 'pos' ? (snapshot.posProducts ?? snapshot.products) : snapshot.products;
+    return page(filtered(products), parameters) as T;
+  }
   if (pathname === '/inventory') return page(filtered(snapshot.inventory), parameters) as T;
   if (pathname === '/customers') return page(filtered(snapshot.customers), parameters) as T;
   if (pathname === '/categories') return snapshot.categories as T;
@@ -93,7 +97,8 @@ export async function offlineSnapshotFallback<T>(path: string): Promise<T | unde
   if (pathname === '/settings') return snapshot.settings as T;
   if (pathname === '/products/lookup') {
     const code = parameters.get('code');
-    return filtered(snapshot.products).find((item) => {
+    const products = usage === 'pos' ? (snapshot.posProducts ?? snapshot.products) : snapshot.products;
+    return filtered(products).find((item) => {
       const product = item as {
         sku?: string;
         barcodes?: string[];

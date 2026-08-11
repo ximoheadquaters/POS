@@ -1,8 +1,4 @@
-import {
-  MODULE_DEPENDENCIES,
-  type BusinessProfile,
-  type ModuleCode,
-} from '@ximo/shared';
+import { MODULE_DEPENDENCIES, type BusinessProfile, type ModuleCode } from '@ximo/shared';
 import type { Queryable } from '../database/types.js';
 
 export function pruneDisabledDependentModules(modules: ModuleCode[]): ModuleCode[] {
@@ -38,10 +34,13 @@ export class EntitlementService {
     const result = await queryable.query<{ code: string }>(
       `select m.code
        from modules m
+       join applications application
+         on application.id = m.application_id and application.code = 'ximo_pos'
        join lateral (
          select sub.plan_id, sub.status
          from subscriptions sub
          where sub.organization_id = $1
+           and sub.application_id = application.id
            and sub.status in ('trialing', 'active')
          order by sub.created_at desc, sub.id desc
          limit 1

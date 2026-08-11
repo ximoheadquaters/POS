@@ -17,12 +17,14 @@ export const provisionOrganizationRequestSchema = z.object({
   businessProfile: z.enum(['retail', 'food_service', 'hybrid']).default('retail'),
   ownerEmail: z.string(),
   ownerName: z.string().optional(),
+  ownerUserId: z.uuid().optional(),
 });
 
 export type ProvisionOrganizationRequest = z.infer<typeof provisionOrganizationRequestSchema>;
 
 interface PlanRow {
   id: string;
+  applicationId: string;
   code: string;
   name: string;
   isActive: boolean;
@@ -44,7 +46,7 @@ export interface ProvisionedOrganization {
   owner: {
     email: string;
     displayName: string;
-    invitationStatus: 'pending';
+    invitationStatus: 'pending' | 'accepted';
   };
   defaultBranch: {
     id: string;
@@ -75,6 +77,7 @@ function normalize(input: ProvisionOrganizationRequest): ProvisionOrganizationRe
     businessProfile: input.businessProfile ?? 'retail',
     ownerEmail,
     ownerName: input.ownerName?.trim() || fallbackOwnerName,
+    ...(input.ownerUserId ? { ownerUserId: input.ownerUserId } : {}),
   };
 }
 
@@ -195,7 +198,7 @@ export class PlatformProvisioningService {
 
         validateInput(input);
         const planResult = await transaction.query<PlanRow>(
-          `select p.id,p.code,p.name,p.is_active as "isActive",
+          `select p.id,p.application_id as "applicationId",p.code,p.name,p.is_active as "isActive",
             p.is_available_for_onboarding as "isAvailableForOnboarding",
             p.allowed_onboarding_statuses::text[] as "allowedOnboardingStatuses",
             coalesce(
@@ -204,6 +207,8 @@ export class PlatformProvisioningService {
               '[]'::jsonb
             ) as modules
            from plans p
+           join applications application
+             on application.id=p.application_id and application.code='ximo_pos'
            left join plan_modules pm on pm.plan_id=p.id
            left join modules m on m.id=pm.module_id
            where p.code=$1
@@ -235,11 +240,25 @@ export class PlatformProvisioningService {
           );
         }
 
-        const invitedOwner = await this.authActions.inviteUser({
-          email: input.ownerEmail,
-          displayName: input.ownerName!,
-        });
-        invitedAuthUserId = invitedOwner.id;
+        let ownerAuthUser: { id: string; email: string };
+        let ownerInvitationStatus: 'pending' | 'accepted' = 'pending';
+        if (input.ownerUserId) {
+          const existingOwner = await this.authActions.getUser(input.ownerUserId);
+          if (!existingOwner || existingOwner.email.trim().toLowerCase() !== input.ownerEmail) {
+            throw unprocessable(
+              'OWNER_ACCOUNT_MISMATCH',
+              'The signed-in owner account does not match the supplied owner email',
+            );
+          }
+          ownerAuthUser = existingOwner;
+          ownerInvitationStatus = existingOwner.lastSignInAt ? 'accepted' : 'pending';
+        } else {
+          ownerAuthUser = await this.authActions.inviteUser({
+            email: input.ownerEmail,
+            displayName: input.ownerName!,
+          });
+          invitedAuthUserId = ownerAuthUser.id;
+        }
 
         const organizationId = randomUUID();
         const organization = await transaction.query<{
@@ -262,9 +281,9 @@ export class PlatformProvisioningService {
           ],
         );
         await transaction.query(
-          `insert into subscriptions (organization_id,plan_id,status)
-           values ($1,$2,$3)`,
-          [organizationId, plan.id, input.subscriptionStatus],
+          `insert into subscriptions (organization_id,application_id,plan_id,status)
+           values ($1,$2,$3,$4)`,
+          [organizationId, plan.applicationId, plan.id, input.subscriptionStatus],
         );
         await transaction.query(
           `insert into organization_settings (
@@ -328,7 +347,7 @@ export class PlatformProvisioningService {
           `insert into profiles (
             id,organization_id,role_id,display_name,email,is_active,invitation_sent_at
            ) values ($1,$2,$3,$4,$5,true,now())`,
-          [invitedOwner.id, organizationId, ownerRole.id, input.ownerName, invitedOwner.email],
+          [ownerAuthUser.id, organizationId, ownerRole.id, input.ownerName, ownerAuthUser.email],
         );
         const branch = await transaction.query<{ id: string; name: string; code: string }>(
           `insert into branches (organization_id,name,code,is_active)
@@ -339,7 +358,7 @@ export class PlatformProvisioningService {
         await transaction.query(
           `insert into user_branches (organization_id,user_id,branch_id)
            values ($1,$2,$3)`,
-          [organizationId, invitedOwner.id, branch.rows[0]!.id],
+          [organizationId, ownerAuthUser.id, branch.rows[0]!.id],
         );
         await transaction.query(
           `insert into registers (organization_id,branch_id,name,code,is_active)
@@ -354,9 +373,9 @@ export class PlatformProvisioningService {
           subscriptionStatus: input.subscriptionStatus,
           enabledModules: plan.modules.map((module) => ({ ...module, source: 'plan' as const })),
           owner: {
-            email: invitedOwner.email,
+            email: ownerAuthUser.email,
             displayName: input.ownerName!,
-            invitationStatus: 'pending',
+            invitationStatus: ownerInvitationStatus,
           },
           defaultBranch: branch.rows[0]!,
         };
@@ -365,7 +384,7 @@ export class PlatformProvisioningService {
           `insert into audit_logs (
             organization_id,branch_id,actor_id,action,entity_type,entity_id,after_data
            ) values ($1,$2,$3,'organization.created','organization',$1,$4::jsonb)`,
-          [organizationId, branch.rows[0]!.id, invitedOwner.id, JSON.stringify(data)],
+          [organizationId, branch.rows[0]!.id, ownerAuthUser.id, JSON.stringify(data)],
         );
         await transaction.query(
           `insert into platform_audit_logs (

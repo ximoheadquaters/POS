@@ -67,8 +67,9 @@ function PurchaseOrderFormContent() {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [createdOrder, setCreatedOrder] = useState<CreatedPurchaseOrder | null>(null);
   const suppliers = useQuery({
-    queryKey: ['suppliers'],
-    queryFn: () => api<Supplier[]>('/suppliers'),
+    queryKey: ['suppliers', branch?.id],
+    enabled: Boolean(branch),
+    queryFn: () => api<Supplier[]>(`/suppliers?branchId=${branch!.id}`),
   });
   const products = useQuery({
     queryKey: ['purchase-products', branch?.id],

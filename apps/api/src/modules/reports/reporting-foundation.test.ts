@@ -66,14 +66,14 @@ class FakeReportDatabase implements Database {
         {
           grossSales: '1250.00',
           customerRefunds: '150.00',
-          netSales: '1100.00',
+          netSales: '1050.00',
           discounts: '50.00',
           taxes: '120.00',
           transactions: 5,
-          averageTransaction: '220.00',
+          averageTransaction: '210.00',
           netCost: '600.00',
-          grossProfit: '500.00',
-          grossMarginPercent: '45.45',
+          grossProfit: '450.00',
+          grossMarginPercent: '42.86',
         } as unknown as T,
       ];
     } else if (sql.includes('from sale_items si')) {
@@ -88,9 +88,9 @@ class FakeReportDatabase implements Database {
           unitsPerBase: 12,
           baseQuantity: 36,
           baseUnit: 'piece',
-          sales: '1100.00',
+          sales: '1050.00',
           cost: '600.00',
-          profit: '500.00',
+          profit: '450.00',
         } as unknown as T,
       ];
     } else if (sql.includes('from branches')) {
@@ -114,7 +114,7 @@ class FakeReportDatabase implements Database {
 }
 
 describe('Phase F1 — Reporting Foundation & Sales Summary Proof Tests', () => {
-  it('1. Gross Sales uses canonical definition (SUM(sales.total) before refunds)', async () => {
+  it('1. Gross Sales uses canonical line-price times quantity before discounts and refunds', async () => {
     const db = new FakeReportDatabase();
     const service = new SalesSummaryReportService(db);
     const scope = resolveReportScope(mockOwner, { from: '2026-08-01', to: '2026-08-06' });
@@ -135,7 +135,7 @@ describe('Phase F1 — Reporting Foundation & Sales Summary Proof Tests', () => 
     const refundsCard = report.summaryCards.find((c) => c.cardId === 'customer_refunds');
     const netSalesCard = report.summaryCards.find((c) => c.cardId === 'net_sales');
     expect(refundsCard?.value).toBe(150);
-    expect(netSalesCard?.value).toBe(1100);
+    expect(netSalesCard?.value).toBe(1050);
   });
 
   it('5. Partial and Full Refunds update Net Sales correctly', async () => {
@@ -147,7 +147,8 @@ describe('Phase F1 — Reporting Foundation & Sales Summary Proof Tests', () => 
     const netSales = report.summaryCards.find((c) => c.cardId === 'net_sales')?.value;
     const grossSales = report.summaryCards.find((c) => c.cardId === 'gross_sales')?.value;
     const refunds = report.summaryCards.find((c) => c.cardId === 'customer_refunds')?.value;
-    expect(netSales).toBe(Number(grossSales) - Number(refunds));
+    const discounts = report.summaryCards.find((c) => c.cardId === 'discounts')?.value;
+    expect(netSales).toBe(Number(grossSales) - Number(discounts) - Number(refunds));
   });
 
   it('8. Selling unit quantity and base unit quantity are calculated correctly', async () => {

@@ -90,6 +90,7 @@ class ProvisioningDatabase implements Database {
       return result([
         {
           id: PLAN_ID,
+          applicationId: '99999999-9999-4999-8999-999999999999',
           code: 'business',
           name: 'Business',
           isActive: this.planActive,
@@ -174,7 +175,9 @@ class ProvisioningDatabase implements Database {
   async close() {}
 }
 
-function authFixture(options: { failInvite?: boolean; duplicateAuth?: boolean } = {}) {
+function authFixture(
+  options: { failInvite?: boolean; duplicateAuth?: boolean; existingUser?: boolean } = {},
+) {
   const invitations: string[] = [];
   const deletions: string[] = [];
   const actions: AuthActions = {
@@ -192,7 +195,16 @@ function authFixture(options: { failInvite?: boolean; duplicateAuth?: boolean } 
       return { id: OWNER_ID, email: input.email };
     },
     resendOwnerInvitation: async () => undefined,
-    getUser: async () => null,
+    getUser: async (userId) =>
+      options.existingUser && userId === OWNER_ID
+        ? {
+            id: OWNER_ID,
+            email: requestBody.ownerEmail,
+            createdAt: '2026-08-10T00:00:00.000Z',
+            invitedAt: null,
+            lastSignInAt: '2026-08-10T00:05:00.000Z',
+          }
+        : null,
     deleteUser: async (userId) => {
       deletions.push(userId);
     },
@@ -334,6 +346,26 @@ describe('Platform organization provisioning', () => {
     expect(response.body.error.code).toBe('OWNER_ALREADY_EXISTS');
     expect(database.organizations.size).toBe(0);
     expect(database.idempotency.size).toBe(0);
+  });
+
+  it('links a website-authenticated owner instead of sending another invitation', async () => {
+    const token = createPlatformToken();
+    const database = new ProvisioningDatabase(token.tokenHash);
+    const auth = authFixture({ existingUser: true });
+    const response = await request(createProvisioningApp(database, auth.actions))
+      .post('/api/v1/platform/organizations')
+      .set('authorization', `Bearer ${token.token}`)
+      .set('idempotency-key', 'website-order-existing-owner-1001')
+      .send({ ...requestBody, ownerUserId: OWNER_ID })
+      .expect(201);
+
+    expect(response.body.data.owner).toMatchObject({
+      email: requestBody.ownerEmail,
+      invitationStatus: 'accepted',
+    });
+    expect(auth.invitations).toHaveLength(0);
+    const profileInsert = database.calls.find((call) => call.text.includes('insert into profiles'));
+    expect(profileInsert?.values?.[0]).toBe(OWNER_ID);
   });
 
   it('distinguishes malformed requests from invalid domain values', async () => {

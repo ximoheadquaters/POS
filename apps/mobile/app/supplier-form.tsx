@@ -6,8 +6,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, Field, Header, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
+import { useBranchStore } from '@/store/branch';
 
 function SupplierFormContent() {
+  const branch = useBranchStore((state) => state.activeBranch);
   const params = useLocalSearchParams<{
     id?: string;
     name?: string;
@@ -34,6 +36,7 @@ function SupplierFormContent() {
       api(params.id ? `/suppliers/${params.id}` : '/suppliers', {
         method: params.id ? 'PATCH' : 'POST',
         body: JSON.stringify({
+          branchId: branch!.id,
           name,
           contactName,
           email,

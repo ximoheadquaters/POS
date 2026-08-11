@@ -64,12 +64,14 @@ export const branchSchema = z.object({
 });
 
 export const categorySchema = z.object({
+  branchId: uuidSchema,
   name: z.string().trim().min(1).max(100),
   description: z.string().trim().max(500).optional(),
   isActive: z.boolean().default(true),
 });
 
 export const brandSchema = z.object({
+  branchId: uuidSchema,
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).optional(),
   isActive: z.boolean().default(true),
@@ -270,6 +272,7 @@ export const productionBatchSchema = z.object({
 const purchaseQuantitySchema = z.number().positive().max(1_000_000).multipleOf(0.001);
 
 export const supplierSchema = z.object({
+  branchId: uuidSchema,
   name: z.string().trim().min(2).max(180),
   contactName: z.string().trim().max(120).optional(),
   email: z.preprocess(
@@ -460,6 +463,7 @@ export const returnSchema = z.object({
 });
 
 export const customerSchema = z.object({
+  branchId: uuidSchema,
   name: z.string().trim().min(1).max(180),
   email: z.email().optional(),
   phone: z.string().trim().max(40).optional(),
@@ -535,8 +539,9 @@ const emptyToUndefined = (value: unknown) =>
   typeof value === 'string' && value.trim() === '' ? undefined : value;
 
 export const createPromotionSchema = z
-  .object({
-    name: z.string().trim().min(2).max(180),
+    .object({
+      branchId: uuidSchema,
+      name: z.string().trim().min(2).max(180),
     code: z.preprocess(emptyToUndefined, z.string().trim().max(50).optional()),
     description: z.preprocess(emptyToUndefined, z.string().trim().max(1000).optional()),
     type: promotionTypeSchema,
@@ -626,6 +631,7 @@ export type OpenShiftInput = z.infer<typeof openShiftSchema>;
 export type CashMovementInput = z.infer<typeof cashMovementSchema>;
 export type CloseShiftInput = z.infer<typeof closeShiftSchema>;
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
+export type HoldSaleInput = z.infer<typeof holdSaleSchema>;
 export type ReturnInput = z.infer<typeof returnSchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;
 export const posBarcodeItemSchema = z.object({

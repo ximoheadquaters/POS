@@ -211,8 +211,10 @@ export default function PosScreen() {
     mutationFn: () =>
       api<{ receiptNumber: string }>('/sales/hold', {
         method: 'POST',
+        idempotencyKey: `hold-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         body: JSON.stringify({
           branchId: branch?.id,
+          registerId: activeShift?.registerId,
           shiftId: activeShift?.id,
           customerId: useCartStore.getState().customerId,
           note: holdNote.trim() || undefined,
@@ -946,11 +948,26 @@ export default function PosScreen() {
                 </Text>
               ) : null}
               {activeShift ? (
-                <Button
-                  title="Continue to Payment  ›"
-                  disabled={!items.length || hasStockConflict}
-                  onPress={() => router.push('/payment')}
-                />
+                <View className="flex-row gap-2">
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open parked sales${heldCount ? `, ${heldCount} parked` : ''}`}
+                    onPress={() => router.push('/food/parked-sales')}
+                    className="min-h-11 flex-row items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 active:bg-amber-100"
+                  >
+                    <Feather name="pause-circle" size={16} color="#B45309" />
+                    <Text className="ml-1.5 text-xs font-bold text-amber-900">
+                      Parked{heldCount > 0 ? ` (${heldCount})` : ''}
+                    </Text>
+                  </Pressable>
+                  <View className="flex-1">
+                    <Button
+                      title="Continue to Payment  ›"
+                      disabled={!items.length || hasStockConflict}
+                      onPress={() => router.push('/payment')}
+                    />
+                  </View>
+                </View>
               ) : (
                 <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
               )}

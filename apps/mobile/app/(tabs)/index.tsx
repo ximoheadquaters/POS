@@ -279,11 +279,11 @@ export default function DashboardScreen() {
     queryKey: ['dashboard', period, range.from.slice(0, 10), branch?.id],
     queryFn: () =>
       api<Summary>(
-        `/reports/summary?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
+        `/reports/summary?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}&branchId=${branch!.id}`,
       ),
     enabled:
-      (currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')) ??
-      false,
+      Boolean(branch?.id) &&
+      ((currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')) ?? false),
   });
 
   const chartRange = useMemo(() => periodRange('7d'), []);
@@ -293,11 +293,11 @@ export default function DashboardScreen() {
       api<WorkspaceTrend>(
         `/reports/workspace?from=${encodeURIComponent(chartRange.from)}&to=${encodeURIComponent(
           chartRange.to,
-        )}${branch?.id ? `&branchId=${branch.id}` : ''}`,
+        )}&branchId=${branch!.id}`,
       ),
     enabled:
-      (currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')) ??
-      false,
+      Boolean(branch?.id) &&
+      ((currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')) ?? false),
   });
 
   const canViewDashboard =

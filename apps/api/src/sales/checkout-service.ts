@@ -162,7 +162,8 @@ export class CheckoutService {
            left join product_variants portioning
              on portioning.organization_id=p.organization_id
              and portioning.product_id=p.id and portioning.is_portioning_container
-           where p.organization_id = $1 and p.id = $3 and p.status = 'active'
+           where p.organization_id = $1 and p.branch_id = $2
+             and p.id = $3 and p.status = 'active'
              and ($4::uuid is null or v.id is not null)`,
           [actor.organizationId, input.branchId, item.productId, item.variantId],
         );
@@ -618,8 +619,9 @@ export class CheckoutService {
     }
     if (input.customerId) {
       const customer = await transaction.query(
-        'select 1 from customers where id = $1 and organization_id = $2 and is_active',
-        [input.customerId, actor.organizationId],
+        `select 1 from customers
+         where id = $1 and organization_id = $2 and branch_id = $3 and is_active`,
+        [input.customerId, actor.organizationId, input.branchId],
       );
       if (!customer.rowCount) throw notFound('Customer');
     }

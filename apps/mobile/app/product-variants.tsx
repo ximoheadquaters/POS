@@ -21,6 +21,7 @@ import { ApiError, api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { normalizeBarcode } from '@/lib/product-scan';
 import { useIosAlert } from '@/providers/ios-alert';
+import { useBranchStore } from '@/store/branch';
 
 function FormField({
   label,
@@ -227,6 +228,7 @@ function ProductChooserModal({
 }
 
 function ProductVariantsContent() {
+  const branch = useBranchStore((state) => state.activeBranch);
   const {
     productId,
     name: productName,
@@ -244,8 +246,9 @@ function ProductVariantsContent() {
   const { showAlert } = useIosAlert();
 
   const productsList = useQuery({
-    queryKey: ['products-list-picker'],
-    queryFn: () => api<ProductItem[]>('/products?pageSize=100'),
+    queryKey: ['products-list-picker', branch?.id],
+    enabled: Boolean(branch),
+    queryFn: () => api<ProductItem[]>(`/products?branchId=${branch!.id}&pageSize=100`),
   });
 
   const [selectedProductId, setSelectedProductId] = useState<string | null>(

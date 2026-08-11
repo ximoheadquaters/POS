@@ -78,9 +78,9 @@ function StockTransfersContent() {
   });
 
   const productsQuery = useQuery({
-    queryKey: ['products-lookup', productSearch],
+    queryKey: ['products-lookup', branch.id, productSearch],
     enabled: modalVisible && hasModule,
-    queryFn: () => api<ProductItem[]>(`/products?pageSize=20&search=${encodeURIComponent(productSearch)}`),
+    queryFn: () => api<ProductItem[]>(`/products?branchId=${branch.id}&pageSize=20&search=${encodeURIComponent(productSearch)}`),
   });
 
   const createMutation = useMutation({

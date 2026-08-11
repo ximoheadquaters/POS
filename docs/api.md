@@ -93,19 +93,22 @@ Authorization: Bearer ximo_platform_<secret>
 The website server may include `X-Platform-Actor-Id` and `X-Platform-Actor-Email` so the immutable
 platform audit record identifies which signed-in Super Admin initiated a change.
 
-| Method | Route                                                             | Purpose                                      |
-| ------ | ----------------------------------------------------------------- | -------------------------------------------- |
-| GET    | `/platform/plans`                                                 | List plans and their included modules        |
-| GET    | `/platform/modules`                                               | List the module catalog                      |
-| GET    | `/platform/organizations`                                         | Search and paginate organizations            |
-| POST   | `/platform/organizations`                                         | Provision an organization and invite owner   |
-| GET    | `/platform/organizations/:organizationId`                         | Organization and subscription details        |
-| POST   | `/platform/organizations/:organizationId/owner-invitation/resend` | Resend owner password setup                  |
-| GET    | `/platform/organizations/:organizationId/modules`                 | Plan, override, and effective module states  |
-| PATCH  | `/platform/organizations/:organizationId/subscription`            | Change the plan and subscription status      |
-| PUT    | `/platform/organizations/:organizationId/modules/:moduleCode`     | Set an enabled/disabled module override      |
-| DELETE | `/platform/organizations/:organizationId/modules/:moduleCode`     | Remove an override and follow the plan again |
-| GET    | `/platform/audit`                                                 | Paginated platform audit history             |
+| Method | Route                                                                                | Purpose                                        |
+| ------ | ------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| GET    | `/platform/applications`                                                             | List Ximo applications and subscription counts |
+| GET    | `/platform/plans`                                                                    | List plans and their included modules          |
+| GET    | `/platform/modules`                                                                  | List the module catalog                        |
+| GET    | `/platform/organizations`                                                            | Search and paginate organizations              |
+| POST   | `/platform/organizations`                                                            | Provision an organization and invite owner     |
+| GET    | `/platform/organizations/:organizationId`                                            | Organization and subscription details          |
+| POST   | `/platform/organizations/:organizationId/owner-invitation/resend`                    | Resend owner password setup                    |
+| GET    | `/platform/organizations/:organizationId/modules`                                    | Plan, override, and effective module states    |
+| PATCH  | `/platform/organizations/:organizationId/subscription`                               | Change the plan and subscription status        |
+| GET    | `/platform/organizations/:organizationId/applications`                               | List purchased applications and entitlements   |
+| PATCH  | `/platform/organizations/:organizationId/applications/:applicationCode/subscription` | Change one application's subscription          |
+| PUT    | `/platform/organizations/:organizationId/modules/:moduleCode`                        | Set an enabled/disabled module override        |
+| DELETE | `/platform/organizations/:organizationId/modules/:moduleCode`                        | Remove an override and follow the plan again   |
+| GET    | `/platform/audit`                                                                    | Paginated platform audit history               |
 
 ### Organization provisioning
 
@@ -118,10 +121,16 @@ platform audit record identifies which signed-in Super Admin initiated a change.
   "timezone": "Asia/Manila",
   "planCode": "business",
   "subscriptionStatus": "active",
+  "ownerUserId": "existing-supabase-auth-user-uuid",
   "ownerEmail": "owner@example.com",
   "ownerName": "Client Owner"
 }
 ```
+
+When the owner has already registered and signed in on the official Ximo website, its trusted
+backend must include `ownerUserId` from that Supabase session. The API verifies that Auth user and
+email match and links the existing account; it does not send a second invitation. Omit
+`ownerUserId` only when Ximo should create/invite a brand-new owner account.
 
 The first successful request returns `201`. An identical retry returns `200`, the original response,
 and `Idempotent-Replayed: true`. Reusing the key with changed details returns `409`.

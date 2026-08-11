@@ -23,11 +23,13 @@ export function promotionsRouter(database: Database): Router {
     '/',
     validateQuery(
       paginationSchema.extend({
+        branchId: uuidSchema,
         type: uuidSchema.optional(),
       }),
     ),
+    requireBranchAccess('query'),
     async (request, response) => {
-      const { page, pageSize, search } = request.query as any;
+      const { page, pageSize, search, branchId } = request.query as any;
       const organizationId = request.authUser!.organization.id;
 
       const result = await database.query(
@@ -41,10 +43,10 @@ export function promotionsRouter(database: Database): Router {
           (select count(*)::int from promotion_items pi where pi.promotion_id = p.id) as "itemCount",
           count(*) over()::int as total
          from promotions p
-         where p.organization_id = $1
+         where p.organization_id = $1 and p.branch_id = $5
            and ($2::text is null or p.name ilike '%'||$2||'%' or p.code ilike '%'||$2||'%')
          order by p.created_at desc limit $3 offset $4`,
-        [organizationId, search ?? null, pageSize, (page - 1) * pageSize],
+        [organizationId, search ?? null, pageSize, (page - 1) * pageSize, branchId],
       );
 
       const total = result.rows[0]?.total ?? 0;
@@ -115,11 +117,28 @@ export function promotionsRouter(database: Database): Router {
           ), '[]'::jsonb) as components
          from promotions p
          where p.organization_id = $1
+           and p.branch_id = $2
            and p.is_active
            and p.type = 'combo_bundle'
            and p.combo_price is not null
            and (p.start_date is null or p.start_date <= now())
            and (p.end_date is null or p.end_date >= now())
+           and not exists (
+             select 1
+             from promotion_items stock_item
+             join products stock_product
+               on stock_product.id = stock_item.product_id
+               and stock_product.organization_id = stock_item.organization_id
+             left join branch_inventory stock
+               on stock.organization_id = stock_product.organization_id
+               and stock.branch_id = $2
+               and stock.product_id = stock_product.id
+               and stock.variant_id is null
+             where stock_item.promotion_id = p.id
+               and stock_item.organization_id = p.organization_id
+               and stock_product.track_inventory
+               and coalesce(stock.quantity, 0) < stock_item.required_quantity
+           )
            and ($3::text is null
              or p.name ilike '%' || $3 || '%'
              or coalesce(p.code, '') ilike '%' || $3 || '%')
@@ -151,8 +170,9 @@ export function promotionsRouter(database: Database): Router {
         p.start_date as "startDate", p.end_date as "endDate",
         p.is_active as "isActive", p.created_at as "createdAt"
        from promotions p
-       where p.id = $1 and p.organization_id = $2`,
-      [id, organizationId],
+       where p.id = $1 and p.organization_id = $2
+         and p.branch_id=any($3::uuid[])`,
+      [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
     );
 
     if (!promoResult.rows[0]) throw notFound('Promotion');
@@ -173,20 +193,25 @@ export function promotionsRouter(database: Database): Router {
   });
 
   // POST /promotions -> Create advanced promotion / combo deal
-  router.post('/', validateBody(createPromotionSchema), async (request, response) => {
+  router.post(
+    '/',
+    validateBody(createPromotionSchema),
+    requireBranchAccess('body'),
+    async (request, response) => {
     const input = request.body;
     const organizationId = request.authUser!.organization.id;
 
     const created = await database.transaction(async (tx) => {
       const pRes = await tx.query<{ id: string }>(
         `insert into promotions (
-           organization_id, name, code, description, type,
+           organization_id, branch_id, name, code, description, type,
            combo_price, discount_percentage, discount_amount,
            min_order_quantity, start_date, end_date, is_active
-         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          returning id`,
         [
           organizationId,
+          input.branchId,
           input.name,
           input.code ?? null,
           input.description ?? null,
@@ -205,6 +230,11 @@ export function promotionsRouter(database: Database): Router {
 
       if (input.items && input.items.length > 0) {
         for (const item of input.items) {
+          const validProduct = await tx.query(
+            `select 1 from products where id=$1 and organization_id=$2 and branch_id=$3`,
+            [item.productId, organizationId, input.branchId],
+          );
+          if (!validProduct.rowCount) throw notFound('Product');
           await tx.query(
             `insert into promotion_items (organization_id, promotion_id, product_id, role, required_quantity)
              values ($1, $2, $3, $4, $5)`,
@@ -223,7 +253,8 @@ export function promotionsRouter(database: Database): Router {
     });
 
     sendData(response, created, 201);
-  });
+    },
+  );
 
     const updateHandler = async (request: any, response: any) => {
       const id = uuidSchema.parse(request.params.id);
@@ -231,11 +262,15 @@ export function promotionsRouter(database: Database): Router {
       const organizationId = request.authUser!.organization.id;
 
       const updated = await database.transaction(async (tx) => {
-        const existing = await tx.query<{ id: string }>(
-          `select id from promotions where id = $1 and organization_id = $2`,
-          [id, organizationId],
+        const existing = await tx.query<{ id: string; branchId: string }>(
+          `select id,branch_id as "branchId" from promotions
+           where id = $1 and organization_id = $2 and branch_id=any($3::uuid[])`,
+          [id, organizationId, request.authUser!.branches.map((branch: { id: string }) => branch.id)],
         );
         if (!existing.rows[0]) throw notFound('Promotion');
+        if (input.branchId !== existing.rows[0].branchId) {
+          throw notFound('Promotion');
+        }
 
         await tx.query(
           `update promotions set
@@ -268,6 +303,11 @@ export function promotionsRouter(database: Database): Router {
 
         if (input.items && input.items.length > 0) {
           for (const item of input.items) {
+            const validProduct = await tx.query(
+              `select 1 from products where id=$1 and organization_id=$2 and branch_id=$3`,
+              [item.productId, organizationId, input.branchId],
+            );
+            if (!validProduct.rowCount) throw notFound('Product');
             await tx.query(
               `insert into promotion_items (organization_id, promotion_id, product_id, role, required_quantity)
                values ($1, $2, $3, $4, $5)`,
@@ -301,9 +341,9 @@ export function promotionsRouter(database: Database): Router {
 
     const result = await database.query(
       `update promotions set is_active = not is_active, updated_at = now()
-       where id = $1 and organization_id = $2
+       where id = $1 and organization_id = $2 and branch_id=any($3::uuid[])
        returning id, is_active as "isActive"`,
-      [id, organizationId],
+      [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
     );
 
     if (!result.rows[0]) throw notFound('Promotion');

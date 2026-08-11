@@ -12,6 +12,7 @@ import {
   EntitlementService,
   pruneDisabledDependentModules,
 } from '../services/entitlement-service.js';
+import { PlatformAccessService } from '../services/platform-access-service.js';
 
 export { pruneDisabledDependentModules };
 
@@ -54,6 +55,8 @@ join roles r on r.id = p.role_id and r.organization_id = p.organization_id
 left join lateral (
   select sub.id, sub.plan_id, sub.status
   from subscriptions sub
+  join applications application
+    on application.id = sub.application_id and application.code = 'ximo_pos'
   where sub.organization_id = p.organization_id
     and sub.status in ('trialing', 'active')
   order by sub.created_at desc, sub.id desc
@@ -64,6 +67,7 @@ where p.id = $1 and p.is_active
 
 export function authenticate(db: Queryable, verifyToken: VerifyToken) {
   const entitlementService = new EntitlementService(db);
+  const platformAccessService = new PlatformAccessService(db);
   return async (request: Request, _response: Response, next: NextFunction) => {
     try {
       const header = request.header('authorization');
@@ -73,10 +77,16 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
       const result = await db.query<ContextRow>(CONTEXT_SQL, [verified.id]);
       const row = result.rows[0];
       if (!row) throw unauthorized('No active POS profile is linked to this account');
-      const effectiveModules = await entitlementService.getEffectiveModules(
-        row.organization_id,
-        row.business_profile,
-      );
+      const [effectiveModules, platformAccess] = await Promise.all([
+        entitlementService.getEffectiveModules(row.organization_id, row.business_profile),
+        platformAccessService.getForUserOrganization(row.id, row.organization_id),
+      ]);
+      if (platformAccess.membership && platformAccess.membership.status !== 'active') {
+        throw forbidden(
+          'MEMBERSHIP_INACTIVE',
+          'Your organization membership is not active for this account',
+        );
+      }
       request.authToken = token;
       request.authUser = {
         id: row.id,
@@ -94,6 +104,24 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
         permissions: row.permissions ?? [],
         modules: effectiveModules,
         branches: row.branches ?? [],
+        ...(platformAccess.membership ? { membership: platformAccess.membership } : {}),
+        applications:
+          platformAccess.applications.length > 0
+            ? platformAccess.applications
+            : [
+                {
+                  id: 'legacy-ximo-pos',
+                  code: 'ximo_pos',
+                  name: 'Ximo POS',
+                  subscriptionStatus: row.subscription_status,
+                  planCode: null,
+                  planName: null,
+                  role: row.role,
+                  entitlements: Object.fromEntries(
+                    effectiveModules.map((module) => [`module.${module}`, true]),
+                  ),
+                },
+              ],
       };
       next();
     } catch (error) {

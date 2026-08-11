@@ -5,3 +5,4 @@ export * from './schemas.js';
 export * from './units.js';
 export * from './report-catalog.js';
 export * from './report-schemas.js';
+export * from './report-standards.js';

@@ -72,7 +72,10 @@ export function suppliersRouter(database: Database): Router {
   router.get(
     '/',
     requirePermission('suppliers:read', 'purchasing:read'),
+    validateQuery(z.object({ branchId: uuidSchema })),
+    requireBranchAccess('query'),
     async (request, response) => {
+      const { branchId } = request.query as { branchId: string };
       const result = await database.query(
         `select s.id,s.name,s.contact_name as "contactName",s.email,s.phone,s.address,
           s.tax_id as "taxId",s.notes,s.is_active as "isActive",
@@ -81,9 +84,9 @@ export function suppliersRouter(database: Database): Router {
          from suppliers s
          left join purchase_orders po
            on po.supplier_id=s.id and po.organization_id=s.organization_id
-         where s.organization_id=$1
+         where s.organization_id=$1 and s.branch_id=$2
          group by s.id order by s.is_active desc,s.name`,
-        [request.authUser!.organization.id],
+        [request.authUser!.organization.id, branchId],
       );
       sendData(response, result.rows);
     },
@@ -92,17 +95,19 @@ export function suppliersRouter(database: Database): Router {
     '/',
     requirePermission('suppliers:manage'),
     validateBody(supplierSchema),
+    requireBranchAccess('body'),
     async (request, response) => {
       const input = request.body;
       const organizationId = request.authUser!.organization.id;
       const result = await database.query(
         `insert into suppliers (
-          organization_id,name,contact_name,email,phone,address,tax_id,notes,is_active
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          organization_id,branch_id,name,contact_name,email,phone,address,tax_id,notes,is_active
+         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          returning id,name,contact_name as "contactName",email,phone,address,
            tax_id as "taxId",notes,is_active as "isActive"`,
         [
           organizationId,
+          input.branchId,
           input.name,
           input.contactName ?? null,
           input.email ?? null,
@@ -133,8 +138,8 @@ export function suppliersRouter(database: Database): Router {
       const id = uuidSchema.parse(request.params.id);
       const organizationId = request.authUser!.organization.id;
       const existing = await database.query<any>(
-        'select * from suppliers where id=$1 and organization_id=$2',
-        [id, organizationId],
+        'select * from suppliers where id=$1 and organization_id=$2 and branch_id=any($3::uuid[])',
+        [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
       );
       if (!existing.rows[0]) throw notFound('Supplier');
       const input = {
@@ -396,8 +401,8 @@ export function purchasingRouter(database: Database): Router {
       const organizationId = request.authUser!.organization.id;
       const order = await database.transaction(async (tx) => {
         const supplier = await tx.query(
-          'select id from suppliers where id=$1 and organization_id=$2 and is_active',
-          [input.supplierId, organizationId],
+          'select id from suppliers where id=$1 and organization_id=$2 and branch_id=$3 and is_active',
+          [input.supplierId, organizationId, input.branchId],
         );
         if (!supplier.rows[0]) throw badRequest('INVALID_SUPPLIER', 'Select an active supplier');
         const created = await tx.query<{ id: string; orderNumber: string }>(
@@ -439,10 +444,10 @@ export function purchasingRouter(database: Database): Router {
              from products p
              left join product_variants v
                on v.product_id=p.id and v.organization_id=p.organization_id and v.id=$3
-             where p.organization_id=$1 and p.id=$2
+             where p.organization_id=$1 and p.id=$2 and p.branch_id=$4
                and p.status in ('active','pending_receipt') and p.track_inventory
                and ($3::uuid is null or v.id is not null)`,
-            [organizationId, requested.productId, requested.variantId ?? null],
+            [organizationId, requested.productId, requested.variantId ?? null, input.branchId],
           );
           if (!product.rows[0]) {
             throw badRequest(

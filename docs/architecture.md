@@ -17,6 +17,11 @@ flowchart LR
   DB --> RLS["RLS defense in depth"]
 ```
 
+For the shared official-website and future multi-product architecture, see
+[Ximo multi-product platform foundation](platform-foundation.md). Supabase Auth is the global
+identity provider, `organizations` are the tenant boundary, and `applications` namespace plans,
+subscriptions, roles, and entitlements.
+
 ## Request authorization
 
 1. Supabase Auth issues the mobile session.

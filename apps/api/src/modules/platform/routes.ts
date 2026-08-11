@@ -1,7 +1,12 @@
 import type { Request, Response } from 'express';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { businessProfileSchema, moduleCodeSchema, paginationSchema, uuidSchema } from '@ximo/shared';
+import {
+  businessProfileSchema,
+  moduleCodeSchema,
+  paginationSchema,
+  uuidSchema,
+} from '@ximo/shared';
 import { z } from 'zod';
 import type { AuthActions } from '../../auth/types.js';
 import type { Database, Queryable } from '../../database/types.js';
@@ -34,6 +39,11 @@ const updateSubscriptionSchema = z.object({
   currentPeriodEndsAt: z.iso.datetime({ offset: true }).nullable().optional(),
 });
 
+const applicationCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-z][a-z0-9_]{1,79}$/);
+
 const moduleOverrideSchema = z.object({
   enabled: z.boolean(),
   reason: z.string().trim().min(1, 'Reason is required').max(1000),
@@ -54,7 +64,10 @@ select m.code,m.name,m.description,
   ) as "effectiveEnabled"
 from organizations o
 left join subscriptions s on s.organization_id=o.id
+  and s.application_id=(select id from applications where code='ximo_pos')
 cross join modules m
+join applications application
+  on application.id=m.application_id and application.code='ximo_pos'
 left join plan_modules pm on pm.plan_id=s.plan_id and pm.module_id=m.id
 left join organization_modules om
   on om.organization_id=o.id and om.module_id=m.id
@@ -83,8 +96,8 @@ async function ensureOrganization(database: Queryable, organizationId: string) {
 
 async function moduleStatus(database: Queryable, organizationId: string, moduleCode?: string) {
   await database.query(
-    `insert into modules (code, name, description) values
-      ('stock_transfers', 'Stock Transfers', 'Transfer inventory items between multiple branches with dispatch and receiving tracking.')
+    `insert into modules (application_id, code, name, description) values
+      ((select id from applications where code='ximo_pos'), 'stock_transfers', 'Stock Transfers', 'Transfer inventory items between multiple branches with dispatch and receiving tracking.')
      on conflict (code) do update set name=excluded.name, description=excluded.description`,
   );
   const result = await database.query(
@@ -123,6 +136,8 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
             '[]'::jsonb
           ) as modules
          from plans p
+         join applications application
+           on application.id=p.application_id and application.code='ximo_pos'
          left join plan_modules pm on pm.plan_id=p.id
          left join modules m on m.id=pm.module_id
          group by p.id order by p.price_monthly,p.name`,
@@ -130,13 +145,34 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     sendData(response, result.rows);
   });
 
+  router.get('/applications', requirePlatformScope('platform:read'), async (_request, response) => {
+    const result = await database.query(
+      `select application.id,application.code,application.name,application.description,
+         application.launch_url as "launchUrl",application.is_active as "isActive",
+         count(distinct plan.id)::int as "planCount",
+         count(distinct subscription.organization_id)::int as "subscribedOrganizationCount"
+       from applications application
+       left join plans plan on plan.application_id=application.id
+       left join subscriptions subscription on subscription.application_id=application.id
+       group by application.id
+       order by application.name`,
+    );
+    sendData(response, result.rows);
+  });
+
   router.get('/modules', requirePlatformScope('platform:read'), async (_request, response) => {
     await database.query(
-      `insert into modules (code, name, description) values
-        ('stock_transfers', 'Stock Transfers', 'Transfer inventory items between multiple branches with dispatch and receiving tracking.')
+      `insert into modules (application_id, code, name, description) values
+        ((select id from applications where code='ximo_pos'), 'stock_transfers', 'Stock Transfers', 'Transfer inventory items between multiple branches with dispatch and receiving tracking.')
        on conflict (code) do update set name=excluded.name, description=excluded.description`,
     );
-    const result = await database.query('select code,name,description from modules order by name');
+    const result = await database.query(
+      `select module.code,module.name,module.description
+       from modules module
+       join applications application
+         on application.id=module.application_id and application.code='ximo_pos'
+       order by module.name`,
+    );
     sendData(response, result.rows);
   });
 
@@ -167,6 +203,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
           count(*) over()::int as total
          from organizations o
          left join subscriptions s on s.organization_id=o.id
+           and s.application_id=(select id from applications where code='ximo_pos')
          left join plans p on p.id=s.plan_id
          where ($1::text is null or o.name ilike '%'||$1||'%' or o.slug ilike '%'||$1||'%')
            and ($2::text is null or p.code=$2)
@@ -214,9 +251,9 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     },
   );
 
-const updateOrganizationProfileSchema = z.object({
-  businessProfile: businessProfileSchema,
-});
+  const updateOrganizationProfileSchema = z.object({
+    businessProfile: businessProfileSchema,
+  });
 
   router.patch(
     '/organizations/:organizationId/profile',
@@ -299,6 +336,7 @@ const updateOrganizationProfileSchema = z.object({
           (select count(*)::int from profiles pr where pr.organization_id=o.id) as "userCount"
          from organizations o
          left join subscriptions s on s.organization_id=o.id
+           and s.application_id=(select id from applications where code='ximo_pos')
          left join plans p on p.id=s.plan_id
          where o.id=$1`,
         [organizationId],
@@ -364,6 +402,127 @@ const updateOrganizationProfileSchema = z.object({
     },
   );
 
+  router.get(
+    '/organizations/:organizationId/applications',
+    requirePlatformScope('platform:read'),
+    async (request, response) => {
+      const organizationId = uuidSchema.parse(request.params.organizationId);
+      await ensureOrganization(database, organizationId);
+      const result = await database.query(
+        `select access.application_id as id,access.application_code as code,
+           access.application_name as name,
+           coalesce(access.subscription_status,'cancelled') as "subscriptionStatus",
+           access.plan_code as "planCode",access.plan_name as "planName",
+           access.trial_ends_at as "trialEndsAt",
+           access.current_period_ends_at as "currentPeriodEndsAt",
+           coalesce((
+             select jsonb_object_agg(
+               entitlement.code,
+               coalesce(organization_override.value, plan_entitlement.value)
+             )
+             from application_entitlements entitlement
+             left join plan_entitlements plan_entitlement
+               on plan_entitlement.entitlement_id=entitlement.id
+              and plan_entitlement.plan_id=access.plan_id
+             left join organization_entitlement_overrides organization_override
+               on organization_override.organization_id=access.organization_id
+              and organization_override.application_id=access.application_id
+              and organization_override.entitlement_id=entitlement.id
+             where entitlement.application_id=access.application_id
+               and (plan_entitlement.entitlement_id is not null
+                 or organization_override.entitlement_id is not null)
+           ), '{}'::jsonb) as entitlements
+         from organization_application_access access
+         where access.organization_id=$1
+         order by access.application_name`,
+        [organizationId],
+      );
+      sendData(response, result.rows);
+    },
+  );
+
+  router.patch(
+    '/organizations/:organizationId/applications/:applicationCode/subscription',
+    requirePlatformScope('platform:write'),
+    validateBody(updateSubscriptionSchema),
+    async (request, response) => {
+      const organizationId = uuidSchema.parse(request.params.organizationId);
+      const applicationCode = applicationCodeSchema.parse(request.params.applicationCode);
+      const input = request.body as z.infer<typeof updateSubscriptionSchema>;
+      const client = platformClient(response);
+      const subscription = await database.transaction(async (transaction) => {
+        await ensureOrganization(transaction, organizationId);
+        const application = await transaction.query<{ id: string; code: string }>(
+          'select id,code from applications where code=$1 and is_active',
+          [applicationCode],
+        );
+        if (!application.rows[0]) throw notFound('Active application');
+        const plan = await transaction.query<{ id: string }>(
+          `select id from plans
+           where code=$1 and application_id=$2 and is_active`,
+          [input.planCode, application.rows[0].id],
+        );
+        if (!plan.rows[0]) throw notFound('Active application plan');
+        const before = await transaction.query(
+          `select plan.code as "planCode",subscription.status::text,
+             subscription.trial_ends_at as "trialEndsAt",
+             subscription.current_period_ends_at as "currentPeriodEndsAt"
+           from subscriptions subscription
+           join plans plan on plan.id=subscription.plan_id
+           where subscription.organization_id=$1 and subscription.application_id=$2`,
+          [organizationId, application.rows[0].id],
+        );
+        const trialEndsAt =
+          input.trialEndsAt === undefined
+            ? (before.rows[0]?.trialEndsAt ?? null)
+            : input.trialEndsAt;
+        const currentPeriodEndsAt =
+          input.currentPeriodEndsAt === undefined
+            ? (before.rows[0]?.currentPeriodEndsAt ?? null)
+            : input.currentPeriodEndsAt;
+        const updated = await transaction.query(
+          `insert into subscriptions (
+             organization_id,application_id,plan_id,status,trial_ends_at,current_period_ends_at
+           ) values ($1,$2,$3,$4,$5,$6)
+           on conflict (organization_id,application_id) do update set
+             plan_id=excluded.plan_id,status=excluded.status,
+             trial_ends_at=excluded.trial_ends_at,
+             current_period_ends_at=excluded.current_period_ends_at,
+             updated_at=now()
+           returning id,status::text,trial_ends_at as "trialEndsAt",
+             current_period_ends_at as "currentPeriodEndsAt"`,
+          [
+            organizationId,
+            application.rows[0].id,
+            plan.rows[0].id,
+            input.status,
+            trialEndsAt,
+            currentPeriodEndsAt,
+          ],
+        );
+        const after = {
+          ...updated.rows[0],
+          applicationCode,
+          planCode: input.planCode,
+        };
+        await transaction.query(
+          `insert into platform_audit_logs (
+             api_client_id,organization_id,action,before_data,after_data,metadata
+           ) values ($1,$2,'application.subscription.updated',$3::jsonb,$4::jsonb,$5::jsonb)`,
+          [
+            client.id,
+            organizationId,
+            JSON.stringify(before.rows[0] ?? null),
+            JSON.stringify(after),
+            JSON.stringify(auditMetadata(request, response)),
+          ],
+        );
+        return after;
+      });
+      sendData(response, subscription);
+    },
+  );
+
   router.patch(
     '/organizations/:organizationId/subscription',
     requirePlatformScope('platform:write'),
@@ -389,6 +548,8 @@ const updateOrganizationProfileSchema = z.object({
           `select p.code as "planCode",s.status::text,
             s.trial_ends_at as "trialEndsAt",s.current_period_ends_at as "currentPeriodEndsAt"
            from subscriptions s join plans p on p.id=s.plan_id
+           join applications application
+             on application.id=s.application_id and application.code='ximo_pos'
            where s.organization_id=$1`,
           [organizationId],
         );
@@ -402,9 +563,11 @@ const updateOrganizationProfileSchema = z.object({
             : input.currentPeriodEndsAt;
         const updated = await transaction.query(
           `insert into subscriptions (
-            organization_id,plan_id,status,trial_ends_at,current_period_ends_at
-           ) values ($1,$2,$3,$4,$5)
-           on conflict (organization_id) do update set
+            organization_id,application_id,plan_id,status,trial_ends_at,current_period_ends_at
+           ) values (
+             $1,(select id from applications where code='ximo_pos'),$2,$3,$4,$5
+           )
+           on conflict (organization_id,application_id) do update set
              plan_id=excluded.plan_id,status=excluded.status,
              trial_ends_at=excluded.trial_ends_at,
              current_period_ends_at=excluded.current_period_ends_at,
@@ -450,7 +613,8 @@ const updateOrganizationProfileSchema = z.object({
         );
         if (!moduleResult.rows[0]) {
           moduleResult = await transaction.query<{ id: string }>(
-            `insert into modules (code, name, description) values ($1, $2, $3)
+            `insert into modules (application_id, code, name, description)
+             values ((select id from applications where code='ximo_pos'), $1, $2, $3)
              on conflict (code) do update set name=excluded.name
              returning id`,
             [
