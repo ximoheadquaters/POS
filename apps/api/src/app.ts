@@ -143,7 +143,7 @@ export function createApp(dependencies: AppDependencies) {
       next(
         forbidden(
           'PASSWORD_CHANGE_REQUIRED',
-          'Replace your temporary password before using the POS',
+          'Create your password before using the POS',
         ),
       );
       return;

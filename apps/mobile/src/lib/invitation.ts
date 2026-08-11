@@ -1,7 +1,7 @@
 import type { CurrentUser } from '@ximo/shared';
 
 export const INVALID_INVITATION_MESSAGE =
-  'This secure setup link is no longer valid. Each link can be used only once. Ask your Ximo administrator to send a new setup link.';
+  'This invitation link is invalid or has expired. Request a new invitation from your administrator.';
 
 // A recovery/invitation session is intentionally authenticated before its POS
 // profile is loaded. SessionProvider must not treat that temporary state as a
@@ -37,16 +37,6 @@ export interface InvitationAuthClient {
   }>;
   getSession(): Promise<AuthResponse>;
   signOut(): Promise<unknown>;
-}
-
-export async function completeInvitationVerification(
-  auth: Pick<InvitationAuthClient, 'signOut'>,
-): Promise<void> {
-  // OTP exchange proves control of the inbox. End the short-lived callback
-  // session immediately so the verification button can never act as a login
-  // or password-change shortcut.
-  await auth.signOut();
-  setInvitationSetupActive(false);
 }
 
 export class InvitationFlowError extends Error {
@@ -123,30 +113,16 @@ function providerFailure(error: { message: string; status?: number } | null): In
   );
 }
 
-async function existingSessionAccessToken(auth: InvitationAuthClient): Promise<string | null> {
-  try {
-    const current = await auth.getSession();
-    return current.error ? null : (current.data.session?.access_token ?? null);
-  } catch {
-    return null;
-  }
-}
-
 export async function establishInvitationSession(
   auth: InvitationAuthClient,
   callback: InvitationCallback,
 ): Promise<string> {
-  // Supabase recovery links can establish and persist the session before this
-  // screen finishes mounting. Keep the invitation guard active while we check
-  // for that session so SessionProvider does not treat it as a normal login.
-  setInvitationSetupActive(true);
-
   if (callback.kind === 'invalid') {
-    const existingAccessToken = await existingSessionAccessToken(auth);
-    if (existingAccessToken) return existingAccessToken;
     setInvitationSetupActive(false);
     throw new InvitationFlowError(callback.reason, callback.message);
   }
+
+  setInvitationSetupActive(true);
 
   let result: AuthResponse;
   try {
@@ -160,8 +136,6 @@ export async function establishInvitationSession(
             })
           : await auth.verifyOtp({ token_hash: callback.tokenHash, type: callback.type });
   } catch {
-    const existingAccessToken = await existingSessionAccessToken(auth);
-    if (existingAccessToken) return existingAccessToken;
     setInvitationSetupActive(false);
     throw new InvitationFlowError(
       'network',
@@ -170,11 +144,6 @@ export async function establishInvitationSession(
   }
 
   if (result.error || !result.data.session) {
-    // A browser callback may already have been consumed by the auth client or
-    // by a page remount. The one-time exchange then reports an expired code,
-    // even though the correct recovery session is already stored locally.
-    const existingAccessToken = await existingSessionAccessToken(auth);
-    if (existingAccessToken) return existingAccessToken;
     setInvitationSetupActive(false);
     throw providerFailure(result.error);
   }

@@ -35,13 +35,9 @@
               <td style="padding: 36px 32px">
                 <h1 style="margin: 0; font-size: 28px; line-height: 1.25">Welcome to Ximo POS</h1>
                 <p style="margin: 18px 0 0; color: #526057; font-size: 16px; line-height: 1.65">
-                  You have been invited as the owner of a Ximo POS workspace. Verify this email,
-                  then sign in with the temporary password below.
+                  You have been invited as the owner of a Ximo POS workspace. Create your password
+                  to access your branches, staff, products, inventory, sales, and reports.
                 </p>
-                <div style="margin: 22px 0; border: 1px solid #cbd8d0; border-radius: 12px; background: #f4f8f5; padding: 16px">
-                  <div style="color: #526057; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase">Temporary password</div>
-                  <code style="display: block; margin-top: 8px; color: #17241c; font-size: 19px; font-weight: 700; word-break: break-all">{{ .Data.temporary_password }}</code>
-                </div>
                 <p style="margin: 28px 0">
                   <a
                     href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=invite"
@@ -55,12 +51,12 @@
                       font-weight: 700;
                       text-decoration: none;
                     "
-                    >Verify my email</a
+                    >Create my password</a
                   >
                 </p>
                 <p style="margin: 0; color: #6a756e; font-size: 13px; line-height: 1.6">
-                  This verification link can be used once. After signing in, Ximo will require you
-                  to replace the temporary password. If you did not expect this invitation, ignore it.
+                  This secure setup link can be used once. If you did not expect this invitation,
+                  you can safely ignore this email.
                 </p>
               </td>
             </tr>
