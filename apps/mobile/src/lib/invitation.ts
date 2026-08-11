@@ -113,16 +113,30 @@ function providerFailure(error: { message: string; status?: number } | null): In
   );
 }
 
+async function existingSessionAccessToken(auth: InvitationAuthClient): Promise<string | null> {
+  try {
+    const current = await auth.getSession();
+    return current.error ? null : (current.data.session?.access_token ?? null);
+  } catch {
+    return null;
+  }
+}
+
 export async function establishInvitationSession(
   auth: InvitationAuthClient,
   callback: InvitationCallback,
 ): Promise<string> {
+  // Supabase recovery links can establish and persist the session before this
+  // screen finishes mounting. Keep the invitation guard active while we check
+  // for that session so SessionProvider does not treat it as a normal login.
+  setInvitationSetupActive(true);
+
   if (callback.kind === 'invalid') {
+    const existingAccessToken = await existingSessionAccessToken(auth);
+    if (existingAccessToken) return existingAccessToken;
     setInvitationSetupActive(false);
     throw new InvitationFlowError(callback.reason, callback.message);
   }
-
-  setInvitationSetupActive(true);
 
   let result: AuthResponse;
   try {
@@ -136,6 +150,8 @@ export async function establishInvitationSession(
             })
           : await auth.verifyOtp({ token_hash: callback.tokenHash, type: callback.type });
   } catch {
+    const existingAccessToken = await existingSessionAccessToken(auth);
+    if (existingAccessToken) return existingAccessToken;
     setInvitationSetupActive(false);
     throw new InvitationFlowError(
       'network',
@@ -144,6 +160,11 @@ export async function establishInvitationSession(
   }
 
   if (result.error || !result.data.session) {
+    // A browser callback may already have been consumed by the auth client or
+    // by a page remount. The one-time exchange then reports an expired code,
+    // even though the correct recovery session is already stored locally.
+    const existingAccessToken = await existingSessionAccessToken(auth);
+    if (existingAccessToken) return existingAccessToken;
     setInvitationSetupActive(false);
     throw providerFailure(result.error);
   }
