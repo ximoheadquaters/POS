@@ -7,9 +7,9 @@ import { Button, Field, LoadingState, Screen } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import {
   establishInvitationSession,
-  finishInvitationSetup,
   InvitationFlowError,
   INVALID_INVITATION_MESSAGE,
+  PASSWORD_SAVED_SIGN_IN_MESSAGE,
   SETUP_SESSION_EXPIRED_MESSAGE,
   setInvitationSetupActive,
   parseInvitationCallback,
@@ -23,7 +23,7 @@ import { useSession } from '@/providers/session';
 type PageState =
   | { kind: 'loading' }
   | { kind: 'form' }
-  | { kind: 'success' }
+  | { kind: 'success'; message?: string; goToLogin?: boolean }
   | { kind: 'error'; message: string };
 
 // Survive React remounts so the one-time invite token is not verified twice.
@@ -103,34 +103,53 @@ export default function AcceptInvitationScreen() {
           return;
         }
 
-        await finishInvitationSetup(
-          supabase.auth,
-          password,
-          async (accessToken) => {
-            // Clear must_change_password after Auth password is set. Surface the
-            // real API error — a 401 here is often "no POS profile", not expiry.
-            try {
-              await api<{ changed: true }>('/auth/change-password', {
-                method: 'POST',
-                body: JSON.stringify({ password }),
-                accessToken,
-              });
-            } catch (error) {
-              if (error instanceof ApiError) {
-                throw new InvitationFlowError(
-                  error.status === 401 || error.status === 403 ? 'profile' : 'network',
-                  error.message || SETUP_SESSION_EXPIRED_MESSAGE,
-                );
-              }
-              throw error;
-            }
-            return refreshUser(accessToken);
-          },
-          () => {
-            setPage({ kind: 'success' });
-            redirectTimer.current = setTimeout(() => router.replace('/branch-select'), 900);
-          },
-        );
+        // 1) Always save the Auth password first (does not depend on POS API).
+        const updated = await supabase.auth.updateUser({ password });
+        if (updated.error) {
+          setSubmitError(
+            /session|expired|invalid|not authenticated/i.test(updated.error.message)
+              ? SETUP_SESSION_EXPIRED_MESSAGE
+              : updated.error.message,
+          );
+          return;
+        }
+
+        // 2) Best-effort: clear must_change_password + load POS profile.
+        try {
+          await api<{ changed: true }>('/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({ password }),
+            accessToken: session.access_token,
+          });
+          const user = await refreshUser(session.access_token);
+          if (user.role !== 'owner') {
+            throw new Error('The invited account is not an organization owner');
+          }
+          setInvitationSetupActive(false);
+          setPage({ kind: 'success' });
+          redirectTimer.current = setTimeout(() => router.replace('/branch-select'), 900);
+          return;
+        } catch (error) {
+          // Password is already saved in Auth. If the API is misconfigured (401),
+          // send the owner to sign in instead of blocking setup.
+          setInvitationSetupActive(false);
+          await supabase.auth.signOut();
+          const apiMessage =
+            error instanceof ApiError
+              ? error.message
+              : error instanceof Error
+                ? error.message
+                : '';
+          setPage({
+            kind: 'success',
+            goToLogin: true,
+            message:
+              apiMessage && /profile|unauthorized|401/i.test(apiMessage)
+                ? `${PASSWORD_SAVED_SIGN_IN_MESSAGE} (${apiMessage})`
+                : PASSWORD_SAVED_SIGN_IN_MESSAGE,
+          });
+          redirectTimer.current = setTimeout(() => router.replace('/(auth)/login'), 1200);
+        }
       } catch (error) {
         setSubmitError(
           error instanceof InvitationFlowError
@@ -187,12 +206,17 @@ export default function AcceptInvitationScreen() {
                 <View accessibilityRole="alert">
                   <Text className="text-2xl font-black text-brand-900">Password created</Text>
                   <Text className="mt-3 leading-6 text-slate-600">
-                    Your owner account is ready. Taking you to branch selection…
+                    {page.message ??
+                      (page.goToLogin
+                        ? PASSWORD_SAVED_SIGN_IN_MESSAGE
+                        : 'Your owner account is ready. Taking you to branch selection…')}
                   </Text>
                   <View className="mt-5">
                     <Button
-                      title="Continue to POS"
-                      onPress={() => router.replace('/branch-select')}
+                      title={page.goToLogin ? 'Continue to sign in' : 'Continue to POS'}
+                      onPress={() =>
+                        router.replace(page.goToLogin ? '/(auth)/login' : '/branch-select')
+                      }
                     />
                   </View>
                 </View>

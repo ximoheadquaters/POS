@@ -6,6 +6,9 @@ export const INVALID_INVITATION_MESSAGE =
 export const SETUP_SESSION_EXPIRED_MESSAGE =
   'Your setup session expired before the password was saved. Ask your administrator to resend the setup link, then open it once and create your password immediately.';
 
+export const PASSWORD_SAVED_SIGN_IN_MESSAGE =
+  'Your password was saved. Sign in with your new password to continue.';
+
 // A recovery/invitation session is intentionally authenticated before its POS
 // profile is loaded. SessionProvider must not treat that temporary state as a
 // failed normal login and sign it out before updateUser can save the password.
