@@ -291,6 +291,7 @@ const updateOrganizationProfileSchema = z.object({
       const organizationId = uuidSchema.parse(request.params.organizationId);
       const result = await database.query(
         `select o.id,o.name,o.slug,o.currency,o.timezone,o.logo_path as "logoPath",
+          coalesce(o.business_profile, 'retail') as "businessProfile",
           o.created_at as "createdAt",p.code as "planCode",p.name as "planName",
           p.price_monthly::text as "priceMonthly",
           coalesce(s.status::text,'cancelled') as "subscriptionStatus",
