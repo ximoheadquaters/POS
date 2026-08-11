@@ -61,7 +61,7 @@ export default function ChangePasswordScreen() {
               <BrandLogo size={56} />
               <Text className="mt-5 text-3xl font-black text-white">Protect your account</Text>
               <Text className="mt-2 leading-6 text-brand-100">
-                Create a password you will use to sign in to Ximo POS.
+                Replace the temporary password from your setup email before entering the POS.
               </Text>
             </View>
             <View className="rounded-3xl border border-slate-100 bg-white p-5">

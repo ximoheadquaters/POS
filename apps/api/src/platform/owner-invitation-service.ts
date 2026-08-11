@@ -76,12 +76,16 @@ export class OwnerInvitationService {
         );
       }
 
-      await this.authActions.resendOwnerInvitation(owner.email);
+      await this.authActions.resendOwnerInvitation({
+        id: owner.id,
+        email: owner.email,
+        displayName: owner.displayName,
+      });
       const sentAt = new Date().toISOString();
       await transaction.query(
         `update profiles
          set invitation_sent_at=$2,invitation_resend_count=invitation_resend_count+1,
-           updated_at=now()
+           must_change_password=true,updated_at=now()
          where id=$1`,
         [owner.id, sentAt],
       );
@@ -107,7 +111,7 @@ export class OwnerInvitationService {
           JSON.stringify({
             ownerId: owner.id,
             invitationSentAt: sentAt,
-            delivery: 'supabase_recovery_email',
+            delivery: 'temporary_password_email_verification',
           }),
           JSON.stringify(context.auditMetadata),
         ],
