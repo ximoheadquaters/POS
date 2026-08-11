@@ -107,8 +107,8 @@ export default function AcceptInvitationScreen() {
           supabase.auth,
           password,
           async (accessToken) => {
-            // Prefer the platform password endpoint so the profile flag clears
-            // even when the Auth recovery session is picky about updateUser.
+            // Clear must_change_password after Auth password is set. Surface the
+            // real API error — a 401 here is often "no POS profile", not expiry.
             try {
               await api<{ changed: true }>('/auth/change-password', {
                 method: 'POST',
@@ -116,8 +116,11 @@ export default function AcceptInvitationScreen() {
                 accessToken,
               });
             } catch (error) {
-              if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-                throw new InvitationFlowError('expired', SETUP_SESSION_EXPIRED_MESSAGE);
+              if (error instanceof ApiError) {
+                throw new InvitationFlowError(
+                  error.status === 401 || error.status === 403 ? 'profile' : 'network',
+                  error.message || SETUP_SESSION_EXPIRED_MESSAGE,
+                );
               }
               throw error;
             }
@@ -132,7 +135,9 @@ export default function AcceptInvitationScreen() {
         setSubmitError(
           error instanceof InvitationFlowError
             ? error.message
-            : 'Could not save your password. Check your connection and try again.',
+            : error instanceof ApiError
+              ? error.message
+              : 'Could not save your password. Check your connection and try again.',
         );
       } finally {
         setSubmitting(false);
