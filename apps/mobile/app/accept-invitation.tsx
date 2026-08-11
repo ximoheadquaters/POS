@@ -4,12 +4,13 @@ import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { BrandLogo } from '@/components/brand';
 import { Button, Field, LoadingState, Screen } from '@/components/ui';
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import {
   establishInvitationSession,
   finishInvitationSetup,
   InvitationFlowError,
   INVALID_INVITATION_MESSAGE,
+  SETUP_SESSION_EXPIRED_MESSAGE,
   setInvitationSetupActive,
   parseInvitationCallback,
   runInvitationSubmission,
@@ -25,6 +26,9 @@ type PageState =
   | { kind: 'success' }
   | { kind: 'error'; message: string };
 
+// Survive React remounts so the one-time invite token is not verified twice.
+let invitationCallbackHandled = false;
+
 function browserUrl(): string | null {
   if (Platform.OS !== 'web') return null;
   return globalThis.location?.href ?? null;
@@ -39,7 +43,6 @@ function clearBrowserCallback() {
 export default function AcceptInvitationScreen() {
   const incomingUrl = Linking.useURL();
   const { refreshUser, signOut } = useSession();
-  const handledCallback = useRef(false);
   const submissionGuard = useRef(false);
   const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [page, setPage] = useState<PageState>({ kind: 'loading' });
@@ -50,8 +53,8 @@ export default function AcceptInvitationScreen() {
   const [submitError, setSubmitError] = useState('');
 
   useEffect(() => {
-    if (handledCallback.current) return;
-    handledCallback.current = true;
+    if (invitationCallbackHandled) return;
+    invitationCallbackHandled = true;
 
     void (async () => {
       const callbackUrl = incomingUrl ?? browserUrl() ?? (await Linking.getInitialURL());
@@ -61,8 +64,10 @@ export default function AcceptInvitationScreen() {
       }
       try {
         const callback = parseInvitationCallback(callbackUrl);
-        clearBrowserCallback();
         await establishInvitationSession(supabase.auth, callback);
+        // Clear the one-time token from the address bar only after the session
+        // is established so remounts can still resume from a stored session.
+        clearBrowserCallback();
         setPage({ kind: 'form' });
       } catch (error) {
         setInvitationSetupActive(false);
@@ -90,17 +95,32 @@ export default function AcceptInvitationScreen() {
     const result = await runInvitationSubmission(submissionGuard, async () => {
       setSubmitting(true);
       try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          setSubmitError(SETUP_SESSION_EXPIRED_MESSAGE);
+          return;
+        }
+
         await finishInvitationSetup(
           supabase.auth,
           password,
           async (accessToken) => {
-            // Invite creates the Auth password via updateUser; this clears the
-            // profile must_change_password flag so the owner can enter POS.
-            await api<{ changed: true }>('/auth/change-password', {
-              method: 'POST',
-              body: JSON.stringify({ password }),
-              accessToken,
-            });
+            // Prefer the platform password endpoint so the profile flag clears
+            // even when the Auth recovery session is picky about updateUser.
+            try {
+              await api<{ changed: true }>('/auth/change-password', {
+                method: 'POST',
+                body: JSON.stringify({ password }),
+                accessToken,
+              });
+            } catch (error) {
+              if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+                throw new InvitationFlowError('expired', SETUP_SESSION_EXPIRED_MESSAGE);
+              }
+              throw error;
+            }
             return refreshUser(accessToken);
           },
           () => {
