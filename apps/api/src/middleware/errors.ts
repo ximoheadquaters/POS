@@ -38,8 +38,27 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
     });
     return;
   }
-  const pgError = error as { code?: string; constraint?: string; table?: string };
+  const pgError = error as {
+    code?: string;
+    constraint?: string;
+    table?: string;
+    message?: string;
+  };
   const pgCode = pgError.code;
+  if (
+    pgCode === '53300' ||
+    (pgCode === 'XX000' && /max clients reached|EMAXCONNSESSION/i.test(pgError.message ?? ''))
+  ) {
+    response.status(503).json({
+      success: false,
+      error: {
+        code: 'DATABASE_BUSY',
+        message: 'Reports are temporarily busy. Please try again in a few seconds.',
+        requestId,
+      },
+    });
+    return;
+  }
   if (pgCode === '23505') {
     const duplicate =
       pgError.constraint === 'product_barcodes_organization_id_barcode_key'

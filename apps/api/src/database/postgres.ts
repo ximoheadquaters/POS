@@ -7,11 +7,16 @@ const { Pool } = pg;
 export class PostgresDatabase implements Database {
   private readonly pool: pg.Pool;
 
-  constructor(config: Pick<AppConfig, 'DATABASE_URL' | 'DATABASE_SSL'>) {
+  constructor(config: Pick<AppConfig, 'DATABASE_URL' | 'DATABASE_SSL' | 'DATABASE_POOL_MAX'>) {
     this.pool = new Pool({
       connectionString: config.DATABASE_URL,
-      max: 15,
-      idleTimeoutMillis: 30_000,
+      // Supabase's session pool has a small project-wide connection budget.
+      // A single API instance must not reserve the entire pool because Render,
+      // local development, migrations, and the website API may connect at the
+      // same time. Queries above this limit queue inside pg.Pool.
+      max: config.DATABASE_POOL_MAX,
+      min: 0,
+      idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 10_000,
       ssl: config.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
     });
