@@ -370,16 +370,14 @@ const updateOrganizationProfileSchema = z.object({
         const client = platformClient(response);
         await transaction.query(
           `insert into platform_audit_logs (
-            platform_api_client_id, action, target_type, target_id, details
-           ) values ($1, 'organization.business_profile.updated', 'organization', $2, $3::jsonb)`,
+            api_client_id, organization_id, action, before_data, after_data, metadata
+           ) values ($1, $2, 'organization.business_profile.updated', $3::jsonb, $4::jsonb, $5::jsonb)`,
           [
             client.id,
             organizationId,
-            JSON.stringify({
-              before: before.rows[0],
-              after: result.rows[0],
-              metadata: auditMetadata(request, response),
-            }),
+            JSON.stringify(before.rows[0]),
+            JSON.stringify(result.rows[0]),
+            JSON.stringify(auditMetadata(request, response)),
           ],
         );
 
