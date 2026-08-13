@@ -369,7 +369,7 @@ function SidebarMenu({ close }: { close(): void }) {
                           {isGroupDisabled ? (
                             <View className="flex-row items-center gap-1 rounded-full bg-amber-100/80 px-2 py-0.5">
                               <Feather name="lock" size={10} color="#B45309" />
-                              <Text className="text-[10px] font-bold text-amber-800">Pro</Text>
+                              <Text className="text-[10px] font-bold text-amber-800">Locked</Text>
                             </View>
                           ) : null}
                         </Pressable>
