@@ -108,9 +108,15 @@ const sidebarSections: SidebarSection[] = [
         id: 'reports',
         title: 'Income & Reports',
         icon: 'trending-up',
+        module: 'reports',
         children: [
           { title: 'Overview', href: '/reports/overview', module: 'reports' },
+          { title: 'Sales', href: '/reports/sales', module: 'reports' },
+          { title: 'Products', href: '/reports/products', module: 'reports' },
           { title: 'Inventory', href: '/reports/inventory' as Href, module: 'reports' },
+          { title: 'Purchasing', href: '/reports/purchasing' as Href, module: 'reports' },
+          { title: 'Profit', href: '/reports/profit' as Href, module: 'reports', permission: 'reports:view_profit' },
+          { title: 'Cash & shifts', href: '/reports/cash' as Href, module: 'reports' },
         ],
       },
       {
