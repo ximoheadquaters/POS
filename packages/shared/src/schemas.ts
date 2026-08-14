@@ -14,7 +14,8 @@ import { validateUnitConversion } from './units.js';
 export const uuidSchema = z.uuid();
 export const dateTimeSchema = z.iso.datetime({ offset: true });
 const optionalBarcodeSchema = z.preprocess(
-  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  (value) =>
+    value === null || (typeof value === 'string' && value.trim() === '') ? undefined : value,
   z.string().trim().min(3).max(80).optional(),
 );
 
