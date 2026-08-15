@@ -3,15 +3,12 @@ import type { CurrentUser } from '@ximo/shared';
 export const INVALID_INVITATION_MESSAGE =
   'This invitation link is invalid or has expired. Request a new invitation from your administrator.';
 
-<<<<<<< HEAD
-=======
 export const SETUP_SESSION_EXPIRED_MESSAGE =
   'Your setup session expired before the password was saved. Ask your administrator to resend the setup link, then open it once and create your password immediately.';
 
 export const PASSWORD_SAVED_SIGN_IN_MESSAGE =
   'Your password was saved. Sign in with your new password to continue.';
 
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
 // A recovery/invitation session is intentionally authenticated before its POS
 // profile is loaded. SessionProvider must not treat that temporary state as a
 // failed normal login and sign it out before updateUser can save the password.
@@ -142,16 +139,10 @@ export async function establishInvitationSession(
   setInvitationSetupActive(true);
 
   if (callback.kind === 'invalid') {
-<<<<<<< HEAD
-=======
-    const existingAccessToken = await existingSessionAccessToken(auth);
-    if (existingAccessToken) return existingAccessToken;
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
     setInvitationSetupActive(false);
     throw new InvitationFlowError(callback.reason, callback.message);
   }
 
-<<<<<<< HEAD
   setInvitationSetupActive(true);
 
   let result: AuthResponse;
@@ -174,34 +165,6 @@ export async function establishInvitationSession(
   }
 
   if (result.error || !result.data.session) {
-=======
-  let result: AuthResponse;
-  try {
-    result =
-      callback.kind === 'pkce'
-        ? await auth.exchangeCodeForSession(callback.code)
-        : callback.kind === 'session'
-          ? await auth.setSession({
-              access_token: callback.accessToken,
-              refresh_token: callback.refreshToken,
-            })
-          : await auth.verifyOtp({ token_hash: callback.tokenHash, type: callback.type });
-  } catch {
-    const existingAccessToken = await existingSessionAccessToken(auth);
-    if (existingAccessToken) return existingAccessToken;
-    setInvitationSetupActive(false);
-    throw new InvitationFlowError(
-      'network',
-      'Could not verify the invitation. Check your connection and try opening the link again.',
-    );
-  }
-
-  if (result.error || !result.data.session) {
-    // A browser callback may already have been consumed by a remount or email
-    // preview. If the setup session is already stored locally, continue.
-    const existingAccessToken = await existingSessionAccessToken(auth);
-    if (existingAccessToken) return existingAccessToken;
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
     setInvitationSetupActive(false);
     throw providerFailure(result.error);
   }
@@ -267,12 +230,7 @@ export async function completeInvitationPassword(
     }
     setInvitationSetupActive(false);
     return user;
-<<<<<<< HEAD
   } catch {
-=======
-  } catch (error) {
-    if (error instanceof InvitationFlowError) throw error;
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
     setInvitationSetupActive(false);
     await auth.signOut();
     throw new InvitationFlowError(

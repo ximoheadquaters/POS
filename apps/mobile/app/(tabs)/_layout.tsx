@@ -49,7 +49,13 @@ export default function TabLayout() {
   }
 
   if (!session) return <Redirect href="/(auth)/login" />;
-  if (!currentUser || !branch) return <Redirect href="/branch-select" />;
+  if (
+    !currentUser ||
+    !branch ||
+    !currentUser.branches.some((authorizedBranch) => authorizedBranch.id === branch.id)
+  ) {
+    return <Redirect href="/branch-select" />;
+  }
   const dashboardEnabled =
     currentUser.modules.includes('dashboard') || currentUser.modules.includes('reports');
   const posEnabled = currentUser.modules.includes('pos');

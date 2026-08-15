@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Modal,
   Pressable,
@@ -20,6 +20,7 @@ import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 
 type ReportPeriod = 'today' | 'yesterday' | '7d' | '30d' | 'custom';
+type InventoryStockStatus = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
 
 function localDateInput(date = new Date()): string {
   const offset = date.getTimezoneOffset() * 60_000;
@@ -110,6 +111,61 @@ function inventoryStockStatus(quantity: number, isLowStock: boolean): {
   return { label: 'In stock', tone: 'bg-brand-50 text-brand-700' };
 }
 
+function inventoryStockStatusKey(
+  quantity: number,
+  isLowStock: boolean,
+): Exclude<InventoryStockStatus, 'all'> {
+  if (quantity <= 0) return 'out_of_stock';
+  if (isLowStock) return 'low_stock';
+  return 'in_stock';
+}
+
+function ReportFilterChips({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ label: string; value: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <View className="mb-3 gap-2">
+      <Text className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View className="flex-row gap-2 pr-2">
+          {options.map((option) => {
+            const selected = option.value === value;
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => onChange(option.value)}
+                className={`min-h-9 justify-center rounded-lg border px-3 ${
+                  selected
+                    ? 'border-brand-700 bg-brand-700'
+                    : 'border-slate-200 bg-white'
+                }`}
+              >
+                <Text
+                  className={`text-xs font-medium ${selected ? 'text-white' : 'text-slate-600'}`}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 function ReportCard({
   title,
   subtitle,
@@ -143,12 +199,41 @@ function TableEmpty({ message }: { message: string }) {
   return <Text className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">{message}</Text>;
 }
 
-function InventoryReportTables({ report }: { report: InventoryReportResponse }) {
+function InventoryReportTables({
+  report,
+  performedBy,
+  onPerformedByChange,
+}: {
+  report: InventoryReportResponse;
+  performedBy: string;
+  onPerformedByChange: (value: string) => void;
+}) {
+  const [stockStatus, setStockStatus] = useState<InventoryStockStatus>('all');
+  const filteredStock = useMemo(
+    () =>
+      stockStatus === 'all'
+        ? report.stock
+        : report.stock.filter(
+            (item) => inventoryStockStatusKey(item.quantity, item.isLowStock) === stockStatus,
+          ),
+    [report.stock, stockStatus],
+  );
+  const performerOptions = useMemo(() => {
+    return [
+      { label: 'All staff', value: 'all' },
+      ...(report.performers ?? []).map((performer) => ({
+        label: performer.name,
+        value: performer.id,
+      })),
+    ];
+  }, [report.performers]);
+  const selectedPerformer = performerOptions.find((option) => option.value === performedBy);
+
   return (
     <View className="gap-4">
       <ReportCard
         title="Current stock"
-        subtitle={`${report.stock.length} tracked products on hand.`}
+        subtitle={`${filteredStock.length} of ${report.stock.length} tracked products shown.`}
         action={
           <Pressable
             onPress={() => router.push('/(tabs)/inventory')}
@@ -159,38 +244,55 @@ function InventoryReportTables({ report }: { report: InventoryReportResponse }) 
           </Pressable>
         }
       >
-        {report.stock.length === 0 ? (
-          <TableEmpty message="No tracked inventory for this branch." />
+        <ReportFilterChips
+          label="Status"
+          value={stockStatus}
+          options={[
+            { label: 'All', value: 'all' },
+            { label: 'In stock', value: 'in_stock' },
+            { label: 'Low stock', value: 'low_stock' },
+            { label: 'Out of stock', value: 'out_of_stock' },
+          ]}
+          onChange={(value) => setStockStatus(value as InventoryStockStatus)}
+        />
+        {filteredStock.length === 0 ? (
+          <TableEmpty
+            message={
+              report.stock.length === 0
+                ? 'No tracked inventory for this branch.'
+                : 'No products match the selected status.'
+            }
+          />
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="min-w-[980px] w-full overflow-hidden rounded-xl border border-slate-200">
+            <View className="min-w-[820px] w-full overflow-hidden rounded-xl border border-slate-200">
               <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-                <Text className="min-w-0 flex-[1.4] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[190px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Product
                 </Text>
-                <Text className="w-[88px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[78px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Role
                 </Text>
-                <Text className="w-[96px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  On hand
+                <Text className="w-[72px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Qty
                 </Text>
-                <Text className="w-[80px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[70px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Sealed
                 </Text>
-                <Text className="w-[80px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[70px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Opened
                 </Text>
-                <Text className="w-[72px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[58px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Unit
                 </Text>
                 <Text className="w-[100px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Status
                 </Text>
-                <Text className="w-[110px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[96px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Value
                 </Text>
               </View>
-              {report.stock.map((item, index) => {
+              {filteredStock.map((item, index) => {
                 const status = inventoryStockStatus(item.quantity, item.isLowStock);
                 return (
                   <View
@@ -199,7 +301,7 @@ function InventoryReportTables({ report }: { report: InventoryReportResponse }) 
                       index ? 'border-t border-slate-100' : ''
                     }`}
                   >
-                    <View className="min-w-0 flex-[1.4] pr-3">
+                    <View className="w-[190px] pr-3">
                       <Text className="text-sm font-medium text-slate-900">{item.productName}</Text>
                       <Text className="mt-0.5 text-xs text-slate-500">
                         {item.sku}
@@ -209,19 +311,19 @@ function InventoryReportTables({ report }: { report: InventoryReportResponse }) 
                         <Text className="mt-1 text-xs text-slate-500">{item.conversionHint}</Text>
                       ) : null}
                     </View>
-                    <Text className="w-[88px] text-sm capitalize text-slate-600">
+                    <Text className="w-[78px] text-sm capitalize text-slate-600">
                       {item.inventoryRole}
                     </Text>
-                    <Text className="w-[96px] text-right text-sm font-medium text-slate-900">
+                    <Text className="w-[72px] text-right text-sm font-medium text-slate-900">
                       {formatInventoryQty(item.quantity)}
                     </Text>
-                    <Text className="w-[80px] text-right text-sm text-slate-600">
+                    <Text className="w-[70px] text-right text-sm text-slate-600">
                       {formatInventoryQty(item.sealedQuantity)}
                     </Text>
-                    <Text className="w-[80px] text-right text-sm text-slate-600">
+                    <Text className="w-[70px] text-right text-sm text-slate-600">
                       {formatInventoryQty(item.openedQuantity)}
                     </Text>
-                    <Text className="w-[72px] text-sm text-slate-600">{item.unit}</Text>
+                    <Text className="w-[58px] text-sm text-slate-600">{item.unit}</Text>
                     <View className="w-[100px]">
                       <Text
                         className={`self-start rounded-md px-2 py-0.5 text-[11px] font-medium ${status.tone}`}
@@ -229,7 +331,7 @@ function InventoryReportTables({ report }: { report: InventoryReportResponse }) 
                         {status.label}
                       </Text>
                     </View>
-                    <Text className="w-[110px] text-right text-sm font-medium text-slate-800">
+                    <Text className="w-[96px] text-right text-sm font-medium text-slate-800">
                       {item.inventoryValue == null ? '—' : formatMoney(item.inventoryValue)}
                     </Text>
                   </View>
@@ -289,37 +391,59 @@ function InventoryReportTables({ report }: { report: InventoryReportResponse }) 
       <ReportCard
         title="Inventory movements"
         subtitle={
-          report.movementsTotal > report.movements.length
-            ? `Showing ${report.movements.length} of ${report.movementsTotal} movements in this period.`
-            : `${report.movementsTotal} movements in this period.`
+          performedBy === 'all'
+            ? report.movementsTotal > report.movements.length
+              ? `Showing ${report.movements.length} of ${report.movementsTotal} movements in this period.`
+              : `${report.movementsTotal} movements in this period.`
+            : `${report.movementsTotal} movements performed by ${
+                selectedPerformer?.label ?? 'the selected staff member'
+              }.`
         }
       >
+        <ReportFilterChips
+          label="Performed by"
+          value={performedBy}
+          options={performerOptions}
+          onChange={onPerformedByChange}
+        />
         {report.movements.length === 0 ? (
-          <TableEmpty message="No inventory movements in this period." />
+          <TableEmpty
+            message={
+              performedBy === 'all'
+                ? 'No inventory movements in this period.'
+                : 'No movements match the selected staff member.'
+            }
+          />
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="min-w-[1100px] w-full overflow-hidden rounded-xl border border-slate-200">
+            <View className="min-w-[1040px] w-full overflow-hidden rounded-xl border border-slate-200">
               <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-                <Text className="w-[150px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[126px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   When
                 </Text>
-                <Text className="min-w-0 flex-[1.2] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[160px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Product
                 </Text>
-                <Text className="w-[130px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[108px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Type
                 </Text>
-                <Text className="w-[96px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[78px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Qty
                 </Text>
-                <Text className="min-w-0 flex-[1.1] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[54px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Unit
+                </Text>
+                <Text className="w-[142px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Conversion
                 </Text>
-                <Text className="w-[96px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text className="w-[78px] text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Balance
                 </Text>
-                <Text className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  Reason / Staff
+                <Text className="w-[146px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Reason
+                </Text>
+                <Text className="w-[116px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Performed by
                 </Text>
               </View>
               {report.movements.map((item, index) => (
@@ -329,35 +453,39 @@ function InventoryReportTables({ report }: { report: InventoryReportResponse }) 
                     index ? 'border-t border-slate-100' : ''
                   }`}
                 >
-                  <Text className="w-[150px] pr-2 text-sm text-slate-500">
+                  <Text className="w-[126px] pr-2 text-sm text-slate-500">
                     {formatDate(item.createdAt)}
                   </Text>
-                  <View className="min-w-0 flex-[1.2] pr-3">
+                  <View className="w-[160px] pr-3">
                     <Text className="text-sm font-medium text-slate-900">{item.productName}</Text>
                     <Text className="mt-0.5 text-xs text-slate-500">{item.sku}</Text>
                   </View>
-                  <Text className="w-[130px] pr-2 text-sm text-slate-700">
+                  <Text className="w-[108px] pr-2 text-sm text-slate-700">
                     {inventoryMovementTypeLabel(item.type)}
                   </Text>
                   <Text
-                    className={`w-[96px] text-right text-sm font-medium ${
+                    className={`w-[78px] text-right text-sm font-medium ${
                       item.quantityDelta < 0 ? 'text-red-700' : 'text-brand-800'
                     }`}
                   >
                     {item.quantityDelta > 0 ? '+' : ''}
-                    {formatInventoryQty(item.quantityDelta)} {item.unit}
+                    {formatInventoryQty(item.quantityDelta)}
                   </Text>
-                  <Text className="min-w-0 flex-[1.1] px-3 text-sm text-slate-600">
+                  <Text className="w-[54px] pl-2 text-sm text-slate-600">{item.unit}</Text>
+                  <Text className="w-[142px] px-3 text-sm text-slate-600">
                     {item.conversionLabel ?? '—'}
                   </Text>
-                  <Text className="w-[96px] text-right text-sm text-slate-800">
-                    {formatInventoryQty(item.quantityAfter)} {item.unit}
+                  <Text className="w-[78px] text-right text-sm text-slate-800">
+                    {formatInventoryQty(item.quantityAfter)}
                   </Text>
-                  <View className="min-w-0 flex-1 pl-3">
-                    <Text className="text-sm text-slate-700">{item.reason}</Text>
-                    <Text className="mt-0.5 text-xs text-slate-500">
-                      {item.createdBy ?? '—'}
-                      {item.branchName ? ` · ${item.branchName}` : ''}
+                  <View className="w-[146px] pl-3">
+                    <Text className="text-sm text-slate-700" numberOfLines={2}>
+                      {item.reason}
+                    </Text>
+                  </View>
+                  <View className="w-[116px] pl-3">
+                    <Text className="text-sm text-slate-700" numberOfLines={1}>
+                      {item.createdBy ?? 'System'}
                     </Text>
                   </View>
                 </View>
@@ -388,6 +516,7 @@ function InventoryReportContent() {
   const [draftFrom, setDraftFrom] = useState(defaultCustomRange.from);
   const [draftTo, setDraftTo] = useState(defaultCustomRange.to);
   const [dateRangeError, setDateRangeError] = useState('');
+  const [performedBy, setPerformedBy] = useState('all');
 
   const range = useMemo(() => {
     if (period === 'custom') {
@@ -406,8 +535,19 @@ function InventoryReportContent() {
 
   const rangeLabel = useMemo(() => readableDateRange(range.from, range.to), [range.from, range.to]);
 
+  useEffect(() => {
+    setPerformedBy('all');
+  }, [branch?.id, range.from, range.to]);
+
   const query = useQuery({
-    queryKey: ['inventory-report-page', branch?.id, range.from, range.to, session?.user?.id],
+    queryKey: [
+      'inventory-report-page',
+      branch?.id,
+      range.from,
+      range.to,
+      performedBy,
+      session?.user?.id,
+    ],
     enabled: !sessionLoading && Boolean(session?.access_token),
     queryFn: () => {
       const fromDate = range.from.slice(0, 10);
@@ -417,7 +557,7 @@ function InventoryReportContent() {
       return api<InventoryReportResponse>(
         `/reports/inventory?from=${encodeURIComponent(fromDate)}&to=${encodeURIComponent(toDate)}${
           branch?.id ? `&branchId=${branch.id}` : ''
-        }&pageSize=100`,
+        }${performedBy !== 'all' ? `&performedById=${encodeURIComponent(performedBy)}` : ''}&pageSize=100`,
       );
     },
   });
@@ -518,7 +658,11 @@ function InventoryReportContent() {
               <ErrorState message={query.error.message} retry={() => void query.refetch()} />
             </View>
           ) : query.data ? (
-            <InventoryReportTables report={query.data} />
+            <InventoryReportTables
+              report={query.data}
+              performedBy={performedBy}
+              onPerformedByChange={setPerformedBy}
+            />
           ) : null}
         </View>
       </ScrollView>

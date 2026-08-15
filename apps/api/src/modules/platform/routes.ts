@@ -149,7 +149,6 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     sendData(response, result.rows);
   });
 
-<<<<<<< HEAD
   router.get('/applications', requirePlatformScope('platform:read'), async (_request, response) => {
     const result = await database.query(
       `select application.id,application.code,application.name,application.description,
@@ -164,7 +163,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     );
     sendData(response, result.rows);
   });
-=======
+
   router.put(
     '/plans/:planCode/modules',
     requirePlatformScope('platform:write'),
@@ -285,7 +284,6 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
       sendData(response, updated);
     },
   );
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
 
   router.get('/modules', requirePlatformScope('platform:read'), async (_request, response) => {
     await database.query(

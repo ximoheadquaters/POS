@@ -4,7 +4,6 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -13,6 +12,7 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { REPORT_PERMISSION_MATRIX, type ReportAccessLevel } from '@ximo/shared';
 import { AppSidebarProvider } from '@/components/app-sidebar';
+import { DateRangeCalendar } from '@/components/date-range-calendar';
 import { Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { buildReportsCsv, buildReportsExcel, buildReportsPdf } from '@/lib/report-export';
@@ -295,6 +295,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
   const [customRange, setCustomRange] = useState(() => rangeFor('30d', { from: '', to: '' }));
   const [customVisible, setCustomVisible] = useState(false);
   const [draftRange, setDraftRange] = useState(customRange);
+  const [calendarSession, setCalendarSession] = useState(0);
   const [comparison, setComparison] = useState<Comparison>('none');
   const [exportVisible, setExportVisible] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -510,6 +511,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
                 <Pressable
                   onPress={() => {
                     setDraftRange(customRange);
+                    setCalendarSession((value) => value + 1);
                     setCustomVisible(true);
                   }}
                   className={`min-h-9 flex-row items-center justify-center rounded-lg px-3 ${period === 'custom' ? 'bg-[#E8F5EE]' : 'bg-white'}`}
@@ -600,58 +602,71 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
         animationType="fade"
         onRequestClose={() => setCustomVisible(false)}
       >
-        <View className="flex-1 items-center justify-center bg-black/40 p-4">
+        <View className="flex-1 items-center justify-center bg-black/40 p-3 md:p-6">
           <Pressable className="absolute inset-0" onPress={() => setCustomVisible(false)} />
-          <View className="w-full max-w-[420px] rounded-2xl bg-white p-5">
-            <Text className="text-lg font-semibold text-slate-900">Custom date range</Text>
-            <Text className="mt-1 text-xs text-slate-500">
-              Use YYYY-MM-DD. The range is applied in the store timezone.
-            </Text>
-            <Text className="mb-1 mt-4 text-xs font-medium text-slate-600">From</Text>
-            <TextInput
-              value={draftRange.from}
-              onChangeText={(from) => setDraftRange((value) => ({ ...value, from }))}
-              placeholder="2026-08-01"
-              className="min-h-11 rounded-xl border border-slate-200 px-3 text-sm"
-            />
-            <Text className="mb-1 mt-3 text-xs font-medium text-slate-600">To</Text>
-            <TextInput
-              value={draftRange.to}
-              onChangeText={(to) => setDraftRange((value) => ({ ...value, to }))}
-              placeholder="2026-08-31"
-              className="min-h-11 rounded-xl border border-slate-200 px-3 text-sm"
-            />
-            <View className="mt-5 flex-row gap-2">
-              <View className="flex-1">
-                <Button
-                  title="Cancel"
-                  variant="secondary"
+          <View className="max-h-[92%] w-full max-w-[440px] overflow-hidden rounded-2xl bg-white">
+            <ScrollView
+              contentContainerClassName="p-4 md:p-5"
+              showsVerticalScrollIndicator={false}
+            >
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="min-w-0 flex-1">
+                  <Text className="text-lg font-semibold text-slate-900">Select date range</Text>
+                  <Text className="mt-1 text-xs leading-5 text-slate-500">
+                    Tap a start date, then tap an end date. The range uses the store timezone.
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close calendar"
                   onPress={() => setCustomVisible(false)}
+                  className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
+                >
+                  <Feather name="x" size={16} color="#64748B" />
+                </Pressable>
+              </View>
+
+              <View className="mt-5">
+                <DateRangeCalendar
+                  key={calendarSession}
+                  from={draftRange.from}
+                  to={draftRange.to}
+                  onChange={setDraftRange}
                 />
               </View>
-              <View className="flex-1">
-                <Button
-                  title="Apply"
-                  onPress={() => {
-                    if (
-                      !/^\d{4}-\d{2}-\d{2}$/.test(draftRange.from) ||
-                      !/^\d{4}-\d{2}-\d{2}$/.test(draftRange.to) ||
-                      draftRange.from > draftRange.to
-                    ) {
-                      showAlert({
-                        type: 'warning',
-                        title: 'Invalid date range',
-                        message: 'Enter valid dates and make sure From is not later than To.',
-                      });
-                      return;
-                    }
-                    setCustomRange(draftRange);
-                    setPeriod('custom');
-                    setCustomVisible(false);
-                  }}
-                />
+
+              <View className="mt-5 flex-row gap-2">
+                <View className="flex-1">
+                  <Button
+                    title="Cancel"
+                    variant="secondary"
+                    onPress={() => setCustomVisible(false)}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Button
+                    title="Apply range"
+                    onPress={() => {
+                      if (
+                        !/^\d{4}-\d{2}-\d{2}$/.test(draftRange.from) ||
+                        !/^\d{4}-\d{2}-\d{2}$/.test(draftRange.to) ||
+                        draftRange.from > draftRange.to
+                      ) {
+                        showAlert({
+                          type: 'warning',
+                          title: 'Invalid date range',
+                          message: 'Select a valid start and end date from the calendar.',
+                        });
+                        return;
+                      }
+                      setCustomRange(draftRange);
+                      setPeriod('custom');
+                      setCustomVisible(false);
+                    }}
+                  />
+                </View>
               </View>
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>

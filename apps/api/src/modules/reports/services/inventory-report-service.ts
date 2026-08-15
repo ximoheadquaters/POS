@@ -53,6 +53,7 @@ export interface InventoryReportResponse {
   stock: InventoryReportStockRow[];
   conversions: InventoryReportConversionRow[];
   movements: InventoryReportMovementRow[];
+  performers: Array<{ id: string; name: string }>;
   movementsTotal: number;
   page: number;
   pageSize: number;
@@ -84,7 +85,7 @@ export class InventoryReportService {
 
   async generate(
     scope: ReportScopeContext,
-    filter: { page?: number; pageSize?: number },
+    filter: { page?: number; pageSize?: number; performedById?: string },
   ): Promise<InventoryReportResponse> {
     const page = Math.max(1, filter.page ?? 1);
     const pageSize = Math.min(200, Math.max(10, filter.pageSize ?? 100));
@@ -107,6 +108,7 @@ export class InventoryReportService {
       scope.branchId,
       scope.hasAllBranchesAccess,
       scope.allowedBranchIds,
+      filter.performedById ?? null,
       pageSize,
       offset,
     ] as const;
@@ -114,7 +116,7 @@ export class InventoryReportService {
       `($4::uuid is null or ${alias}.branch_id=$4)
        and ($5::boolean or ${alias}.branch_id=any($6::uuid[]))`;
 
-    const [stockResult, conversionsResult, movementsResult] = await Promise.all([
+    const [stockResult, conversionsResult, movementsResult, performersResult] = await Promise.all([
       this.database.query<{
         id: string;
         productId: string;
@@ -228,7 +230,7 @@ export class InventoryReportService {
          from inventory_movements im
          join products p on p.id=im.product_id and p.organization_id=im.organization_id
          join branches b on b.id=im.branch_id and b.organization_id=im.organization_id
-         join profiles pr on pr.id=im.created_by and pr.organization_id=im.organization_id
+         left join profiles pr on pr.id=im.created_by and pr.organization_id=im.organization_id
          left join product_variants v
            on v.id=im.variant_id and v.organization_id=im.organization_id
          left join lateral (
@@ -253,9 +255,20 @@ export class InventoryReportService {
          where im.organization_id=$1
            and im.created_at >= $2 and im.created_at < $3
            and ${movementBranchScope('im')}
+           and ($7::uuid is null or im.created_by=$7)
          order by im.created_at desc
-         limit $7 offset $8`,
+         limit $8 offset $9`,
         [...movementValues],
+      ),
+      this.database.query<{ id: string; name: string }>(
+        `select distinct pr.id,pr.display_name as name
+         from inventory_movements im
+         join profiles pr on pr.id=im.created_by and pr.organization_id=im.organization_id
+         where im.organization_id=$1
+           and im.created_at >= $2 and im.created_at < $3
+           and ${movementBranchScope('im')}
+         order by name asc`,
+        [...movementValues.slice(0, 6)],
       ),
     ]);
 
@@ -347,6 +360,7 @@ export class InventoryReportService {
       stock,
       conversions,
       movements,
+      performers: scope.canViewStaff ? performersResult.rows : [],
       movementsTotal,
       page,
       pageSize,

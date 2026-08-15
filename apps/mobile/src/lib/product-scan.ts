@@ -5,6 +5,17 @@ export function normalizeBarcode(value: string): string {
   return value.trim();
 }
 
+export function productLookupPath(
+  scannedValue: string,
+  branchId: string,
+  usage?: 'pos' | 'bom',
+): string {
+  const code = normalizeBarcode(scannedValue);
+  return `/products/lookup?code=${encodeURIComponent(code)}&branchId=${encodeURIComponent(branchId)}${
+    usage ? `&usage=${encodeURIComponent(usage)}` : ''
+  }`;
+}
+
 export type ProductScanResult =
   | {
       matchType: 'base';

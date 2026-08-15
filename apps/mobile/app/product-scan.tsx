@@ -1,10 +1,11 @@
-import { useCallback, useState } from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { Redirect, router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { Button, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
-import { normalizeBarcode } from '@/lib/product-scan';
+import { normalizeBarcode, productLookupPath } from '@/lib/product-scan';
+import { useIosAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 import { useCartStore, type CartProduct } from '@/store/cart';
@@ -28,41 +29,97 @@ export default function ProductScanScreen() {
   const addToCart = params.addToCart === '1';
   const branch = useBranchStore((state) => state.activeBranch);
   const add = useCartStore((state) => state.add);
+  const { showAlert } = useIosAlert();
   const [permission, requestPermission] = useCameraPermissions();
   const [manualBarcode, setManualBarcode] = useState('');
   const [manualCodeType, setManualCodeType] = useState<'barcode' | 'sku'>('barcode');
   const [checking, setChecking] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [cameraSession, setCameraSession] = useState(0);
+  const scanLockRef = useRef(false);
+  const permissionPromptedRef = useRef(false);
+
+  const resumeScanning = useCallback(() => {
+    scanLockRef.current = false;
+    setChecking(false);
+    setManualBarcode('');
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
+      scanLockRef.current = false;
+      setChecking(false);
+      setCameraReady(false);
+      setCameraError('');
       setFocused(true);
-      return () => setFocused(false);
+      return () => {
+        setFocused(false);
+        scanLockRef.current = true;
+      };
     }, []),
   );
 
-  const handleCode = async (rawValue: string, codeType: 'barcode' | 'sku' = 'barcode') => {
-    const barcode = normalizeBarcode(rawValue);
-    if (checking) return;
-    if (barcode.length < 3) {
-      Alert.alert('Invalid barcode', 'Enter or scan at least 3 characters.');
+  useEffect(() => {
+    if (
+      !focused ||
+      !permission ||
+      permission.granted ||
+      permission.status !== 'undetermined' ||
+      permissionPromptedRef.current
+    ) {
       return;
     }
+    permissionPromptedRef.current = true;
+    void requestPermission().catch(() => {
+      setCameraError('The camera permission request could not be opened.');
+    });
+  }, [focused, permission, requestPermission]);
+
+  const handleCode = async (rawValue: string, codeType: 'barcode' | 'sku' = 'barcode') => {
+    const barcode = normalizeBarcode(rawValue);
+    if (scanLockRef.current) return;
+    if (barcode.length < 3) {
+      scanLockRef.current = true;
+      setChecking(true);
+      showAlert({
+        type: 'warning',
+        title: 'Invalid barcode',
+        message: 'Enter or scan at least 3 characters.',
+        buttons: [{ text: 'Scan another', onPress: resumeScanning }],
+      });
+      return;
+    }
+    if (!branch || !currentUser?.branches.some((assigned) => assigned.id === branch.id)) {
+      scanLockRef.current = true;
+      setChecking(true);
+      showAlert({
+        type: 'warning',
+        title: 'Branch required',
+        message: 'Select an assigned branch before scanning a product.',
+        buttons: [
+          { text: 'Cancel', style: 'cancel', onPress: resumeScanning },
+          { text: 'Select branch', onPress: () => router.replace('/branches') },
+        ],
+      });
+      return;
+    }
+    scanLockRef.current = true;
     setChecking(true);
     try {
       const existing = await api<CartProduct | null>(
-        `/products/lookup?usage=pos&code=${encodeURIComponent(barcode)}${
-          addToCart && branch ? `&branchId=${branch.id}` : ''
-        }`,
+        productLookupPath(barcode, branch.id, addToCart ? 'pos' : undefined),
       );
       if (existing) {
         if (addToCart) {
           if (existing.status === 'inactive') {
-            Alert.alert(
-              'Product is inactive',
-              'Ask an owner or manager to reactivate this product.',
-              [{ text: 'Scan another', onPress: () => setChecking(false) }],
-            );
+            showAlert({
+              type: 'warning',
+              title: 'Product is inactive',
+              message: 'Ask an owner or manager to reactivate this product.',
+              buttons: [{ text: 'Scan another', onPress: resumeScanning }],
+            });
             return;
           }
           if (
@@ -70,33 +127,36 @@ export default function ProductScanScreen() {
             existing.availableQuantity !== undefined &&
             existing.availableQuantity <= 0
           ) {
-            Alert.alert('Product is sold out', 'Stock changed on another register.', [
-              { text: 'Scan another', onPress: () => setChecking(false) },
-            ]);
+            showAlert({
+              type: 'warning',
+              title: 'Product is sold out',
+              message: 'Stock changed on another register.',
+              buttons: [{ text: 'Scan another', onPress: resumeScanning }],
+            });
             return;
           }
           add(existing);
           router.replace('/(tabs)/pos');
           return;
         }
-        Alert.alert('Product already exists', `${existing.name} already uses this barcode.`, [
-          {
-            text: 'Scan another',
-            onPress: () => {
-              setManualBarcode('');
-              setChecking(false);
-            },
-          },
-          { text: 'Back to products', onPress: () => router.back() },
-        ]);
+        showAlert({
+          type: 'info',
+          title: 'Product already exists',
+          message: `${existing.name} already uses this barcode.`,
+          buttons: [
+            { text: 'Scan another', onPress: resumeScanning },
+            { text: 'Back to products', onPress: () => router.back() },
+          ],
+        });
         return;
       }
       if (!currentUser?.permissions.includes('products:manage')) {
-        Alert.alert(
-          'Product not found',
-          'Ask an owner or manager to add this barcode before selling it.',
-          [{ text: 'Scan another', onPress: () => setChecking(false) }],
-        );
+        showAlert({
+          type: 'warning',
+          title: 'Product not found',
+          message: 'Ask an owner or manager to add this barcode before selling it.',
+          buttons: [{ text: 'Scan another', onPress: resumeScanning }],
+        });
         return;
       }
       router.replace({
@@ -107,11 +167,12 @@ export default function ProductScanScreen() {
         },
       } as Href);
     } catch (error) {
-      Alert.alert(
-        'Could not check barcode',
-        error instanceof Error ? error.message : 'Please try again.',
-        [{ text: 'Try again', onPress: () => setChecking(false) }],
-      );
+      showAlert({
+        type: 'error',
+        title: 'Could not check barcode',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        buttons: [{ text: 'Try again', onPress: resumeScanning }],
+      });
     }
   };
 
@@ -122,6 +183,9 @@ export default function ProductScanScreen() {
   if (!currentUser?.modules.includes('barcode_scanner')) {
     return <Redirect href="/(tabs)/more" />;
   }
+
+  const insecureWebContext =
+    Platform.OS === 'web' && typeof window !== 'undefined' && !window.isSecureContext;
 
   return (
     <Screen>
@@ -140,14 +204,41 @@ export default function ProductScanScreen() {
         <LoadingState label="Checking camera permission…" />
       ) : (
         <View className="flex-1 p-4">
-          {permission.granted ? (
-            <View className="mb-4 h-72 overflow-hidden rounded-3xl bg-black">
-              {focused ? (
+          {permission.granted && !insecureWebContext ? (
+            cameraError ? (
+              <View className="mb-4 min-h-72 items-center justify-center rounded-3xl bg-slate-950 p-6">
+                <Text className="text-center font-semibold text-white">Camera could not start</Text>
+                <Text className="mt-2 text-center text-sm leading-5 text-slate-300">
+                  {cameraError}
+                </Text>
+                <View className="mt-4 w-full max-w-48">
+                  <Button
+                    title="Try camera again"
+                    onPress={() => {
+                      setCameraError('');
+                      setCameraReady(false);
+                      setCameraSession((value) => value + 1);
+                    }}
+                  />
+                </View>
+              </View>
+            ) : (
+              <View className="relative mb-4 h-72 overflow-hidden rounded-3xl bg-black">
+                {focused ? (
                 <CameraView
+                  key={cameraSession}
                   style={{ flex: 1 }}
                   facing="back"
                   barcodeScannerSettings={{ barcodeTypes: [...BARCODE_TYPES] }}
                   onBarcodeScanned={checking ? undefined : handleCameraScan}
+                  onCameraReady={() => {
+                    setCameraReady(true);
+                    setCameraError('');
+                  }}
+                  onMountError={(event) => {
+                    setCameraReady(false);
+                    setCameraError(event.message || 'Check that another app is not using the camera.');
+                  }}
                 >
                   <View className="flex-1 items-center justify-center">
                     <View className="h-32 w-72 rounded-2xl border-2 border-white" />
@@ -156,23 +247,38 @@ export default function ProductScanScreen() {
                     </Text>
                   </View>
                 </CameraView>
-              ) : null}
-            </View>
+                ) : null}
+                {!cameraReady ? (
+                  <View className="absolute inset-0 items-center justify-center bg-black">
+                    <LoadingState label="Starting camera…" />
+                  </View>
+                ) : null}
+              </View>
+            )
           ) : (
             <View className="mb-4 rounded-3xl bg-brand-50 p-5">
               <Text className="font-bold text-brand-900">Camera access is needed</Text>
               <Text className="mt-1 leading-5 text-slate-600">
-                Ximo only uses the camera to read product barcodes.
+                {insecureWebContext
+                  ? 'Camera scanning requires HTTPS or localhost. Open the secure Ximo address and try again.'
+                  : 'Ximo only uses the camera to read product barcodes.'}
               </Text>
-              {permission.canAskAgain ? (
+              {!insecureWebContext && permission.canAskAgain ? (
                 <View className="mt-4">
                   <Button title="Allow camera" onPress={() => void requestPermission()} />
                 </View>
-              ) : (
+              ) : !insecureWebContext ? (
+                <View className="mt-4 gap-2">
                 <Text className="mt-3 text-sm font-bold text-red-700">
-                  Enable camera access for Ximo POS in your phone settings.
+                    {Platform.OS === 'web'
+                      ? 'Use the lock or camera icon beside the browser address to allow camera access.'
+                      : 'Enable camera access for Ximo POS in your phone settings.'}
                 </Text>
-              )}
+                  {Platform.OS !== 'web' ? (
+                    <Button title="Open device settings" onPress={() => void Linking.openSettings()} />
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           )}
 

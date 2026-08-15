@@ -106,7 +106,6 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
         permissions: row.permissions ?? [],
         modules: effectiveModules,
         branches: row.branches ?? [],
-<<<<<<< HEAD
         ...(platformAccess.membership ? { membership: platformAccess.membership } : {}),
         applications:
           platformAccess.applications.length > 0
@@ -122,12 +121,10 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
                   role: row.role,
                   entitlements: Object.fromEntries(
                     effectiveModules.map((module) => [`module.${module}`, true]),
-                  ),
-                },
-              ],
-=======
+                   ),
+                 },
+               ],
         mustChangePassword: row.must_change_password,
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
       };
       next();
     } catch (error) {

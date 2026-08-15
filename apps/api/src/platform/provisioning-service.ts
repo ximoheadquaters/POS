@@ -346,16 +346,17 @@ export class PlatformProvisioningService {
 
         await transaction.query(
           `insert into profiles (
-<<<<<<< HEAD
-            id,organization_id,role_id,display_name,email,is_active,invitation_sent_at
-           ) values ($1,$2,$3,$4,$5,true,now())`,
-          [ownerAuthUser.id, organizationId, ownerRole.id, input.ownerName, ownerAuthUser.email],
-=======
             id,organization_id,role_id,display_name,email,is_active,invitation_sent_at,
             must_change_password
-           ) values ($1,$2,$3,$4,$5,true,now(),true)`,
-          [invitedOwner.id, organizationId, ownerRole.id, input.ownerName, invitedOwner.email],
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
+           ) values ($1,$2,$3,$4,$5,true,now(),$6)`,
+          [
+            ownerAuthUser.id,
+            organizationId,
+            ownerRole.id,
+            input.ownerName,
+            ownerAuthUser.email,
+            !input.ownerUserId,
+          ],
         );
         const branch = await transaction.query<{ id: string; name: string; code: string }>(
           `insert into branches (organization_id,name,code,is_active)

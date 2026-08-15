@@ -11,7 +11,6 @@ import {
 import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useQuery } from '@tanstack/react-query';
-import { REPORT_CATALOG, REPORT_METRICS, type ReportDefinition } from '@ximo/shared';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { DateRangeCalendar } from '@/components/date-range-calendar';
 import { Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
@@ -21,7 +20,6 @@ import {
   buildInventoryExportExcel,
   buildInventoryExportPdf,
   buildReportsExcel,
-  buildReportsCsv,
   buildReportsPdf,
   type InventoryExportData,
 } from '@/lib/report-export';
@@ -31,18 +29,8 @@ import { useIosAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 
-type ReportSection =
-  | 'overview'
-  | 'sales'
-  | 'products'
-  | 'inventory'
-  | 'purchasing'
-  | 'profit'
-  | 'cash'
-  | 'audit'
-  | 'repacking';
+type ReportSection = 'overview' | 'sales' | 'products' | 'inventory' | 'purchasing' | 'profit' | 'cash';
 type ReportPeriod = 'today' | 'yesterday' | '7d' | '30d' | 'this_month' | 'last_month' | 'all' | 'custom';
-type ComparisonPeriod = 'none' | 'previous_period' | 'previous_month' | 'previous_year';
 
 interface DetailItem {
   id: string;
@@ -172,34 +160,6 @@ function readableDateRange(fromIso: string, toIso: string): string {
   return `${startStr} – ${endStr}`;
 }
 
-function comparisonDateRange(
-  current: { from: string; to: string },
-  mode: ComparisonPeriod,
-): { from: string; to: string } | null {
-  if (mode === 'none') return null;
-  const from = new Date(current.from);
-  const to = new Date(current.to);
-  if (mode === 'previous_period') {
-    const duration = Math.max(86_400_000, to.getTime() - from.getTime());
-    return {
-      from: new Date(from.getTime() - duration).toISOString(),
-      to: from.toISOString(),
-    };
-  }
-  if (mode === 'previous_month') {
-    const start = new Date(from);
-    start.setUTCMonth(start.getUTCMonth() - 1);
-    const end = new Date(to);
-    end.setUTCMonth(end.getUTCMonth() - 1);
-    return { from: start.toISOString(), to: end.toISOString() };
-  }
-  const start = new Date(from);
-  start.setUTCFullYear(start.getUTCFullYear() - 1);
-  const end = new Date(to);
-  end.setUTCFullYear(end.getUTCFullYear() - 1);
-  return { from: start.toISOString(), to: end.toISOString() };
-}
-
 const SECTIONS: Array<{
   key: ReportSection;
   label: string;
@@ -207,17 +167,6 @@ const SECTIONS: Array<{
   description: string;
   icon: ComponentProps<typeof Feather>['name'];
 }> = [
-<<<<<<< HEAD
-  { key: 'overview', label: 'Overview', icon: 'grid' },
-  { key: 'sales', label: 'Sales', icon: 'shopping-cart' },
-  { key: 'products', label: 'Products', icon: 'tag' },
-  { key: 'inventory', label: 'Inventory', icon: 'package' },
-  { key: 'purchasing', label: 'Purchasing', icon: 'truck' },
-  { key: 'profit', label: 'Profit', icon: 'trending-up' },
-  { key: 'cash', label: 'Cash', icon: 'monitor' },
-  { key: 'audit', label: 'Audit', icon: 'shield' },
-  { key: 'repacking', label: 'Repacking', icon: 'repeat' },
-=======
   {
     key: 'overview',
     label: 'Overview',
@@ -267,20 +216,7 @@ const SECTIONS: Array<{
     description: 'Drawer accountability, counted cash, and variance.',
     icon: 'monitor',
   },
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
 ];
-
-const SECTION_REPORT_IDS: Record<ReportSection, string> = {
-  overview: 'sales_overview',
-  sales: 'sales_summary',
-  products: 'product_performance',
-  inventory: 'inventory_valuation',
-  purchasing: 'purchasing_summary',
-  profit: 'profit_analysis',
-  cash: 'cash_shift_accountability',
-  audit: 'audit_activity',
-  repacking: 'recipe_costing',
-};
 
 /** Distinct chart hues — readable on white, not a single green wash. */
 const CHART_COLORS = [
@@ -595,7 +531,6 @@ function MetricCard({
               color={trend === 'up' ? '#1A593B' : '#E11D48'}
             />
           ) : null}
-
           <View className="h-8 w-8 items-center justify-center rounded-xl bg-white/70">
             <Feather name={icon} size={15} color={palette.accent} />
           </View>
@@ -5522,528 +5457,6 @@ function CashReport({
   );
 }
 
-function AuditReport({
-  report,
-  onOpenDetail,
-}: {
-  report: ReportsWorkspace;
-  onOpenDetail(config: MetricDrilldownConfig): void;
-}) {
-  const audit = report.audit;
-  if (!audit) {
-    return (
-      <ReportCard
-        title="Audit activity"
-        subtitle="Voids, refunds, stock adjustments, and cash adjustments"
-      >
-        <View className="items-center rounded-2xl bg-slate-50 px-5 py-10">
-          <Feather name="shield" size={28} color="#94A3B8" />
-          <Text className="mt-3 text-sm font-semibold text-slate-800">Audit access is required</Text>
-          <Text className="mt-1 max-w-lg text-center text-xs leading-5 text-slate-500">
-            Ask an owner to grant Audit Logs access to view sensitive operational events.
-          </Text>
-        </View>
-      </ReportCard>
-    );
-  }
-
-  const detailItems = (type?: NonNullable<ReportsWorkspace['audit']>['events'][number]['type']): DetailItem[] =>
-    audit.events
-      .filter((event) => !type || event.type === type)
-      .map((event) => ({
-        id: event.id,
-        title: event.title,
-        category: event.branchName,
-        note: `${new Date(event.createdAt).toLocaleString('en-PH')} - ${event.actorName ?? 'System'}`,
-        value: event.amount === null ? event.detail : formatMoney(event.amount),
-        subValue: event.amount === null ? undefined : event.detail,
-        statusTag: event.type,
-        statusTone: event.type === 'void' || event.type === 'refund' ? 'red' : event.type === 'cash' ? 'amber' : 'blue',
-      }));
-
-  return (
-    <>
-      <View className="w-full flex-row flex-wrap gap-3">
-        <MetricCard
-          label="Voided sales"
-          value={`${audit.voidedSales}`}
-          icon="slash"
-          tone="red"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'void_count',
-              title: 'Voided Sale Events',
-              subtitle: 'Voided transactions in the selected date range.',
-              icon: 'slash',
-              tone: 'red',
-              summaryLabel: 'Voided Sales',
-              summaryValue: `${audit.voidedSales}`,
-              items: detailItems('void'),
-            })
-          }
-        />
-        <MetricCard
-          label="Refunds"
-          value={formatMoney(audit.refundAmount)}
-          note={`${audit.refundTransactions} transactions`}
-          icon="corner-up-left"
-          tone="red"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'refund_amount',
-              title: 'Refund Events',
-              subtitle: 'Completed customer refunds in the selected date range.',
-              icon: 'corner-up-left',
-              tone: 'red',
-              summaryLabel: 'Refund Amount',
-              summaryValue: formatMoney(audit.refundAmount),
-              items: detailItems('refund'),
-            })
-          }
-        />
-        <MetricCard
-          label="Stock adjustments"
-          value={`${audit.inventoryAdjustments}`}
-          icon="package"
-          tone="blue"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'inventory_adjustments',
-              title: 'Inventory Adjustment Events',
-              subtitle: 'Manual stock changes recorded in the inventory ledger.',
-              icon: 'package',
-              tone: 'blue',
-              summaryLabel: 'Stock Adjustments',
-              summaryValue: `${audit.inventoryAdjustments}`,
-              items: detailItems('inventory'),
-            })
-          }
-        />
-        <MetricCard
-          label="Cash adjustments"
-          value={`${audit.cashAdjustments}`}
-          icon="repeat"
-          tone="amber"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'cash_adjustments',
-              title: 'Cash Adjustment Events',
-              subtitle: 'Cash-in and cash-out movements recorded during shifts.',
-              icon: 'repeat',
-              tone: 'amber',
-              summaryLabel: 'Cash Adjustments',
-              summaryValue: `${audit.cashAdjustments}`,
-              items: detailItems('cash'),
-            })
-          }
-        />
-      </View>
-      <ReportCard
-        title="Activity timeline"
-        subtitle="Direct source events from the operational ledger, newest first."
-        icon="clock"
-      >
-        {audit.events.length === 0 ? (
-          <Text className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-            No sensitive activity was recorded for this period.
-          </Text>
-        ) : (
-          <View className="gap-2">
-            {audit.events.slice(0, 50).map((event) => (
-              <View key={`${event.type}:${event.id}`} className="flex-row items-start gap-3 rounded-xl border border-slate-100 p-3.5">
-                <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-50">
-                  <Feather
-                    name={event.type === 'void' ? 'slash' : event.type === 'refund' ? 'corner-up-left' : event.type === 'cash' ? 'dollar-sign' : 'package'}
-                    size={15}
-                    color={event.type === 'void' || event.type === 'refund' ? '#DC2626' : '#1A593B'}
-                  />
-                </View>
-                <View className="min-w-0 flex-1">
-                  <View className="flex-row flex-wrap items-center justify-between gap-2">
-                    <Text className="font-medium text-slate-900">{event.title}</Text>
-                    {event.amount !== null ? <Text className="font-semibold text-slate-900">{formatMoney(event.amount)}</Text> : null}
-                  </View>
-                  <Text className="mt-0.5 text-xs leading-5 text-slate-500">{event.detail}</Text>
-                  <Text className="mt-1 text-[11px] text-slate-400">
-                    {event.branchName} - {event.actorName ?? 'System'} - {new Date(event.createdAt).toLocaleString('en-PH')}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-      </ReportCard>
-    </>
-  );
-}
-
-function RepackingReport({
-  report,
-  onOpenDetail,
-}: {
-  report: ReportsWorkspace;
-  onOpenDetail(config: MetricDrilldownConfig): void;
-}) {
-  const repacking = report.repacking;
-  if (!repacking) {
-    return (
-      <ReportCard title="Repacking performance" subtitle="Production output, cost allocation, yield, and loss">
-        <Text className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-          No production or repacking data is available for this period.
-        </Text>
-      </ReportCard>
-    );
-  }
-
-  const batchItems: DetailItem[] = repacking.batchRows.map((batch) => ({
-    id: batch.id,
-    title: batch.productName,
-    sku: batch.batchNumber,
-    quantity: batch.quantityProduced,
-    value: formatMoney(batch.totalCost),
-    subValue: `${formatMoney(batch.unitCost)} per output unit`,
-    note: `${new Date(batch.createdAt).toLocaleString('en-PH')} - Input ${batch.inputQuantity} - Output ${batch.quantityProduced}`,
-    statusTag: batch.yieldPercent === null ? 'Mixed units' : `${Number(batch.yieldPercent).toFixed(1)}% yield`,
-    statusTone: batch.yieldPercent === null ? 'slate' : Number(batch.yieldPercent) >= 95 ? 'green' : 'amber',
-  }));
-
-  return (
-    <>
-      <View className="w-full flex-row flex-wrap gap-3">
-        <MetricCard
-          label="Batches"
-          value={`${repacking.batches}`}
-          icon="layers"
-          onPress={() =>
-            onOpenDetail({
-              metricKey: 'production_batches',
-              title: 'Production and Repacking Batches',
-              subtitle: 'Finished-stock batches recorded during this period.',
-              icon: 'layers',
-              summaryLabel: 'Recorded Batches',
-              summaryValue: `${repacking.batches}`,
-              items: batchItems,
-            })
-          }
-        />
-        <MetricCard label="Output quantity" value={`${repacking.outputQuantity}`} icon="package" tone="blue" />
-        <MetricCard label="Allocated cost" value={formatMoney(repacking.totalCost)} icon="dollar-sign" />
-        <MetricCard label="Average output cost" value={formatMoney(repacking.averageCostPerOutput)} icon="pie-chart" tone="blue" />
-        <MetricCard
-          label="Yield"
-          value={repacking.yieldPercent === null ? 'Not comparable' : `${Number(repacking.yieldPercent).toFixed(1)}%`}
-          note={repacking.yieldPercent === null ? 'Input and output units differ' : 'Output divided by comparable input'}
-          icon="trending-up"
-        />
-        <MetricCard
-          label="Loss"
-          value={repacking.lossPercent === null ? 'Not comparable' : `${Number(repacking.lossPercent).toFixed(1)}%`}
-          note="100% minus comparable yield"
-          icon="trending-down"
-          tone={repacking.lossPercent !== null && Number(repacking.lossPercent) > 5 ? 'amber' : 'brand'}
-        />
-      </View>
-      <ReportCard
-        title="Production batch ledger"
-        subtitle="Source consumption and finished output are costed when the batch is recorded."
-        icon="list"
-      >
-        {repacking.batchRows.length === 0 ? (
-          <Text className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-            No production or repacking batches were recorded for this period.
-          </Text>
-        ) : (
-          <View className="gap-2">
-            {repacking.batchRows.map((batch) => (
-              <Pressable
-                key={batch.id}
-                accessibilityRole="button"
-                onPress={() =>
-                  onOpenDetail({
-                    metricKey: `batch:${batch.id}`,
-                    title: batch.batchNumber,
-                    subtitle: `${batch.productName} production details`,
-                    icon: 'layers',
-                    summaryLabel: 'Allocated Batch Cost',
-                    summaryValue: formatMoney(batch.totalCost),
-                    items: [batchItems.find((item) => item.id === batch.id)!],
-                  })
-                }
-                className="flex-row flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 p-3.5 active:bg-slate-50"
-              >
-                <View className="min-w-0 flex-1">
-                  <Text className="font-medium text-slate-900">{batch.productName}</Text>
-                  <Text className="mt-0.5 text-xs text-slate-500">
-                    {batch.batchNumber} - {new Date(batch.createdAt).toLocaleString('en-PH')}
-                  </Text>
-                  <Text className="mt-1 text-[11px] text-slate-400">
-                    Input {batch.inputQuantity} - Output {batch.quantityProduced}
-                    {batch.yieldPercent === null ? ' - Mixed units' : ` - ${Number(batch.yieldPercent).toFixed(1)}% yield`}
-                  </Text>
-                </View>
-                <View className="items-end">
-                  <Text className="font-semibold text-slate-900">{formatMoney(batch.totalCost)}</Text>
-                  <Text className="mt-0.5 text-[11px] text-slate-500">{formatMoney(batch.unitCost)} per unit</Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </ReportCard>
-    </>
-  );
-}
-
-interface StandardComparisonMetric {
-  id: string;
-  label: string;
-  value: number;
-  comparisonValue: number | null;
-  format: 'currency' | 'number' | 'percentage';
-}
-
-function reportComparisonMetrics(
-  report: ReportsWorkspace,
-  comparison: ReportsWorkspace | undefined,
-  section: ReportSection,
-): StandardComparisonMetric[] {
-  const metric = (
-    id: string,
-    label: string,
-    current: string | number | null | undefined,
-    previous: string | number | null | undefined,
-    format: StandardComparisonMetric['format'],
-  ): StandardComparisonMetric => ({
-    id,
-    label,
-    value: Number(current ?? 0),
-    comparisonValue: comparison ? Number(previous ?? 0) : null,
-    format,
-  });
-  if (section === 'inventory') {
-    return [
-      metric('inventory_value_cost', 'Inventory value (cost)', report.inventory.inventoryValue, comparison?.inventory.inventoryValue, 'currency'),
-      metric('inventory_value_retail', 'Inventory value (retail)', report.inventory.retailValue, comparison?.inventory.retailValue, 'currency'),
-      metric('inventory_quantity', 'Inventory quantity', report.inventory.unitsOnHand, comparison?.inventory.unitsOnHand, 'number'),
-      metric('dead_stock', 'Dead stock', report.inventory.deadStockCount, comparison?.inventory.deadStockCount, 'number'),
-    ];
-  }
-  if (section === 'purchasing') {
-    return [
-      metric('purchase_value', 'Purchase value', report.purchasing.orderedValue, comparison?.purchasing.orderedValue, 'currency'),
-      metric('receiving_accuracy', 'Receiving accuracy', report.purchasing.receivingAccuracy, comparison?.purchasing.receivingAccuracy, 'percentage'),
-      metric('supplier_fulfillment_rate', 'Supplier fulfillment', report.purchasing.supplierFulfillmentRate, comparison?.purchasing.supplierFulfillmentRate, 'percentage'),
-      metric('outstanding_payables', 'Outstanding payables', report.purchasing.outstandingPayables, comparison?.purchasing.outstandingPayables, 'currency'),
-    ];
-  }
-  if (section === 'cash') {
-    return [
-      metric('cash_drawer_balance', 'Drawer balance', report.cash.drawerBalance, comparison?.cash.drawerBalance, 'currency'),
-      metric('expected_cash', 'Expected cash', report.cash.expectedCash, comparison?.cash.expectedCash, 'currency'),
-      metric('counted_cash', 'Counted cash', report.cash.countedCash, comparison?.cash.countedCash, 'currency'),
-      metric('cash_variance', 'Cash variance', report.cash.variance, comparison?.cash.variance, 'currency'),
-    ];
-  }
-  if (section === 'audit') {
-    return [
-      metric('void_count', 'Voided sales', report.audit?.voidedSales, comparison?.audit?.voidedSales, 'number'),
-      metric('refund_amount', 'Refund amount', report.audit?.refundAmount, comparison?.audit?.refundAmount, 'currency'),
-      metric('inventory_adjustments', 'Stock adjustments', report.audit?.inventoryAdjustments, comparison?.audit?.inventoryAdjustments, 'number'),
-      metric('cash_adjustments', 'Cash adjustments', report.audit?.cashAdjustments, comparison?.audit?.cashAdjustments, 'number'),
-    ];
-  }
-  if (section === 'repacking') {
-    return [
-      metric('batches', 'Production batches', report.repacking?.batches, comparison?.repacking?.batches, 'number'),
-      metric('cost_allocation', 'Production cost', report.repacking?.totalCost, comparison?.repacking?.totalCost, 'currency'),
-      metric('yield_percent', 'Yield', report.repacking?.yieldPercent, comparison?.repacking?.yieldPercent, 'percentage'),
-      metric('loss_percent', 'Loss', report.repacking?.lossPercent, comparison?.repacking?.lossPercent, 'percentage'),
-    ];
-  }
-  if (section === 'profit') {
-    return [
-      metric('net_sales', 'Net sales', report.profit.netSales, comparison?.profit.netSales, 'currency'),
-      metric('cogs', 'COGS', report.profit.netCost, comparison?.profit.netCost, 'currency'),
-      metric('gross_profit', 'Gross profit', report.profit.grossProfit, comparison?.profit.grossProfit, 'currency'),
-      metric('profit_margin', 'Profit margin', report.profit.grossMarginPercent, comparison?.profit.grossMarginPercent, 'percentage'),
-    ];
-  }
-  if (section === 'products') {
-    const currentSales = report.sales.topProducts.reduce((sum, item) => sum + Number(item.sales), 0);
-    const previousSales = comparison?.sales.topProducts.reduce((sum, item) => sum + Number(item.sales), 0);
-    const currentQuantity = report.sales.topProducts.reduce((sum, item) => sum + Number(item.quantity), 0);
-    const previousQuantity = comparison?.sales.topProducts.reduce((sum, item) => sum + Number(item.quantity), 0);
-    const currentProfit = report.sales.topProducts.reduce((sum, item) => sum + Number(item.profit ?? 0), 0);
-    const previousProfit = comparison?.sales.topProducts.reduce((sum, item) => sum + Number(item.profit ?? 0), 0);
-    return [
-      metric('product_sales', 'Product sales', currentSales, previousSales, 'currency'),
-      metric('quantity_sold', 'Quantity sold', currentQuantity, previousQuantity, 'number'),
-      metric('products_sold', 'Products sold', report.sales.topProducts.length, comparison?.sales.topProducts.length, 'number'),
-      metric('gross_profit', 'Gross profit', currentProfit, previousProfit, 'currency'),
-    ];
-  }
-  return [
-    metric('gross_sales', 'Gross sales', report.kpis.grossSales, comparison?.kpis.grossSales, 'currency'),
-    metric('total_discounts', 'Total discounts', report.kpis.discounts, comparison?.kpis.discounts, 'currency'),
-    metric('refund_amount', 'Refund amount', report.kpis.customerRefunds, comparison?.kpis.customerRefunds, 'currency'),
-    metric('net_sales', 'Net sales', report.kpis.netSales, comparison?.kpis.netSales, 'currency'),
-  ];
-}
-
-function ReportStandardsPanel({
-  definition,
-  report,
-  comparisonReport,
-  comparisonMode,
-  comparisonLabel,
-  isRefreshing,
-  updatedAt,
-  onRefresh,
-}: {
-  definition?: ReportDefinition;
-  report: ReportsWorkspace;
-  comparisonReport?: ReportsWorkspace;
-  comparisonMode: ComparisonPeriod;
-  comparisonLabel: string;
-  isRefreshing: boolean;
-  updatedAt: number;
-  onRefresh(): void;
-}) {
-  const { width } = useWindowDimensions();
-  const phone = width < 640;
-  const [showDefinitions, setShowDefinitions] = useState(false);
-  const section = (Object.entries(SECTION_REPORT_IDS).find(([, id]) => id === definition?.reportId)?.[0] ?? 'overview') as ReportSection;
-  const comparisons = reportComparisonMetrics(report, comparisonReport, section);
-  const refreshLabel =
-    definition?.refreshStrategy === 'five_minutes'
-      ? 'Every 5 minutes'
-      : definition?.refreshStrategy === 'on_demand'
-        ? 'On demand'
-        : 'Real-time';
-
-  return (
-    <View className="gap-3 rounded-2xl border border-slate-100 bg-white p-4" style={softCardShadow}>
-      <View className={`${phone ? 'gap-3' : 'flex-row items-start justify-between gap-4'}`}>
-        <View className="min-w-0 flex-1">
-          <View className="flex-row flex-wrap items-center gap-2">
-            <Text className="text-lg font-semibold text-slate-950">
-              {definition?.reportName ?? 'Business report'}
-            </Text>
-            <View className="rounded-full bg-[#E8F5EE] px-2.5 py-1">
-              <Text className="text-[10px] font-semibold uppercase tracking-wide text-brand-800">
-                {definition?.status ?? 'active'}
-              </Text>
-            </View>
-          </View>
-          <Text className="mt-1 text-xs leading-5 text-slate-600">
-            {definition?.purpose ?? 'Operational report using standardized Ximo metrics.'}
-          </Text>
-          <Text className="mt-2 text-[11px] text-slate-400">
-            Report ID: {definition?.reportId ?? 'workspace'} · Module: {definition?.module ?? 'Reports'} · Version {definition?.version ?? '1.0'}
-          </Text>
-        </View>
-        <View className="flex-row flex-wrap items-center gap-2">
-          <View className="rounded-xl bg-slate-50 px-3 py-2">
-            <Text className="text-[10px] uppercase tracking-wide text-slate-400">Last updated</Text>
-            <Text className="mt-0.5 text-xs font-medium text-slate-700">
-              {updatedAt ? new Date(updatedAt).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : 'Waiting'}
-            </Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Refresh report"
-            onPress={onRefresh}
-            className="min-h-11 flex-row items-center rounded-xl border border-slate-200 bg-white px-3.5 active:bg-slate-50"
-          >
-            <Feather name="refresh-cw" size={14} color="#1A593B" />
-            <Text className="ml-2 text-xs font-semibold text-brand-800">
-              {isRefreshing ? 'Refreshing…' : 'Refresh'}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <View className="flex-row flex-wrap gap-2">
-        <View className="rounded-full bg-slate-50 px-3 py-1.5">
-          <Text className="text-[11px] text-slate-600">{refreshLabel}</Text>
-        </View>
-        <View className="rounded-full bg-slate-50 px-3 py-1.5">
-          <Text className="text-[11px] text-slate-600">
-            {report.metadata?.timezone ?? 'Asia/Manila'} · {report.metadata?.currency ?? 'PHP'}
-          </Text>
-        </View>
-        <View className="rounded-full bg-slate-50 px-3 py-1.5">
-          <Text className="text-[11px] text-slate-600">Completed transactions only</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setShowDefinitions((value) => !value)}
-          className="flex-row items-center rounded-full bg-[#E8F5EE] px-3 py-1.5"
-        >
-          <Feather name="book-open" size={12} color="#1A593B" />
-          <Text className="ml-1.5 text-[11px] font-medium text-brand-800">
-            {showDefinitions ? 'Hide definitions' : 'Metric definitions'}
-          </Text>
-        </Pressable>
-      </View>
-
-      <View className="flex-row flex-wrap gap-2">
-        {comparisons.map((item) => {
-          const delta =
-            item.comparisonValue === null
-              ? null
-              : item.comparisonValue === 0
-                ? item.value === 0
-                  ? 0
-                  : 100
-                : ((item.value - item.comparisonValue) / Math.abs(item.comparisonValue)) * 100;
-          const display =
-            item.format === 'currency'
-              ? formatMoney(item.value)
-              : item.format === 'percentage'
-                ? `${item.value.toFixed(1)}%`
-                : item.value.toLocaleString('en-PH', { maximumFractionDigits: 2 });
-          return (
-            <View
-              key={item.id}
-              className="min-w-[150px] flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3"
-              style={{ flexBasis: phone ? '46%' : '22%' }}
-            >
-              <Text className="text-[10px] font-medium uppercase tracking-wide text-slate-500" numberOfLines={1}>
-                {item.label}
-              </Text>
-              <Text className="mt-1 text-lg font-semibold text-slate-950" numberOfLines={1}>{display}</Text>
-              {comparisonMode !== 'none' ? (
-                <Text className={`mt-1 text-[11px] font-medium ${delta !== null && delta < 0 ? 'text-rose-600' : 'text-brand-700'}`}>
-                  {delta === null ? 'Loading comparison…' : `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% vs ${comparisonLabel}`}
-                </Text>
-              ) : (
-                <Text className="mt-1 text-[11px] text-slate-400">Comparison off</Text>
-              )}
-            </View>
-          );
-        })}
-      </View>
-
-      {showDefinitions ? (
-        <View className="gap-2 border-t border-slate-100 pt-3">
-          {(definition?.metrics ?? []).map((metricId) => {
-            const item = REPORT_METRICS[metricId];
-            if (!item) return null;
-            return (
-              <View key={metricId} className="rounded-xl bg-slate-50 px-3 py-2.5">
-                <Text className="text-xs font-semibold text-slate-800">{item.label}</Text>
-                <Text className="mt-0.5 text-[11px] leading-4 text-slate-500">{item.description}</Text>
-                <Text className="mt-1 text-[11px] font-medium text-brand-800">{item.formula}</Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 function ReportsContent({
   initialSection = 'sales',
   workspaceTitle = 'Reports',
@@ -6060,24 +5473,9 @@ function ReportsContent({
   const { currentUser, session, loading: sessionLoading } = useSession();
   const { showAlert } = useIosAlert();
   const canViewProfit = (currentUser?.permissions ?? []).includes('reports:view_profit');
-  const canViewAudit =
-    (currentUser?.permissions ?? []).includes('audit:read') &&
-    (currentUser?.modules ?? []).includes('audit');
-  const canViewAllBranches =
-    (currentUser?.permissions ?? []).includes('reports:view_all_branches') ||
-    (currentUser?.permissions ?? []).includes('sales:read_all');
-  const canViewRepacking =
-    (currentUser?.modules ?? []).includes('production') ||
-    (currentUser?.modules ?? []).includes('recipes');
   const visibleSections = useMemo(
-    () =>
-      SECTIONS.filter((item) => {
-        if (item.key === 'profit') return canViewProfit;
-        if (item.key === 'audit') return canViewAudit;
-        if (item.key === 'repacking') return canViewRepacking;
-        return true;
-      }),
-    [canViewAudit, canViewProfit, canViewRepacking],
+    () => SECTIONS.filter((item) => item.key !== 'profit' || canViewProfit),
+    [canViewProfit],
   );
   const defaultCustomRange = useMemo(() => {
     const to = new Date();
@@ -6098,19 +5496,6 @@ function ReportsContent({
   const [dateRangeError, setDateRangeError] = useState('');
   const [exportMenuVisible, setExportMenuVisible] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [comparisonMode, setComparisonMode] = useState<ComparisonPeriod>('previous_period');
-  const [reportBranchId, setReportBranchId] = useState<string | 'all' | null>(branch?.id ?? null);
-
-  useEffect(() => {
-    if (!reportBranchId && branch?.id) setReportBranchId(branch.id);
-  }, [branch?.id, reportBranchId]);
-
-  const reportBranchName =
-    reportBranchId === 'all'
-      ? 'All accessible branches'
-      : currentUser?.branches.find((item) => item.id === reportBranchId)?.name ??
-        branch?.name ??
-        'Selected branch';
 
   const [activeMetricDrilldown, setActiveMetricDrilldown] = useState<MetricDrilldownConfig | null>(null);
 
@@ -6134,80 +5519,38 @@ function ReportsContent({
   }, [customRange.from, customRange.to, period]);
 
   const rangeLabel = useMemo(() => readableDateRange(range.from, range.to), [range.from, range.to]);
-  const comparisonRange = useMemo(
-    () => comparisonDateRange(range, comparisonMode),
-    [comparisonMode, range],
-  );
-  const comparisonLabel =
-    comparisonMode === 'previous_month'
-      ? 'previous month'
-      : comparisonMode === 'previous_year'
-        ? 'previous year'
-        : 'previous period';
-  const reportDefinition = useMemo(
-    () => REPORT_CATALOG.find((item) => item.reportId === SECTION_REPORT_IDS[section]),
-    [section],
-  );
 
   const exportMetadata = useMemo(
     () => ({
       organizationName: currentUser?.organization.name ?? 'Ximo POS',
-      branchName: reportBranchName,
+      branchName: branch?.name ?? 'All accessible branches',
       rangeLabel,
       from: range.from,
       to: range.to,
       generatedAt: new Date(),
     }),
-    [currentUser?.organization.name, range.from, range.to, rangeLabel, reportBranchName],
+    [branch?.name, currentUser?.organization.name, range.from, range.to, rangeLabel],
   );
 
   const query = useQuery({
-    queryKey: ['reports-workspace', period, reportBranchId, range.from, range.to, session?.user?.id],
-    enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(reportBranchId),
+    queryKey: ['reports-workspace', period, branch?.id, range.from, range.to, session?.user?.id],
+    enabled: !sessionLoading && Boolean(session?.access_token),
     queryFn: () =>
       api<ReportsWorkspace>(
         `/reports/workspace?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(
           range.to,
-        )}${reportBranchId === 'all' ? '' : `&branchId=${reportBranchId}`}`,
+        )}${branch?.id ? `&branchId=${branch.id}` : ''}`,
       ),
-    refetchInterval:
-      section === 'purchasing' || section === 'products' ? 300_000 : section === 'profit' ? false : 60_000,
-  });
-
-  const comparisonQuery = useQuery({
-    queryKey: [
-      'reports-workspace-comparison',
-      comparisonMode,
-      reportBranchId,
-      comparisonRange?.from,
-      comparisonRange?.to,
-      session?.user?.id,
-    ],
-    enabled:
-      comparisonMode !== 'none' &&
-      Boolean(comparisonRange) &&
-      !sessionLoading &&
-      Boolean(session?.access_token) &&
-      Boolean(reportBranchId),
-    queryFn: () =>
-      api<ReportsWorkspace>(
-        `/reports/workspace?from=${encodeURIComponent(comparisonRange!.from)}&to=${encodeURIComponent(
-          comparisonRange!.to,
-        )}${reportBranchId === 'all' ? '' : `&branchId=${reportBranchId}`}`,
-      ),
-    staleTime: 60_000,
   });
 
   const inventoryExportRef = useRef<(() => InventoryExportData) | null>(null);
 
-  const handleWorkspaceExport = async (format: 'xlsx' | 'pdf' | 'csv') => {
+  const handleWorkspaceExport = async (format: 'xlsx' | 'pdf') => {
     if (!query.data || exporting) return;
     setExporting(true);
     try {
       let output: { bytes: Uint8Array; fileName: string };
-      if (format === 'csv') {
-        output = buildReportsCsv(query.data, exportMetadata, section);
-      } else if (section === 'inventory' && inventoryExportRef.current) {
+      if (section === 'inventory' && inventoryExportRef.current) {
         const invData = inventoryExportRef.current();
         output =
           format === 'xlsx'
@@ -6238,66 +5581,35 @@ function ReportsContent({
   };
 
   const productsQuery = useQuery({
-    queryKey: ['reports-products-list', reportBranchId, session?.user?.id],
-    enabled:
-      !sessionLoading &&
-      Boolean(session?.access_token) &&
-      Boolean(reportBranchId) &&
-      reportBranchId !== 'all',
+    queryKey: ['reports-products-list', branch?.id, session?.user?.id],
+    enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(branch?.id),
     queryFn: () =>
-<<<<<<< HEAD
-      api<any[]>(`/products?branchId=${reportBranchId}&includeInactive=true&pageSize=100`),
-=======
       api<any[]>(`/products?branchId=${branch!.id}&includeInactive=true&pageSize=250`),
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
   });
 
   const inventoryItemsQuery = useQuery({
-    queryKey: ['reports-inventory-items', reportBranchId, session?.user?.id],
-    enabled:
-      !sessionLoading &&
-      Boolean(session?.access_token) &&
-      Boolean(reportBranchId) &&
-      reportBranchId !== 'all' &&
-      section === 'inventory',
+    queryKey: ['reports-inventory-items', branch?.id, session?.user?.id],
+    enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(branch?.id) && section === 'inventory',
     queryFn: () =>
-<<<<<<< HEAD
-      api<any>(`/inventory?branchId=${reportBranchId}&pageSize=100`).catch(() => ({ data: [] })),
-=======
       api<any>(`/inventory?branchId=${branch!.id}&pageSize=250`).catch(() => ({ data: [] })),
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
   });
 
   const inventoryMovementsQuery = useQuery({
-    queryKey: ['reports-inventory-movements', reportBranchId, session?.user?.id],
-    enabled:
-      !sessionLoading &&
-      Boolean(session?.access_token) &&
-      Boolean(reportBranchId) &&
-      reportBranchId !== 'all' &&
-      section === 'inventory',
+    queryKey: ['reports-inventory-movements', branch?.id, session?.user?.id],
+    enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(branch?.id) && section === 'inventory',
     queryFn: () =>
-<<<<<<< HEAD
-      api<any>(`/inventory/history?branchId=${reportBranchId}&pageSize=100`).catch(() => ({ data: [] })),
-=======
       api<any>(`/inventory/history?branchId=${branch!.id}&pageSize=250`).catch(() => ({ data: [] })),
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
   });
 
   const productionProductsQuery = useQuery({
-    queryKey: ['reports-production-products', reportBranchId, session?.user?.id],
-    enabled:
-      !sessionLoading &&
-      Boolean(session?.access_token) &&
-      Boolean(reportBranchId) &&
-      reportBranchId !== 'all' &&
-      section === 'inventory',
+    queryKey: ['reports-production-products', branch?.id, session?.user?.id],
+    enabled: !sessionLoading && Boolean(session?.access_token) && Boolean(branch?.id) && section === 'inventory',
     queryFn: () =>
-      api<any[]>(`/inventory/production-products?branchId=${reportBranchId}`).catch(() => []),
+      api<any[]>(`/inventory/production-products?branchId=${branch!.id}`).catch(() => []),
   });
 
   const productPerformanceQuery = useQuery({
-    queryKey: ['reports-product-performance', period, reportBranchId, range.from, range.to, session?.user?.id],
+    queryKey: ['reports-product-performance', period, branch?.id, range.from, range.to, session?.user?.id],
     enabled: !sessionLoading && Boolean(session?.access_token) && section === 'products',
     queryFn: () => {
       const fromDate = range.from.slice(0, 10);
@@ -6317,7 +5629,7 @@ function ReportsContent({
         rows: ProductPerformanceRow[];
       }>(
         `/reports/products?from=${encodeURIComponent(fromDate)}&to=${encodeURIComponent(toDate)}${
-          reportBranchId && reportBranchId !== 'all' ? `&branchId=${reportBranchId}` : ''
+          branch?.id ? `&branchId=${branch.id}` : ''
         }`,
       );
     },
@@ -6329,8 +5641,8 @@ function ReportsContent({
         title={activeMetricDrilldown ? activeMetricDrilldown.title : workspaceTitle}
         subtitle={
           activeMetricDrilldown
-            ? `${rangeLabel} · ${reportBranchName}`
-            : reportBranchName
+            ? `${rangeLabel} · ${branch?.name ?? 'All accessible branches'}`
+            : branch?.name ?? 'All accessible branches'
         }
         showBack={!phone}
         backLabel="More"
@@ -6359,56 +5671,6 @@ function ReportsContent({
           }}
         >
           {!activeMetricDrilldown ? (
-<<<<<<< HEAD
-            <View className="flex-row flex-wrap items-end justify-between gap-3">
-              <View className="min-w-[220px] flex-1">
-                <Text className="text-2xl font-semibold text-slate-900">{workspaceTitle}</Text>
-                <Text className="mt-1 text-sm text-slate-500">
-                  Store performance for {rangeLabel}
-                  {reportBranchName ? ` · ${reportBranchName}` : ''}.
-                </Text>
-              </View>
-              <View className="flex-row flex-wrap items-center gap-2">
-                {canViewAllBranches && (currentUser?.branches.length ?? 0) > 1 ? (
-                  <View className="max-w-full rounded-xl border border-slate-200 bg-white p-1">
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <View className="flex-row items-center gap-1">
-                        {[
-                          { id: 'all', name: 'All branches' },
-                          ...(currentUser?.branches ?? []),
-                        ].map((item) => {
-                          const selected = reportBranchId === item.id;
-                          return (
-                            <Pressable
-                              key={item.id}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected }}
-                              onPress={() => {
-                                setReportBranchId(item.id);
-                                setActiveMetricDrilldown(null);
-                              }}
-                              className={`min-h-8 justify-center rounded-lg px-2.5 ${
-                                selected ? 'bg-[#E8F5EE]' : ''
-                              }`}
-                            >
-                              <Text
-                                className={`text-xs font-medium ${
-                                  selected ? 'text-brand-800' : 'text-slate-500'
-                                }`}
-                              >
-                                {item.name}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </ScrollView>
-                  </View>
-                ) : null}
-                {PERIOD_PRESETS.slice(0, 4).map((item) => {
-                  const selected = item.key === period;
-                  return (
-=======
             <View className="gap-4">
               <View className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
                 <View className="flex-row flex-wrap items-start justify-between gap-4">
@@ -6427,7 +5689,6 @@ function ReportsContent({
                     </Text>
                   </View>
                   <View className="flex-row flex-wrap items-center gap-2">
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Export reports"
@@ -6547,102 +5808,16 @@ function ReportsContent({
             </View>
           ) : null}
 
-          {!activeMetricDrilldown ? (
-            <View className="rounded-2xl border border-slate-100 bg-white p-2">
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className="flex-row items-center gap-2">
-                  <Text className="px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Compare
-                  </Text>
-                  {([
-                    ['none', 'Off'],
-                    ['previous_period', 'Previous period'],
-                    ['previous_month', 'Previous month'],
-                    ['previous_year', 'Previous year'],
-                  ] as Array<[ComparisonPeriod, string]>).map(([key, label]) => {
-                    const selected = comparisonMode === key;
-                    return (
-                      <Pressable
-                        key={key}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        onPress={() => setComparisonMode(key)}
-                        className={`min-h-9 justify-center rounded-xl px-3 ${selected ? 'bg-[#E8F5EE]' : 'bg-slate-50'}`}
-                      >
-                        <Text className={`text-xs font-medium ${selected ? 'text-brand-800' : 'text-slate-500'}`}>
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            </View>
-          ) : null}
-
           {activeMetricDrilldown ? (
             <MetricDrilldownView
               config={activeMetricDrilldown}
               rangeLabel={rangeLabel}
-              branchName={reportBranchName}
+              branchName={branch?.name ?? 'All accessible branches'}
               organizationName={currentUser?.organization.name ?? 'Ximo POS'}
               onBack={() => setActiveMetricDrilldown(null)}
             />
           ) : (
             <>
-<<<<<<< HEAD
-              <View className="rounded-2xl border border-slate-100 bg-white p-1">
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View className="flex-row items-center gap-1">
-                    {visibleSections.map((item) => {
-                      const selected = item.key === section;
-                      return (
-                        <Pressable
-                          key={item.key}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected }}
-                          onPress={() => setSection(item.key)}
-                          className={`min-h-10 flex-row items-center justify-center rounded-xl px-4 ${
-                            selected ? 'bg-brand-700' : 'active:bg-slate-50'
-                          }`}
-                        >
-                          <Feather
-                            name={item.icon}
-                            size={14}
-                            color={selected ? '#FFFFFF' : '#94A3B8'}
-                          />
-                          <Text
-                            className={`ml-2 text-[13px] font-medium ${
-                              selected ? 'text-white' : 'text-slate-500'
-                            }`}
-                          >
-                            {item.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-              </View>
-
-              {query.data ? (
-                <ReportStandardsPanel
-                  definition={reportDefinition}
-                  report={query.data}
-                  comparisonReport={comparisonQuery.data}
-                  comparisonMode={comparisonMode}
-                  comparisonLabel={comparisonLabel}
-                  isRefreshing={query.isRefetching || comparisonQuery.isFetching}
-                  updatedAt={query.dataUpdatedAt}
-                  onRefresh={() => {
-                    void query.refetch();
-                    if (comparisonMode !== 'none') void comparisonQuery.refetch();
-                  }}
-                />
-              ) : null}
-
-=======
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
               {query.isLoading ? (
                 <View className="min-h-96 rounded-2xl bg-white">
                   <LoadingState label="Building your reports…" />
@@ -6714,12 +5889,6 @@ function ReportsContent({
                   {section === 'cash' ? (
                     <CashReport report={query.data} onOpenDetail={handleOpenDetail} />
                   ) : null}
-                  {section === 'audit' ? (
-                    <AuditReport report={query.data} onOpenDetail={handleOpenDetail} />
-                  ) : null}
-                  {section === 'repacking' ? (
-                    <RepackingReport report={query.data} onOpenDetail={handleOpenDetail} />
-                  ) : null}
                 </>
               ) : null}
             </>
@@ -6762,23 +5931,6 @@ function ReportsContent({
               <Pressable
                 accessibilityRole="button"
                 disabled={exporting || !query.data}
-                onPress={() => void handleWorkspaceExport('csv')}
-                className="min-h-12 flex-row items-center rounded-xl border border-slate-100 bg-slate-50 px-4 active:bg-slate-100"
-              >
-                <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#F4F0E6]">
-                  <Feather name="list" size={16} color="#8A6A2F" />
-                </View>
-                <View className="ml-3 min-w-0 flex-1">
-                  <Text className="text-sm font-semibold text-slate-900">CSV data</Text>
-                  <Text className="mt-0.5 text-xs text-slate-500">
-                    Current report tab for data tools and imports
-                  </Text>
-                </View>
-                <Feather name="download" size={16} color="#8A6A2F" />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                disabled={exporting || !query.data}
                 onPress={() => void handleWorkspaceExport('xlsx')}
                 className="min-h-12 flex-row items-center rounded-xl border border-slate-100 bg-slate-50 px-4 active:bg-slate-100"
               >
@@ -6788,7 +5940,7 @@ function ReportsContent({
                 <View className="ml-3 min-w-0 flex-1">
                   <Text className="text-sm font-semibold text-slate-900">Excel workbook</Text>
                   <Text className="mt-0.5 text-xs text-slate-500">
-                    Summary, Sales, Inventory, Purchasing, Profit, Cash, Audit, Repacking
+                    Summary, Sales, Inventory, Purchasing, Profit, Cash
                   </Text>
                 </View>
                 <Feather name="download" size={16} color="#1A593B" />

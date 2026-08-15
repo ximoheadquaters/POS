@@ -255,6 +255,7 @@ export interface InventoryReportResponse {
   stock: InventoryReportStockRow[];
   conversions: InventoryReportConversionRow[];
   movements: InventoryReportMovementRow[];
+  performers: Array<{ id: string; name: string }>;
   movementsTotal: number;
   page: number;
   pageSize: number;

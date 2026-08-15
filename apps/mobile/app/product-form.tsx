@@ -378,11 +378,15 @@ function ProductFormContent() {
   const enteredSku = typeof params.sku === 'string' ? params.sku.trim() : '';
   const addToCart = params.addToCart === '1';
   const incoming = params.incoming === '1';
-  const branch = useBranchStore((state) => state.activeBranch)!;
+  const branch = useBranchStore((state) => state.activeBranch);
   const add = useCartStore((state) => state.add);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scannerTarget, setScannerTarget] = useState<'barcode' | 'alternate' | null>(null);
   const [scanChecking, setScanChecking] = useState(false);
+  const [scannerCameraReady, setScannerCameraReady] = useState(false);
+  const [scannerCameraError, setScannerCameraError] = useState('');
+  const [scannerCameraSession, setScannerCameraSession] = useState(0);
+  const scannerLockRef = useRef(false);
   const [openingQuantity, setOpeningQuantity] = useState(addToCart ? '1' : '0');
   const [openingContainerQuantity, setOpeningContainerQuantity] = useState('0');
   const [stockSaleMode, setStockSaleMode] = useState<StockSaleMode>('single_unit');
@@ -813,6 +817,19 @@ function ProductFormContent() {
     });
   };
 
+  const resumeScanner = () => {
+    scannerLockRef.current = false;
+    setScanChecking(false);
+  };
+
+  const closeScanner = () => {
+    scannerLockRef.current = false;
+    setScanChecking(false);
+    setScannerCameraReady(false);
+    setScannerCameraError('');
+    setScannerTarget(null);
+  };
+
   const openScanner = async (target: 'barcode' | 'alternate') => {
     if (!scannerEnabled) {
       showAlert({
@@ -834,25 +851,48 @@ function ProductFormContent() {
       });
       return;
     }
+    scannerLockRef.current = false;
     setScanChecking(false);
+    setScannerCameraReady(false);
+    setScannerCameraError('');
+    setScannerCameraSession((value) => value + 1);
     setScannerTarget(target);
   };
 
   const handleCameraScan = async (result: BarcodeScanningResult) => {
-    if (scanChecking || !scannerTarget) return;
-    const barcode = normalizeBarcode(result.data);
-    if (barcode.length < 3) {
-      showAlert({ title: 'Invalid barcode', message: 'The scanned barcode must contain at least 3 characters.', type: 'warning' });
+    if (scannerLockRef.current || !scannerTarget) return;
+    scannerLockRef.current = true;
+    setScanChecking(true);
+    if (!branch) {
+      showAlert({
+        title: 'Branch required',
+        message: 'Select an assigned branch before scanning a product barcode.',
+        type: 'warning',
+        buttons: [{ text: 'OK', onPress: closeScanner }],
+      });
       return;
     }
-    setScanChecking(true);
+    const barcode = normalizeBarcode(result.data);
+    if (barcode.length < 3) {
+      showAlert({
+        title: 'Invalid barcode',
+        message: 'The scanned barcode must contain at least 3 characters.',
+        type: 'warning',
+        buttons: [{ text: 'Scan another', onPress: resumeScanner }],
+      });
+      return;
+    }
     try {
       const existing = await api<CartProduct | null>(
         `/products/lookup?code=${encodeURIComponent(barcode)}&branchId=${branch.id}`,
       );
       if (existing && existing.id !== productId) {
-        showAlert({ title: 'Barcode already used', message: `${existing.name} already uses barcode ${barcode}.`, type: 'warning' });
-        setScanChecking(false);
+        showAlert({
+          title: 'Barcode already used',
+          message: `${existing.name} already uses barcode ${barcode}.`,
+          type: 'warning',
+          buttons: [{ text: 'Scan another', onPress: resumeScanner }],
+        });
         return;
       }
       if (scannerTarget === 'barcode') {
@@ -863,20 +903,22 @@ function ProductFormContent() {
       } else {
         setAlternateBarcode(barcode);
       }
-      setScannerTarget(null);
-      setScanChecking(false);
+      closeScanner();
     } catch (error) {
       showAlert({
         title: 'Could not check barcode',
         message: error instanceof Error ? error.message : 'Please try scanning again.',
         type: 'error',
+        buttons: [{ text: 'Try again', onPress: resumeScanner }],
       });
-      setScanChecking(false);
     }
   };
 
   const mutation = useMutation({
     mutationFn: async (input: ProductInput) => {
+      if (!branch || !currentUser?.branches.some((item) => item.id === branch.id)) {
+        throw new Error('Select an assigned branch before saving this product.');
+      }
       const enteredOpeningQuantity = Number(openingQuantity);
       const quantity =
         !isEditing && stockSaleMode === 'whole_and_portions'
@@ -996,15 +1038,20 @@ function ProductFormContent() {
       return savedProduct;
     },
     onSuccess: async (product) => {
-      await Promise.all([
+      const invalidations = [
         queryClient.invalidateQueries({ queryKey: ['products'] }),
         queryClient.invalidateQueries({ queryKey: ['product-summary'] }),
         queryClient.invalidateQueries({ queryKey: ['product', productId] }),
         queryClient.invalidateQueries({ queryKey: ['purchase-products'] }),
         queryClient.invalidateQueries({ queryKey: ['pos-products'] }),
-        queryClient.invalidateQueries({ queryKey: ['inventory', branch.id] }),
-        queryClient.invalidateQueries({ queryKey: ['inventory-summary', branch.id] }),
-      ]);
+      ];
+      if (branch) {
+        invalidations.push(
+          queryClient.invalidateQueries({ queryKey: ['inventory', branch.id] }),
+          queryClient.invalidateQueries({ queryKey: ['inventory-summary', branch.id] }),
+        );
+      }
+      await Promise.all(invalidations);
       if (addToCart) {
         add(product);
         router.replace('/(tabs)/pos');
@@ -1144,7 +1191,12 @@ function ProductFormContent() {
     setCurrentStep((step) => Math.min(step + 1, 4) as 1 | 2 | 3 | 4);
   };
 
-  if (!branch) return <Redirect href="/branch-select" />;
+  if (
+    !branch ||
+    !currentUser?.branches.some((authorizedBranch) => authorizedBranch.id === branch.id)
+  ) {
+    return <Redirect href="/branch-select" />;
+  }
 
   return (
     <Screen>
@@ -2970,10 +3022,7 @@ function ProductFormContent() {
         visible={scannerTarget !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setScannerTarget(null);
-          setScanChecking(false);
-        }}
+        onRequestClose={closeScanner}
       >
         <View className="flex-1 items-center justify-center bg-black/70 p-4">
           <View className="w-full max-w-xl overflow-hidden rounded-3xl bg-white">
@@ -2991,22 +3040,55 @@ function ProductFormContent() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close barcode scanner"
-                onPress={() => {
-                  setScannerTarget(null);
-                  setScanChecking(false);
-                }}
+                onPress={closeScanner}
                 className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
               >
                 <Feather name="x" size={20} color="#475569" />
               </Pressable>
             </View>
             <View className="h-80 bg-black">
-              {cameraPermission?.granted && scannerTarget ? (
+              {scannerCameraError ? (
+                <View className="flex-1 items-center justify-center p-6">
+                  <Feather name="camera-off" size={28} color="#CBD5E1" />
+                  <Text className="mt-3 text-center font-semibold text-white">
+                    Camera could not start
+                  </Text>
+                  <Text className="mt-1 text-center text-sm leading-5 text-slate-300">
+                    {scannerCameraError}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      scannerLockRef.current = false;
+                      setScanChecking(false);
+                      setScannerCameraReady(false);
+                      setScannerCameraError('');
+                      setScannerCameraSession((value) => value + 1);
+                    }}
+                    className="mt-4 min-h-11 items-center justify-center rounded-xl bg-brand-700 px-5"
+                  >
+                    <Text className="text-sm font-semibold text-white">Try camera again</Text>
+                  </Pressable>
+                </View>
+              ) : cameraPermission?.granted && scannerTarget ? (
+                <View className="flex-1">
                 <CameraView
+                  key={scannerCameraSession}
                   style={{ flex: 1 }}
                   facing="back"
                   barcodeScannerSettings={{ barcodeTypes: [...CAMERA_BARCODE_TYPES] }}
                   onBarcodeScanned={scanChecking ? undefined : handleCameraScan}
+                  onCameraReady={() => {
+                    setScannerCameraReady(true);
+                    setScannerCameraError('');
+                  }}
+                  onMountError={(event) => {
+                    scannerLockRef.current = true;
+                    setScannerCameraReady(false);
+                    setScannerCameraError(
+                      event.message || 'Check that another application is not using the camera.',
+                    );
+                  }}
                 >
                   <View className="flex-1 items-center justify-center">
                     <View className="h-32 w-[82%] max-w-sm rounded-2xl border-2 border-white" />
@@ -3017,6 +3099,12 @@ function ProductFormContent() {
                     </View>
                   </View>
                 </CameraView>
+                  {!scannerCameraReady ? (
+                    <View className="absolute inset-0 items-center justify-center bg-black">
+                      <LoadingState label="Starting camera…" />
+                    </View>
+                  ) : null}
+                </View>
               ) : null}
             </View>
             <View className="flex-row items-start bg-slate-50 p-4">

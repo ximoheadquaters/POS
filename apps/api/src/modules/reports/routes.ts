@@ -145,15 +145,26 @@ export function reportsRouter(database: Queryable): Router {
     const pageSizeNum = request.query.pageSize
       ? parseInt(String(request.query.pageSize), 10)
       : 100;
+    const performedByIdStr =
+      typeof request.query.performedById === 'string' && request.query.performedById
+        ? uuidSchema.parse(request.query.performedById)
+        : undefined;
 
-    const filterInput: { from: string; to: string; branchId?: string; page?: number; pageSize?: number } =
-      {
+    const filterInput: {
+      from: string;
+      to: string;
+      branchId?: string;
+      page?: number;
+      pageSize?: number;
+      performedById?: string;
+    } = {
         from: fromStr,
         to: toStr,
         page: pageNum,
         pageSize: pageSizeNum,
       };
     if (branchIdStr) filterInput.branchId = branchIdStr;
+    if (performedByIdStr) filterInput.performedById = performedByIdStr;
 
     const scope = resolveReportScope(request.authUser!, filterInput);
     const result = await inventoryReportService.generate(scope, filterInput);

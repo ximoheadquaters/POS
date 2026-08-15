@@ -6,6 +6,7 @@ import type { CurrentUser } from '@ximo/shared';
 import { api, ApiError } from '@/lib/api';
 import { isInvitationSetupActive } from '@/lib/invitation';
 import { supabase } from '@/lib/supabase';
+import { useBranchStore } from '@/store/branch';
 
 interface SessionContextValue {
   session: Session | null;
@@ -32,6 +33,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const branchHydrated = useBranchStore((state) => state.hydrated);
+  const reconcileBranch = useBranchStore((state) => state.reconcile);
+  const clearBranch = useBranchStore((state) => state.clear);
 
   const refreshUser = useCallback(async (accessToken?: string) => {
     const user = await api<CurrentUser>('/auth/current', { accessToken });
@@ -57,6 +61,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setSession(nextSession);
       if (!nextSession) {
         setCurrentUser(null);
+        void clearBranch();
         return;
       }
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
@@ -69,7 +74,12 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
     });
     return () => data.subscription.unsubscribe();
-  }, [refreshUser]);
+  }, [clearBranch, refreshUser]);
+
+  useEffect(() => {
+    if (!branchHydrated || !currentUser) return;
+    void reconcileBranch(currentUser.branches);
+  }, [branchHydrated, currentUser, reconcileBranch]);
 
   useEffect(() => {
     if (!session || shouldDeferProfileHydration()) return;
@@ -120,9 +130,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       async signOut() {
         await supabase.auth.signOut();
         setCurrentUser(null);
+        await clearBranch();
       },
     }),
-    [session, currentUser, loading, refreshUser],
+    [clearBranch, session, currentUser, loading, refreshUser],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

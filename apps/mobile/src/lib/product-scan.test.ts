@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { findExactScannedProduct, normalizeBarcode, resolveScannedProduct } from './product-scan';
+import {
+  findExactScannedProduct,
+  normalizeBarcode,
+  productLookupPath,
+  resolveScannedProduct,
+} from './product-scan';
 
 const products = [
   {
@@ -25,6 +30,19 @@ const products = [
 describe('product barcode scanning', () => {
   it('normalizes scanner input before lookup', () => {
     expect(normalizeBarcode(' 4800012345678\r\n')).toBe('4800012345678');
+  });
+
+  it('always scopes a camera lookup to the active branch', () => {
+    expect(productLookupPath(' 4800 12/34 ', 'branch-123')).toBe(
+      '/products/lookup?code=4800%2012%2F34&branchId=branch-123',
+    );
+  });
+
+  it('only applies the POS availability filter when scanning for a sale', () => {
+    expect(productLookupPath('4800012345678', 'branch-123', 'pos')).toBe(
+      '/products/lookup?code=4800012345678&branchId=branch-123&usage=pos',
+    );
+    expect(productLookupPath('4800012345678', 'branch-123')).not.toContain('usage=pos');
   });
 
   it('matches an exact barcode instead of a partial product search result', () => {

@@ -117,11 +117,8 @@ const sidebarSections: SidebarSection[] = [
           { title: 'Purchasing', href: '/reports/purchasing' as Href, module: 'reports' },
           { title: 'Profit', href: '/reports/profit' as Href, module: 'reports', permission: 'reports:view_profit' },
           { title: 'Cash & shifts', href: '/reports/cash' as Href, module: 'reports' },
-<<<<<<< HEAD
           { title: 'Audit', href: '/reports/audit' as Href, module: 'audit', permission: 'audit:read' },
           { title: 'Repacking', href: '/reports/repacking' as Href, module: 'reports' },
-=======
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
         ],
       },
       {
@@ -364,16 +361,7 @@ function SidebarMenu({ close }: { close(): void }) {
                               {group.title}
                             </Text>
                           </View>
-<<<<<<< HEAD
 
-                          {isGroupDisabled ? (
-                            <View className="flex-row items-center gap-1 rounded-full bg-amber-100/80 px-2 py-0.5">
-                              <Feather name="lock" size={10} color="#B45309" />
-                              <Text className="text-[10px] font-bold text-amber-800">Locked</Text>
-                            </View>
-                          ) : null}
-=======
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
                         </Pressable>
                       );
                     }

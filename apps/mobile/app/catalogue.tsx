@@ -108,8 +108,11 @@ function CatalogueContent() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!branch || !currentUser?.branches.some((item) => item.id === branch.id)) {
+        throw new Error('Select an assigned branch before saving this catalogue item.');
+      }
       const body = {
-        branchId: branch!.id,
+        branchId: branch.id,
         name: name.trim(),
         description: description.trim() || undefined,
         isActive: editing?.isActive ?? true,

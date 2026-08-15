@@ -9,11 +9,8 @@ import {
   establishInvitationSession,
   InvitationFlowError,
   INVALID_INVITATION_MESSAGE,
-<<<<<<< HEAD
-=======
   PASSWORD_SAVED_SIGN_IN_MESSAGE,
   SETUP_SESSION_EXPIRED_MESSAGE,
->>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
   setInvitationSetupActive,
   parseInvitationCallback,
   runInvitationSubmission,
