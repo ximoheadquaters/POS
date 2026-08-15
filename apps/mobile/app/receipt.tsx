@@ -1,11 +1,18 @@
-import { Alert, Platform, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Alert, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button, Header, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { getHardwareDriver, HardwareUnavailableError } from '@/hardware/registry';
+import {
+  applyReceiptPrinterSettings,
+  DEFAULT_RECEIPT_PRINTER_SETTINGS,
+  getReceiptPrinterSettings,
+} from '@/hardware/receipt-printer-settings';
 import { useSession } from '@/providers/session';
+import { useBranchStore } from '@/store/branch';
 
 interface PrintableSale {
   subtotal: string;
@@ -26,6 +33,7 @@ interface PrintableSale {
 
 export default function ReceiptScreen() {
   const { currentUser } = useSession();
+  const branch = useBranchStore((state) => state.activeBranch);
   const params = useLocalSearchParams<{
     id: string;
     number: string;
@@ -35,6 +43,11 @@ export default function ReceiptScreen() {
   }>();
   const offline = params.offline === '1';
   const printerEnabled = currentUser?.modules.includes('receipt_printer') ?? false;
+  const printerSettingsQuery = useQuery({
+    queryKey: ['receipt-printer-settings', currentUser?.organization.id, branch?.id],
+    queryFn: () => getReceiptPrinterSettings(currentUser?.organization.id, branch?.id),
+  });
+  const printerSettings = printerSettingsQuery.data ?? DEFAULT_RECEIPT_PRINTER_SETTINGS;
   const sale = useQuery({
     queryKey: ['sale-receipt', params.id],
     queryFn: () => api<PrintableSale>(`/sales/${params.id}`),
@@ -42,6 +55,12 @@ export default function ReceiptScreen() {
   });
   const print = useMutation({
     mutationFn: async () => {
+      if (!printerEnabled) {
+        throw new HardwareUnavailableError(
+          'receipt_printer',
+          'Enable the receipt-printer module in Hardware devices before printing.',
+        );
+      }
       const printer = getHardwareDriver('receipt_printer');
       const status = await printer.status();
       if (status.state !== 'ready') {
@@ -50,6 +69,7 @@ export default function ReceiptScreen() {
       await printer.print({
         saleId: params.id,
         receiptNumber: params.number,
+        ...applyReceiptPrinterSettings(printerSettings),
         businessName: currentUser?.organization.name,
         branchName: sale.data?.branchName,
         branchAddress: sale.data?.branchAddress,
@@ -65,100 +85,33 @@ export default function ReceiptScreen() {
         payments: sale.data?.payments,
       });
     },
-    onSuccess: () => {
-      if (Platform.OS !== 'web') Alert.alert('Receipt printed');
-    },
     onError: (error) => Alert.alert('Could not print receipt', error.message),
   });
-  const handlePrint = async () => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const itemsHtml = (sale.data?.items || [])
-        .map(
-          (item) => `
-        <tr>
-          <td style="text-align:left; padding: 4px 0;">${item.productName}<br/><small style="color:#666;">${item.quantity} × ₱${Number(item.unitPrice).toFixed(2)}</small></td>
-          <td style="text-align:right; vertical-align:top; padding: 4px 0;">₱${Number(item.lineTotal).toFixed(2)}</td>
-        </tr>`,
-        )
-        .join('');
-
-      const paymentsHtml = (sale.data?.payments || [])
-        .map(
-          (p) => `
-        <div style="display:flex; justify-space-between; margin-top:2px;">
-          <span>${p.method.toUpperCase()}</span>
-          <span>₱${Number(p.amount).toFixed(2)}</span>
-        </div>`,
-        )
-        .join('');
-
-      const printWindow = window.open('', '_blank', 'width=400,height=600');
-      if (printWindow) {
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Receipt - ${params.number}</title>
-            <style>
-              @media print {
-                body { margin: 0; padding: 10px; font-family: monospace; font-size: 12px; }
-                @page { size: 80mm auto; margin: 0; }
-              }
-              body { font-family: 'Courier New', Courier, monospace; width: 300px; margin: 0 auto; padding: 15px; background: #fff; color: #000; }
-              .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-              .header h2 { margin: 0; font-size: 16px; text-transform: uppercase; }
-              .header p { margin: 2px 0; font-size: 11px; color: #444; }
-              .details { font-size: 11px; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 8px; }
-              .items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }
-              .totals { border-top: 1px dashed #000; padding-top: 8px; font-size: 12px; }
-              .totals div { display: flex; justify-content: space-between; margin-bottom: 3px; }
-              .grand-total { font-weight: bold; font-size: 14px; margin-top: 5px; border-top: 1px solid #000; padding-top: 5px; }
-              .footer { text-align: center; margin-top: 15px; font-size: 10px; color: #666; border-top: 1px dashed #000; padding-top: 10px; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h2>${currentUser?.organization.name || 'XIMO POS'}</h2>
-              <p>${sale.data?.branchName || ''}</p>
-              ${sale.data?.branchAddress ? `<p>${sale.data.branchAddress}</p>` : ''}
-            </div>
-            <div class="details">
-              <div><strong>Receipt:</strong> ${params.number}</div>
-              <div><strong>Date:</strong> ${sale.data?.completedAt ? new Date(sale.data.completedAt).toLocaleString() : new Date().toLocaleString()}</div>
-              <div><strong>Cashier:</strong> ${sale.data?.cashierName || currentUser?.displayName || 'Cashier'}</div>
-            </div>
-            <table class="items">
-              <tbody>
-                ${itemsHtml}
-              </tbody>
-            </table>
-            <div class="totals">
-              <div><span>Subtotal:</span> <span>₱${Number(sale.data?.subtotal || params.total).toFixed(2)}</span></div>
-              ${sale.data?.discountTotal && Number(sale.data.discountTotal) > 0 ? `<div><span>Discount:</span> <span>-₱${Number(sale.data.discountTotal).toFixed(2)}</span></div>` : ''}
-              ${sale.data?.taxTotal && Number(sale.data.taxTotal) > 0 ? `<div><span>Tax:</span> <span>₱${Number(sale.data.taxTotal).toFixed(2)}</span></div>` : ''}
-              <div class="grand-total"><span>TOTAL:</span> <span>₱${Number(params.total).toFixed(2)}</span></div>
-              <div><span>Change:</span> <span>₱${Number(params.change || 0).toFixed(2)}</span></div>
-            </div>
-            ${paymentsHtml ? `<div style="margin-top:8px; font-size:11px;"><strong>Payments:</strong>${paymentsHtml}</div>` : ''}
-            <div class="footer">
-              <p>Thank you for your purchase!</p>
-              <p>Powered by Ximo POS</p>
-            </div>
-            <script>
-              window.onload = function() {
-                window.print();
-                setTimeout(function() { window.close(); }, 500);
-              };
-            </script>
-          </body>
-          </html>
-        `);
-        printWindow.document.close();
-        return;
-      }
+  const autoPrintAttempt = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      offline ||
+      !printerEnabled ||
+      !printerSettings.autoPrintAfterSale ||
+      printerSettingsQuery.isLoading ||
+      sale.isLoading ||
+      !sale.data ||
+      autoPrintAttempt.current === params.id
+    ) {
+      return;
     }
+
+    autoPrintAttempt.current = params.id;
     print.mutate();
-  };
+  }, [
+    offline,
+    params.id,
+    printerEnabled,
+    printerSettings.autoPrintAfterSale,
+    printerSettingsQuery.isLoading,
+    sale.data,
+    sale.isLoading,
+  ]);
 
   return (
     <Screen>
@@ -192,9 +145,19 @@ export default function ReceiptScreen() {
                       ? 'Loading receipt…'
                       : 'Print receipt'
                 }
-                disabled={print.isPending || sale.isLoading}
-                onPress={handlePrint}
+                disabled={
+                  print.isPending ||
+                  sale.isLoading ||
+                  printerSettingsQuery.isLoading ||
+                  !printerEnabled
+                }
+                onPress={() => print.mutate()}
               />
+            ) : null}
+            {!offline && !printerEnabled ? (
+              <Text className="text-center text-xs leading-4 text-amber-700">
+                Enable Receipt printer under Hardware devices to print from Ximo.
+              </Text>
             ) : null}
             {!offline ? (
               <Button

@@ -1,42 +1,112 @@
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HardwareModuleCode } from '@ximo/shared';
 import { Button, Header, LoadingState, Screen } from '@/components/ui';
+import { ReceiptPrinterSetup } from '@/components/receipt-printer-setup';
 import { HARDWARE_CAPABILITIES } from '@/hardware/capabilities';
 import { getHardwareDriver, getHardwareStatuses } from '@/hardware/registry';
+import {
+  DEFAULT_RECEIPT_PRINTER_SETTINGS,
+  getReceiptPrinterSettings,
+  saveReceiptPrinterSettings,
+} from '@/hardware/receipt-printer-settings';
+import type { ReceiptPrinterSettings } from '@/hardware/types';
+import { useIosAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
+import { useBranchStore } from '@/store/branch';
 
 import { AppSidebarProvider } from '@/components/app-sidebar';
 
 function HardwareContent() {
   const { currentUser, refreshUser } = useSession();
+  const { showAlert } = useIosAlert();
+  const queryClient = useQueryClient();
+  const branch = useBranchStore((state) => state.activeBranch);
   const modules = currentUser?.modules ?? [];
+  const organizationId = currentUser?.organization.id;
+  const branchId = branch?.id;
+  const [printerSettings, setPrinterSettings] = useState<ReceiptPrinterSettings>(
+    DEFAULT_RECEIPT_PRINTER_SETTINGS,
+  );
+  const [saveLabel, setSaveLabel] = useState<string | undefined>(undefined);
   const query = useQuery({
     queryKey: ['hardware-status', [...modules].sort().join(',')],
     queryFn: () => getHardwareStatuses(modules),
+  });
+  const printerSettingsQuery = useQuery({
+    queryKey: ['receipt-printer-settings', organizationId, branchId],
+    queryFn: () => getReceiptPrinterSettings(organizationId, branchId),
+  });
+  useEffect(() => {
+    if (printerSettingsQuery.data) setPrinterSettings(printerSettingsQuery.data);
+  }, [printerSettingsQuery.data]);
+
+  const savePrinter = useMutation({
+    mutationFn: () => {
+      if (!organizationId) {
+        throw new Error('Sign in again, then retry saving printer settings.');
+      }
+      return saveReceiptPrinterSettings(printerSettings, organizationId, branchId);
+    },
+    onSuccess: async (saved) => {
+      setPrinterSettings(saved);
+      await queryClient.invalidateQueries({
+        queryKey: ['receipt-printer-settings', organizationId, branchId],
+      });
+      setSaveLabel('Saved');
+      showAlert({
+        type: 'success',
+        title: 'Printer settings saved',
+        message: 'This device will use these settings for future receipts.',
+      });
+      setTimeout(() => setSaveLabel(undefined), 2000);
+    },
+    onError: (error) =>
+      showAlert({
+        type: 'error',
+        title: 'Could not save printer settings',
+        message: error.message,
+      }),
   });
   const refresh = useMutation({
     mutationFn: async () => {
       await refreshUser();
       await query.refetch();
     },
-    onError: (error) => Alert.alert('Could not refresh hardware modules', error.message),
+    onError: (error) =>
+      showAlert({
+        type: 'error',
+        title: 'Could not refresh hardware modules',
+        message: error.message,
+      }),
   });
   const test = useMutation({
     mutationFn: async (code: HardwareModuleCode) => {
-      await getHardwareDriver(code).test();
+      if (code === 'receipt_printer') {
+        await getHardwareDriver('receipt_printer').test(printerSettings);
+      } else {
+        await getHardwareDriver(code).test();
+      }
       return code;
     },
     onSuccess: (code) => {
       const capability = HARDWARE_CAPABILITIES.find((item) => item.code === code);
-      Alert.alert(
-        `${capability?.name ?? 'Hardware'} is ready`,
-        code === 'barcode_scanner'
-          ? 'Open Point of sale, scan a barcode into the search field, and send Enter.'
-          : 'The device test completed successfully.',
-      );
+      showAlert({
+        type: 'success',
+        title: `${capability?.name ?? 'Hardware'} is ready`,
+        message:
+          code === 'barcode_scanner'
+            ? 'Open Point of sale, scan a barcode into the search field, and send Enter.'
+            : 'The device test completed successfully.',
+      });
     },
-    onError: (error) => Alert.alert('Hardware test failed', error.message),
+    onError: (error) =>
+      showAlert({
+        type: 'error',
+        title: 'Hardware test failed',
+        message: error.message,
+      }),
   });
 
   return (
@@ -104,7 +174,7 @@ function HardwareContent() {
                     </Text>
                     <Text className="mt-1 text-xs leading-4 text-slate-600">{status?.detail}</Text>
                   </View>
-                  {ready ? (
+                  {ready && capability.code !== 'receipt_printer' ? (
                     <Pressable
                       accessibilityRole="button"
                       disabled={test.isPending}
@@ -113,6 +183,17 @@ function HardwareContent() {
                     >
                       <Text className="font-bold text-brand-700">Test device</Text>
                     </Pressable>
+                  ) : null}
+                  {capability.code === 'receipt_printer' && status?.state !== 'unavailable' ? (
+                    <ReceiptPrinterSetup
+                      value={printerSettings}
+                      onChange={setPrinterSettings}
+                      onSave={() => savePrinter.mutate()}
+                      onTest={() => test.mutate('receipt_printer')}
+                      saving={savePrinter.isPending}
+                      testing={test.isPending}
+                      saveLabel={saveLabel}
+                    />
                   ) : null}
                 </View>
               );

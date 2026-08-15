@@ -18,10 +18,27 @@ export interface BarcodeScannerDriver extends BaseHardwareDriver {
   mode: 'keyboard' | 'native';
 }
 
+export type ReceiptPaperSize = '58mm' | '80mm' | 'full_page';
+
+export interface ReceiptPrinterSettings {
+  version: 1;
+  printingMethod: 'system_dialog';
+  paperSize: ReceiptPaperSize;
+  autoPrintAfterSale: boolean;
+  includeBranchAddress: boolean;
+  includeCashierName: boolean;
+  includeTaxBreakdown: boolean;
+  includeFooter: boolean;
+}
+
 export interface ReceiptPrintJob {
   saleId: string;
   receiptNumber: string;
-  paperSize?: '58mm' | '80mm';
+  paperSize?: ReceiptPaperSize;
+  includeBranchAddress?: boolean;
+  includeCashierName?: boolean;
+  includeTaxBreakdown?: boolean;
+  includeFooter?: boolean;
   businessName?: string;
   branchName?: string;
   branchAddress?: string | null;
@@ -46,6 +63,7 @@ export interface ReceiptPrintJob {
 }
 
 export interface ReceiptPrinterDriver extends BaseHardwareDriver {
+  test(settings?: ReceiptPrinterSettings): Promise<void>;
   print(job: ReceiptPrintJob): Promise<void>;
 }
 

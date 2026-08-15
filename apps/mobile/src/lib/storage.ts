@@ -28,10 +28,23 @@ const webStorage: AppStorage = {
     }
   },
   async setItem(key, value) {
-    globalThis.localStorage?.setItem(key, value);
+    try {
+      if (!globalThis.localStorage) {
+        throw new Error('Browser storage is unavailable in this window.');
+      }
+      globalThis.localStorage.setItem(key, value);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Browser storage is blocked or full.';
+      throw new Error(`Could not save on this device: ${message}`);
+    }
   },
   async removeItem(key) {
-    globalThis.localStorage?.removeItem(key);
+    try {
+      globalThis.localStorage?.removeItem(key);
+    } catch {
+      // Ignore storage removal failures.
+    }
   },
 };
 

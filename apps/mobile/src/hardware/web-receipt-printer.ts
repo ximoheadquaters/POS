@@ -19,6 +19,11 @@ function money(value: string | undefined, currency = 'PHP'): string {
 export function buildReceiptHtml(job: ReceiptPrintJob): string {
   const paperSize = job.paperSize ?? '58mm';
   const is58mm = paperSize === '58mm';
+  const is80mm = paperSize === '80mm';
+  const includeBranchAddress = job.includeBranchAddress !== false;
+  const includeCashierName = job.includeCashierName !== false;
+  const includeTaxBreakdown = job.includeTaxBreakdown !== false;
+  const includeFooter = job.includeFooter !== false;
 
   const itemRows = (job.items ?? [])
     .map(
@@ -58,7 +63,8 @@ export function buildReceiptHtml(job: ReceiptPrintJob): string {
        @media print {
          html, body { width: 52mm; max-width: 52mm; height: max-content; margin: 0 auto; }
        }`
-    : `@page { size: 80mm auto; margin: 4mm; }
+    : is80mm
+      ? `@page { size: 80mm auto; margin: 4mm; }
        html, body { margin: 0; padding: 0; width: 72mm; color: #000; background: #fff; }
        body { font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; -webkit-print-color-adjust: exact; height: max-content; }
        h1 { margin: 0; font-size: 18px; text-align: center; }
@@ -70,7 +76,18 @@ export function buildReceiptHtml(job: ReceiptPrintJob): string {
        .footer { margin-top: 10px; text-align: center; font-size: 9.5px; }
        @media print {
          body { width: 72mm; max-width: 72mm; height: max-content; margin: 0 auto; }
-       }`;
+        }`
+      : `@page { size: auto; margin: 12mm; }
+         html, body { margin: 0; padding: 0; color: #000; background: #fff; }
+         body { width: 100%; max-width: 186mm; margin: 0 auto; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; -webkit-print-color-adjust: exact; }
+         h1 { margin: 0; font-size: 24px; text-align: center; }
+         .divider { margin: 12px 0; border-top: 1px dashed #000; }
+         .row { display: flex; justify-content: space-between; gap: 12px; }
+         .item-name { margin-top: 8px; font-weight: 700; overflow-wrap: anywhere; }
+         .item-detail { padding-left: 10px; }
+         .total { margin-top: 6px; font-size: 18px; font-weight: 800; }
+         .footer { margin-top: 16px; text-align: center; }
+         @media print { body { width: 100%; max-width: 186mm; margin: 0 auto; } }`;
 
   return `<!doctype html>
 <html>
@@ -87,11 +104,11 @@ export function buildReceiptHtml(job: ReceiptPrintJob): string {
   <body>
     <h1>${escapeHtml(job.businessName ?? 'Ximo POS')}</h1>
     ${job.branchName ? `<div class="center">${escapeHtml(job.branchName)}</div>` : ''}
-    ${job.branchAddress ? `<div class="center muted">${escapeHtml(job.branchAddress)}</div>` : ''}
+    ${includeBranchAddress && job.branchAddress ? `<div class="center muted">${escapeHtml(job.branchAddress)}</div>` : ''}
     <div class="divider"></div>
     <div>Receipt: ${escapeHtml(job.receiptNumber)}</div>
     <div>Date: ${escapeHtml(date)}</div>
-    ${job.cashierName ? `<div>Cashier: ${escapeHtml(job.cashierName)}</div>` : ''}
+    ${includeCashierName && job.cashierName ? `<div>Cashier: ${escapeHtml(job.cashierName)}</div>` : ''}
     <div class="divider"></div>
     ${itemRows || '<div class="center muted">Sale item details unavailable</div>'}
     <div class="divider"></div>
@@ -106,16 +123,14 @@ export function buildReceiptHtml(job: ReceiptPrintJob): string {
         : ''
     }
     ${
-      job.taxTotal
+      includeTaxBreakdown && job.taxTotal
         ? `<div class="row"><span>Tax</span><span>${escapeHtml(money(job.taxTotal, job.currency))}</span></div>`
         : ''
     }
     <div class="row total"><span>TOTAL</span><span>${escapeHtml(money(job.total, job.currency))}</span></div>
     ${paymentRows ? `<div class="divider"></div>${paymentRows}` : ''}
     <div class="row"><span>Change</span><span>${escapeHtml(money(job.changeDue, job.currency))}</span></div>
-    <div class="divider"></div>
-    <div class="footer">Thank you!</div>
-    <div class="footer muted">Powered by Ximo POS</div>
+    ${includeFooter ? '<div class="divider"></div><div class="footer">Thank you!</div><div class="footer muted">Powered by Ximo POS</div>' : ''}
   </body>
 </html>`;
 }
@@ -179,13 +194,19 @@ export const browserReceiptPrinter: ReceiptPrinterDriver = {
         : 'Install a compatible receipt-printer driver for this device.',
     };
   },
-  async test() {
+  async test(settings) {
     await printHtml(
       buildReceiptHtml({
         saleId: 'test',
         receiptNumber: 'TEST-RECEIPT',
+        paperSize: settings?.paperSize,
+        includeBranchAddress: settings?.includeBranchAddress,
+        includeCashierName: settings?.includeCashierName,
+        includeTaxBreakdown: settings?.includeTaxBreakdown,
+        includeFooter: settings?.includeFooter,
         businessName: 'Ximo POS',
         branchName: 'Printer test',
+        branchAddress: 'This line confirms the branch address fits the selected paper width.',
         cashierName: 'Test cashier',
         currency: 'PHP',
         total: '100.00',
