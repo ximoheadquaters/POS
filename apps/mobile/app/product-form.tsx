@@ -171,6 +171,58 @@ const PRODUCT_PRESETS = [
 
 type ProductSetup = (typeof PRODUCT_PRESETS)[number]['id'];
 
+function resolveBusinessProfile(user: {
+  organization?: { businessProfile?: string };
+  businessProfile?: string;
+} | null): 'retail' | 'food_service' | 'hybrid' {
+  const profile =
+    user?.organization?.businessProfile ?? user?.businessProfile ?? 'retail';
+  if (profile === 'food_service' || profile === 'hybrid') return profile;
+  return 'retail';
+}
+
+function isPresetAllowedForProfile(
+  presetId: ProductSetup,
+  profile: 'retail' | 'food_service' | 'hybrid',
+): boolean {
+  if (profile === 'food_service') {
+    return presetId === 'raw' || presetId === 'prepared_food';
+  }
+  if (profile === 'retail') {
+    return presetId === 'retail' || presetId === 'repacked';
+  }
+  return true;
+}
+
+function isPresetAllowedForModules(presetId: ProductSetup, modules: string[]): boolean {
+  if (presetId === 'raw' && !modules.includes('ingredients')) return false;
+  if (
+    presetId === 'prepared_food' &&
+    (!modules.includes('recipes') || !modules.includes('prepared_food'))
+  ) {
+    return false;
+  }
+  if (
+    presetId === 'repacked' &&
+    !modules.includes('production') &&
+    !modules.includes('inventory')
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function getVisibleProductPresets(
+  profile: 'retail' | 'food_service' | 'hybrid',
+  modules: string[],
+) {
+  return PRODUCT_PRESETS.filter(
+    (preset) =>
+      isPresetAllowedForProfile(preset.id, profile) &&
+      isPresetAllowedForModules(preset.id, modules),
+  );
+}
+
 function generatedSku(name: string): string {
   const prefix = name
     .trim()
@@ -311,6 +363,12 @@ function ProductFormContent() {
   }>();
   const { showAlert } = useIosAlert();
   const { currentUser } = useSession();
+  const businessProfile = resolveBusinessProfile(currentUser);
+  const userModules = currentUser?.modules ?? [];
+  const visibleProductPresets = getVisibleProductPresets(businessProfile, userModules);
+  const defaultProductSetup =
+    visibleProductPresets[0]?.id ??
+    (businessProfile === 'food_service' ? 'raw' : 'retail');
   const productId = typeof params.id === 'string' ? params.id : '';
   const isEditing = Boolean(productId);
   const suggestedPrice =
@@ -344,7 +402,7 @@ function ProductFormContent() {
   const [pricingOffset, setPricingOffset] = useState(0);
   const queryClient = useQueryClient();
 
-  const [productSetup, setProductSetup] = useState<ProductSetup>('retail');
+  const [productSetup, setProductSetup] = useState<ProductSetup>(defaultProductSetup);
   const [retailMode, setRetailMode] = useState<RetailProductMode>('simple');
   const [measurementDimension, setMeasurementDimension] = useState<MeasurementDimension>('weight');
   const [pendingRetailMode, setPendingRetailMode] = useState<RetailProductMode | null>(null);
@@ -662,6 +720,22 @@ function ProductFormContent() {
     Number.isFinite(Number(suggestedPrice)) &&
     Number(sellingPrice) === Number(suggestedPrice);
   const scannerEnabled = currentUser?.modules.includes('barcode_scanner') ?? false;
+
+  useEffect(() => {
+    if (isEditing) return;
+    if (visibleProductPresets.some((preset) => preset.id === productSetup)) return;
+    const next = visibleProductPresets[0];
+    if (!next) return;
+    setProductSetup(next.id);
+    setRecipeEnabled(next.id === 'prepared_food' || next.id === 'repacked');
+    form.setValue(
+      'inventoryRole',
+      next.id === 'raw' ? 'ingredient' : 'sellable',
+      { shouldValidate: true },
+    );
+    form.setValue('unit', next.unit, { shouldValidate: true });
+    form.setValue('trackInventory', next.trackInventory, { shouldValidate: true });
+  }, [form, isEditing, productSetup, visibleProductPresets]);
 
   const selectStockSaleMode = (mode: StockSaleMode) => {
     setStockSaleMode(mode);
@@ -1200,15 +1274,7 @@ function ProductFormContent() {
                     Pick one. Ximo will set the recommended inventory behavior automatically.
                   </Text>
                   <View className="gap-3 sm:flex-row sm:flex-wrap">
-                    {PRODUCT_PRESETS.filter((preset) => {
-                      const profile = currentUser?.organization?.businessProfile ?? (currentUser as any)?.businessProfile ?? 'retail';
-                      if (profile === 'retail' && preset.id !== 'retail' && preset.id !== 'repacked') return false;
-                      const userModules = currentUser?.modules ?? [];
-                      if (preset.id === 'raw' && !userModules.includes('ingredients')) return false;
-                      if (preset.id === 'prepared_food' && (!userModules.includes('recipes') || !userModules.includes('prepared_food'))) return false;
-                      if (preset.id === 'repacked' && !userModules.includes('production') && !userModules.includes('inventory')) return false;
-                      return true;
-                    }).map((preset) => {
+                    {visibleProductPresets.map((preset) => {
                       const selected = productSetup === preset.id;
                       return (
                         <Pressable

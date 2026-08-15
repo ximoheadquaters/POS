@@ -91,6 +91,28 @@ export function createSupabaseAuth(config: AppConfig): {
           );
         }
       },
+      async changePassword(userId, password) {
+        const current = await adminClient.auth.admin.getUserById(userId);
+        if (current.error || !current.data.user) {
+          throw serviceUnavailable(
+            'PASSWORD_CHANGE_UNAVAILABLE',
+            'Password changes are temporarily unavailable',
+          );
+        }
+        const { error } = await adminClient.auth.admin.updateUserById(userId, {
+          password,
+          app_metadata: {
+            ...current.data.user.app_metadata,
+            must_change_password: false,
+          },
+        });
+        if (error) {
+          throw serviceUnavailable(
+            'PASSWORD_CHANGE_UNAVAILABLE',
+            'Password changes are temporarily unavailable',
+          );
+        }
+      },
       async getUser(userId) {
         const { data, error } = await adminClient.auth.admin.getUserById(userId);
         if (error) {

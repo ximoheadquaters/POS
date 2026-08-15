@@ -117,8 +117,11 @@ const sidebarSections: SidebarSection[] = [
           { title: 'Purchasing', href: '/reports/purchasing' as Href, module: 'reports' },
           { title: 'Profit', href: '/reports/profit' as Href, module: 'reports', permission: 'reports:view_profit' },
           { title: 'Cash & shifts', href: '/reports/cash' as Href, module: 'reports' },
+<<<<<<< HEAD
           { title: 'Audit', href: '/reports/audit' as Href, module: 'audit', permission: 'audit:read' },
           { title: 'Repacking', href: '/reports/repacking' as Href, module: 'reports' },
+=======
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
         ],
       },
       {
@@ -230,53 +233,42 @@ function SidebarMenu({ close }: { close(): void }) {
     }));
   };
 
+  const hasModuleAccess = (module?: ModuleCode, groupId?: string) => {
+    if (!module) return true;
+    if (groupId === 'dashboard') {
+      return (
+        Boolean(currentUser?.modules.includes('dashboard')) ||
+        Boolean(currentUser?.modules.includes('reports'))
+      );
+    }
+    return Boolean(currentUser?.modules.includes(module));
+  };
+
+  const hasPermissionAccess = (permission?: Permission) => {
+    if (!permission) return true;
+    const isOwnerOrAdmin = currentUser?.role === 'owner' || currentUser?.role === 'administrator';
+    return isOwnerOrAdmin || Boolean(currentUser?.permissions.includes(permission));
+  };
+
   const filterVisibleChildren = (children?: SidebarSubItem[]) => {
     if (!children) return [];
-    return children.filter((item) => {
-      const coreHrefs = [
-        '/products',
-        '/customers',
-        '/purchasing',
-        '/reports',
-        '/settings',
-        '/promotions',
-        '/(tabs)/inventory',
-        '/production',
-        '/catalogue',
-        '/product-variants',
-      ];
-      const isOwnerOrAdmin = currentUser?.role === 'owner' || currentUser?.role === 'administrator';
-      const hasPermission = !item.permission || isOwnerOrAdmin || currentUser?.permissions.includes(item.permission);
-      const hasModule = !item.module || currentUser?.modules.includes(item.module);
-      return hasPermission && hasModule;
-    });
+    return children.filter(
+      (item) => hasPermissionAccess(item.permission) && hasModuleAccess(item.module),
+    );
   };
 
   const filterVisibleGroups = (groups: SidebarGroup[]) => {
     return groups.filter((group) => {
-      const coreGroups = [
-        'dashboard',
-        'products',
-        'customers',
-        'pos',
-        'sales',
-        'purchasing',
-        'promotions',
-        'registers',
-        'reports',
-        'settings',
-      ];
-      if (coreGroups.includes(group.id)) return true;
+      if (!hasPermissionAccess(group.permission)) return false;
 
-      const isOwnerOrAdmin = currentUser?.role === 'owner' || currentUser?.role === 'administrator';
-      const hasPermission =
-        !group.permission || isOwnerOrAdmin || currentUser?.permissions.includes(group.permission);
-      const hasModule =
-        !group.module ||
-        currentUser?.modules.includes(group.module) ||
-        (group.id === 'dashboard' &&
-          (currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')));
-      return hasPermission && hasModule;
+      if (group.children && group.children.length > 0) {
+        // Parent groups without their own module stay visible only when at least
+        // one enabled child remains.
+        if (group.module && !hasModuleAccess(group.module, group.id)) return false;
+        return filterVisibleChildren(group.children).length > 0;
+      }
+
+      return hasModuleAccess(group.module, group.id);
     });
   };
 
@@ -341,14 +333,6 @@ function SidebarMenu({ close }: { close(): void }) {
                     );
 
                     if (!hasChildren && group.href) {
-                      const isGroupDisabled =
-                        group.id === 'dashboard'
-                          ? !(
-                              currentUser?.modules.includes('dashboard') ||
-                              currentUser?.modules.includes('reports')
-                            )
-                          : Boolean(group.module && !currentUser?.modules.includes(group.module));
-
                       return (
                         <Pressable
                           key={group.id}
@@ -380,6 +364,7 @@ function SidebarMenu({ close }: { close(): void }) {
                               {group.title}
                             </Text>
                           </View>
+<<<<<<< HEAD
 
                           {isGroupDisabled ? (
                             <View className="flex-row items-center gap-1 rounded-full bg-amber-100/80 px-2 py-0.5">
@@ -387,9 +372,13 @@ function SidebarMenu({ close }: { close(): void }) {
                               <Text className="text-[10px] font-bold text-amber-800">Locked</Text>
                             </View>
                           ) : null}
+=======
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
                         </Pressable>
                       );
                     }
+
+                    if (hasChildren && visibleChildren.length === 0) return null;
 
                     return (
                       <View key={group.id} className="mb-0.5">
@@ -432,9 +421,6 @@ function SidebarMenu({ close }: { close(): void }) {
                           <View className="ml-5 mt-1 border-l-2 border-slate-200/80 pl-3.5 gap-1.5 py-1">
                             {visibleChildren.map((subItem) => {
                               const active = isPathActive(pathname, subItem.href);
-                              const isSubDisabled = Boolean(
-                                subItem.module && !currentUser?.modules.includes(subItem.module),
-                              );
 
                               return (
                                 <View
@@ -465,14 +451,7 @@ function SidebarMenu({ close }: { close(): void }) {
                                     >
                                       {subItem.title}
                                     </Text>
-                                    {isSubDisabled ? (
-                                      <View className="flex-row items-center gap-1 rounded-full bg-amber-100/80 px-2 py-0.5">
-                                        <Feather name="lock" size={10} color="#B45309" />
-                                        <Text className="text-[10px] font-bold text-amber-800">
-                                          Locked
-                                        </Text>
-                                      </View>
-                                    ) : subItem.badge !== undefined ? (
+                                    {subItem.badge !== undefined ? (
                                       <View
                                         className={`rounded-full px-2 py-0.5 ${getBadgeStyle(
                                           subItem.badgeColor,

@@ -29,10 +29,12 @@ interface ContextRow {
   role: RoleCode;
   permissions: Permission[] | null;
   branches: Array<{ id: string; name: string; code: string }> | null;
+  must_change_password: boolean;
 }
 
 export const CONTEXT_SQL = `
 select p.id, p.email, p.display_name, p.organization_id,
+  coalesce(p.must_change_password, false) as must_change_password,
   o.name as organization_name, o.currency, o.timezone,
   coalesce(o.business_profile, 'retail') as business_profile,
   coalesce(current_sub.status::text, 'cancelled') as subscription_status, r.code as role,
@@ -104,6 +106,7 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
         permissions: row.permissions ?? [],
         modules: effectiveModules,
         branches: row.branches ?? [],
+<<<<<<< HEAD
         ...(platformAccess.membership ? { membership: platformAccess.membership } : {}),
         applications:
           platformAccess.applications.length > 0
@@ -122,6 +125,9 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
                   ),
                 },
               ],
+=======
+        mustChangePassword: row.must_change_password,
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
       };
       next();
     } catch (error) {

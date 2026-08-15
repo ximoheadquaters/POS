@@ -56,6 +56,7 @@ export default function RootLayout() {
                 <Stack.Screen name="index" />
                 <Stack.Screen name="(auth)" />
                 <Stack.Screen name="accept-invitation" />
+                <Stack.Screen name="change-password" />
                 <Stack.Screen name="branch-select" />
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="hardware" />

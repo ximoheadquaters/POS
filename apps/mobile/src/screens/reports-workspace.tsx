@@ -203,8 +203,11 @@ function comparisonDateRange(
 const SECTIONS: Array<{
   key: ReportSection;
   label: string;
+  shortLabel: string;
+  description: string;
   icon: ComponentProps<typeof Feather>['name'];
 }> = [
+<<<<<<< HEAD
   { key: 'overview', label: 'Overview', icon: 'grid' },
   { key: 'sales', label: 'Sales', icon: 'shopping-cart' },
   { key: 'products', label: 'Products', icon: 'tag' },
@@ -214,6 +217,57 @@ const SECTIONS: Array<{
   { key: 'cash', label: 'Cash', icon: 'monitor' },
   { key: 'audit', label: 'Audit', icon: 'shield' },
   { key: 'repacking', label: 'Repacking', icon: 'repeat' },
+=======
+  {
+    key: 'overview',
+    label: 'Overview',
+    shortLabel: 'Overview',
+    description: 'A clear snapshot of sales, stock, cash, and payables.',
+    icon: 'grid',
+  },
+  {
+    key: 'sales',
+    label: 'Sales',
+    shortLabel: 'Sales',
+    description: 'Receipts, refunds, payment mix, and sales trend.',
+    icon: 'shopping-cart',
+  },
+  {
+    key: 'products',
+    label: 'Products',
+    shortLabel: 'Products',
+    description: 'Best sellers, slow movers, and product contribution.',
+    icon: 'tag',
+  },
+  {
+    key: 'inventory',
+    label: 'Inventory',
+    shortLabel: 'Stock',
+    description: 'Stock value, movements, and items that need attention.',
+    icon: 'package',
+  },
+  {
+    key: 'purchasing',
+    label: 'Purchasing',
+    shortLabel: 'Buying',
+    description: 'Orders, receipts, supplier payables, and returns.',
+    icon: 'truck',
+  },
+  {
+    key: 'profit',
+    label: 'Profit',
+    shortLabel: 'Profit',
+    description: 'Gross to net profit, COGS, and margin for the period.',
+    icon: 'trending-up',
+  },
+  {
+    key: 'cash',
+    label: 'Cash & shifts',
+    shortLabel: 'Cash',
+    description: 'Drawer accountability, counted cash, and variance.',
+    icon: 'monitor',
+  },
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
 ];
 
 const SECTION_REPORT_IDS: Record<ReportSection, string> = {
@@ -682,6 +736,37 @@ function ReportCard({
   );
 }
 
+function ReportEmptyState({
+  title,
+  message,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <View className="items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-5 py-10">
+      <View className="h-12 w-12 items-center justify-center rounded-full bg-white">
+        <Feather name="inbox" size={22} color="#94A3B8" />
+      </View>
+      <Text className="mt-4 text-center text-base font-semibold text-slate-800">{title}</Text>
+      <Text className="mt-2 max-w-md text-center text-sm leading-5 text-slate-500">{message}</Text>
+      {actionLabel && onAction ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onAction}
+          className="mt-5 min-h-11 items-center justify-center rounded-xl bg-brand-700 px-4 active:opacity-90"
+        >
+          <Text className="text-sm font-semibold text-white">{actionLabel}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function BarRows({
   rows,
   emptyLabel = 'No activity for this period.',
@@ -694,7 +779,12 @@ function BarRows({
   const maximum = Math.max(...rows.map((row) => Math.abs(row.value)), 1);
   const ready = useChartReady(rows.map((row) => `${row.key}:${row.value}`).join('|'));
   if (!rows.length) {
-    return <Text className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">{emptyLabel}</Text>;
+    return (
+      <ReportEmptyState
+        title="Nothing to show yet"
+        message={emptyLabel}
+      />
+    );
   }
   return (
     <View className="gap-3.5">
@@ -2560,10 +2650,10 @@ function MetricDrilldownView({
             })}
           </View>
         ) : (
-          <View className="items-center justify-center py-12">
-            <Feather name="inbox" size={36} color="#C7C0B8" />
-            <Text className="mt-3 text-sm text-slate-500">No records match your filter criteria.</Text>
-          </View>
+          <ReportEmptyState
+            title="No matching records"
+            message="Try a different date range or branch. If you just opened, run a few sales or stock moves first."
+          />
         )}
       </ReportCard>
     </View>
@@ -3913,6 +4003,19 @@ function InventoryReport({
   onOpenDetail(config: MetricDrilldownConfig): void;
   exportRef?: React.MutableRefObject<(() => InventoryExportData) | null>;
 }) {
+  const { currentUser } = useSession();
+  const isFoodService =
+    (currentUser?.organization?.businessProfile ??
+      (currentUser as { businessProfile?: string } | null)?.businessProfile) === 'food_service';
+  const conversionTabLabel = isFoodService
+    ? 'Recipe production'
+    : 'Conversion / repacking';
+  const productionMovementLabel = isFoodService
+    ? 'Recipe production'
+    : 'Repacking (Production)';
+  const conversionEmptyMessage = isFoodService
+    ? 'No recipe production batches are configured yet.'
+    : 'No conversion or repacking recipes configured yet.';
   const [subTab, setSubTab] = useState<'stock' | 'movements' | 'conversions'>('stock');
 
   // Stock table state
@@ -4253,7 +4356,7 @@ function InventoryReport({
           >
             <Feather name="repeat" size={16} color={subTab === 'conversions' ? '#FFFFFF' : '#475569'} />
             <Text className={`text-xs font-semibold ${subTab === 'conversions' ? 'text-white' : 'text-slate-700'}`}>
-              Conversion (Repacking) ({filteredConversions.length})
+              {conversionTabLabel} ({filteredConversions.length})
             </Text>
           </Pressable>
         </View>
@@ -4548,7 +4651,7 @@ function InventoryReport({
                   { label: 'Adjustments', value: 'adjustment' },
                   { label: 'Sales', value: 'sale' },
                   { label: 'Returns', value: 'return' },
-                  { label: 'Repacking (Production)', value: 'production' },
+                  { label: productionMovementLabel, value: 'production' },
                   { label: 'Transfers', value: 'transfer' },
                 ]}
                 onChange={setMovementTypeFilter}
@@ -4647,7 +4750,9 @@ function InventoryReport({
                               : 'text-amber-800'
                           }`}
                         >
-                          {m.type?.replaceAll('_', ' ') ?? 'adjustment'}
+                          {m.type === 'production'
+                            ? productionMovementLabel
+                            : m.type?.replaceAll('_', ' ') ?? 'adjustment'}
                         </Text>
                       </View>
                     </View>
@@ -4835,7 +4940,7 @@ function InventoryReport({
                 <View className="items-center justify-center p-8">
                   <Feather name="repeat" size={24} color="#94A3B8" />
                   <Text className="mt-2 text-xs font-medium text-slate-500">
-                    No conversion or repacking recipes configured yet.
+                    {conversionEmptyMessage}
                   </Text>
                 </View>
               )}
@@ -5982,6 +6087,9 @@ function ReportsContent({
   }, []);
   const [period, setPeriod] = useState<ReportPeriod>('30d');
   const [section, setSection] = useState<ReportSection>(initialSection);
+  useEffect(() => {
+    setSection(initialSection);
+  }, [initialSection]);
   const [dateRangeVisible, setDateRangeVisible] = useState(false);
   const [calendarSession, setCalendarSession] = useState(0);
   const [customRange, setCustomRange] = useState(defaultCustomRange);
@@ -6137,7 +6245,11 @@ function ReportsContent({
       Boolean(reportBranchId) &&
       reportBranchId !== 'all',
     queryFn: () =>
+<<<<<<< HEAD
       api<any[]>(`/products?branchId=${reportBranchId}&includeInactive=true&pageSize=100`),
+=======
+      api<any[]>(`/products?branchId=${branch!.id}&includeInactive=true&pageSize=250`),
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
   });
 
   const inventoryItemsQuery = useQuery({
@@ -6149,7 +6261,11 @@ function ReportsContent({
       reportBranchId !== 'all' &&
       section === 'inventory',
     queryFn: () =>
+<<<<<<< HEAD
       api<any>(`/inventory?branchId=${reportBranchId}&pageSize=100`).catch(() => ({ data: [] })),
+=======
+      api<any>(`/inventory?branchId=${branch!.id}&pageSize=250`).catch(() => ({ data: [] })),
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
   });
 
   const inventoryMovementsQuery = useQuery({
@@ -6161,7 +6277,11 @@ function ReportsContent({
       reportBranchId !== 'all' &&
       section === 'inventory',
     queryFn: () =>
+<<<<<<< HEAD
       api<any>(`/inventory/history?branchId=${reportBranchId}&pageSize=100`).catch(() => ({ data: [] })),
+=======
+      api<any>(`/inventory/history?branchId=${branch!.id}&pageSize=250`).catch(() => ({ data: [] })),
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
   });
 
   const productionProductsQuery = useQuery({
@@ -6239,6 +6359,7 @@ function ReportsContent({
           }}
         >
           {!activeMetricDrilldown ? (
+<<<<<<< HEAD
             <View className="flex-row flex-wrap items-end justify-between gap-3">
               <View className="min-w-[220px] flex-1">
                 <Text className="text-2xl font-semibold text-slate-900">{workspaceTitle}</Text>
@@ -6287,75 +6408,142 @@ function ReportsContent({
                 {PERIOD_PRESETS.slice(0, 4).map((item) => {
                   const selected = item.key === period;
                   return (
+=======
+            <View className="gap-4">
+              <View className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+                <View className="flex-row flex-wrap items-start justify-between gap-4">
+                  <View className="min-w-[220px] flex-1">
+                    <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                      Store reports
+                    </Text>
+                    <Text className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                      {visibleSections.find((item) => item.key === section)?.label ?? 'Reports'}
+                    </Text>
+                    <Text className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                      {visibleSections.find((item) => item.key === section)?.description ??
+                        'Understand sales, stock, buying, profit, and cash for your store.'}{' '}
+                      Showing {rangeLabel}
+                      {branch?.name ? ` · ${branch.name}` : ''}.
+                    </Text>
+                  </View>
+                  <View className="flex-row flex-wrap items-center gap-2">
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
                     <Pressable
-                      key={item.key}
                       accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      onPress={() => {
-                        setPeriod(item.key);
-                        setActiveMetricDrilldown(null);
-                      }}
-                      className={`min-h-10 items-center justify-center rounded-xl px-3.5 ${
-                        selected ? 'bg-brand-700' : 'border border-slate-200 bg-white'
+                      accessibilityLabel="Export reports"
+                      disabled={!query.data || exporting}
+                      onPress={() => setExportMenuVisible(true)}
+                      className={`min-h-11 flex-row items-center rounded-xl px-4 ${
+                        !query.data || exporting ? 'bg-slate-300' : 'bg-slate-900'
                       }`}
                     >
-                      <Text
-                        className={`text-[13px] font-medium ${
-                          selected ? 'text-white' : 'text-slate-600'
-                        }`}
-                      >
-                        {item.label}
+                      <Feather name="download" size={15} color="#FFFFFF" />
+                      <Text className="ml-2 text-sm font-semibold text-white">
+                        {exporting ? 'Exporting…' : 'Export'}
                       </Text>
                     </Pressable>
-                  );
-                })}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Open calendar date range"
-                  onPress={() => {
-                    const active =
-                      period === 'custom'
-                        ? customRange
-                        : PERIOD_PRESETS.find((p) => p.key === period)?.getRange() ?? customRange;
-                    setDraftFrom(active.from);
-                    setDraftTo(active.to);
-                    setDateRangeError('');
-                    setCalendarSession((value) => value + 1);
-                    setDateRangeVisible(true);
-                  }}
-                  className={`min-h-10 flex-row items-center rounded-xl px-3.5 ${
-                    period === 'custom' ? 'bg-slate-900' : 'border border-slate-200 bg-white'
-                  }`}
-                >
-                  <Feather
-                    name="calendar"
-                    size={15}
-                    color={period === 'custom' ? '#FFFFFF' : '#1A593B'}
-                  />
-                  <Text
-                    className={`ml-2 text-[13px] font-medium ${
-                      period === 'custom' ? 'text-white' : 'text-slate-700'
+                  </View>
+                </View>
+
+                <View className="mt-5 flex-row flex-wrap gap-2">
+                  {[...PERIOD_PRESETS.filter((item) =>
+                    ['today', 'yesterday', '7d', '30d', 'this_month', 'last_month'].includes(item.key),
+                  )].map((item) => {
+                    const selected = item.key === period;
+                    return (
+                      <Pressable
+                        key={item.key}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        onPress={() => {
+                          setPeriod(item.key);
+                          setActiveMetricDrilldown(null);
+                        }}
+                        className={`min-h-10 items-center justify-center rounded-full px-3.5 ${
+                          selected ? 'bg-brand-700' : 'border border-slate-200 bg-slate-50'
+                        }`}
+                      >
+                        <Text
+                          className={`text-[13px] font-medium ${
+                            selected ? 'text-white' : 'text-slate-600'
+                          }`}
+                        >
+                          {item.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Open calendar date range"
+                    onPress={() => {
+                      const active =
+                        period === 'custom'
+                          ? customRange
+                          : PERIOD_PRESETS.find((p) => p.key === period)?.getRange() ?? customRange;
+                      setDraftFrom(active.from);
+                      setDraftTo(active.to);
+                      setDateRangeError('');
+                      setCalendarSession((value) => value + 1);
+                      setDateRangeVisible(true);
+                    }}
+                    className={`min-h-10 flex-row items-center rounded-full px-3.5 ${
+                      period === 'custom' ? 'bg-slate-900' : 'border border-slate-200 bg-slate-50'
                     }`}
-                    numberOfLines={1}
                   >
-                    {period === 'custom' ? rangeLabel : 'Custom'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Export reports"
-                  disabled={!query.data || exporting}
-                  onPress={() => setExportMenuVisible(true)}
-                  className={`min-h-10 flex-row items-center rounded-xl px-3.5 ${
-                    !query.data || exporting ? 'bg-slate-300' : 'bg-slate-900'
-                  }`}
-                >
-                  <Feather name="download" size={15} color="#FFFFFF" />
-                  <Text className="ml-2 text-[13px] font-medium text-white">
-                    {exporting ? 'Exporting…' : 'Export'}
-                  </Text>
-                </Pressable>
+                    <Feather
+                      name="calendar"
+                      size={15}
+                      color={period === 'custom' ? '#FFFFFF' : '#1A593B'}
+                    />
+                    <Text
+                      className={`ml-2 text-[13px] font-medium ${
+                        period === 'custom' ? 'text-white' : 'text-slate-700'
+                      }`}
+                      numberOfLines={1}
+                    >
+                      {period === 'custom' ? rangeLabel : 'Custom dates'}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-2 pb-1">
+                  {visibleSections.map((item) => {
+                    const selected = item.key === section;
+                    return (
+                      <Pressable
+                        key={item.key}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        onPress={() => {
+                          setSection(item.key);
+                          setActiveMetricDrilldown(null);
+                        }}
+                        className={`min-h-11 flex-row items-center rounded-2xl border px-4 ${
+                          selected
+                            ? 'border-brand-600 bg-brand-700'
+                            : 'border-slate-200 bg-white'
+                        }`}
+                      >
+                        <Feather
+                          name={item.icon}
+                          size={15}
+                          color={selected ? '#FFFFFF' : '#64748B'}
+                        />
+                        <Text
+                          className={`ml-2 text-sm font-semibold ${
+                            selected ? 'text-white' : 'text-slate-600'
+                          }`}
+                        >
+                          {phone ? item.shortLabel : item.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
             </View>
           ) : null}
 
@@ -6402,6 +6590,7 @@ function ReportsContent({
             />
           ) : (
             <>
+<<<<<<< HEAD
               <View className="rounded-2xl border border-slate-100 bg-white p-1">
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View className="flex-row items-center gap-1">
@@ -6452,6 +6641,8 @@ function ReportsContent({
                 />
               ) : null}
 
+=======
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
               {query.isLoading ? (
                 <View className="min-h-96 rounded-2xl bg-white">
                   <LoadingState label="Building your reports…" />

@@ -49,6 +49,10 @@ const moduleOverrideSchema = z.object({
   reason: z.string().trim().min(1, 'Reason is required').max(1000),
 });
 
+const updatePlanModulesSchema = z.object({
+  moduleCodes: z.array(moduleCodeSchema).max(200),
+});
+
 const auditQuerySchema = paginationSchema.extend({
   organizationId: uuidSchema.optional(),
 });
@@ -145,6 +149,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     sendData(response, result.rows);
   });
 
+<<<<<<< HEAD
   router.get('/applications', requirePlatformScope('platform:read'), async (_request, response) => {
     const result = await database.query(
       `select application.id,application.code,application.name,application.description,
@@ -159,6 +164,128 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     );
     sendData(response, result.rows);
   });
+=======
+  router.put(
+    '/plans/:planCode/modules',
+    requirePlatformScope('platform:write'),
+    validateBody(updatePlanModulesSchema),
+    async (request, response) => {
+      const planCode = z.string().trim().min(1).max(80).parse(request.params.planCode);
+      const { moduleCodes } = request.body as z.infer<typeof updatePlanModulesSchema>;
+      const uniqueCodes = [...new Set(moduleCodes)];
+      const client = platformClient(response);
+
+      const updated = await database.transaction(async (transaction) => {
+        const plan = await transaction.query<{ id: string; code: string; name: string }>(
+          `select p.id, p.code, p.name
+           from plans p
+           join applications application
+             on application.id = p.application_id and application.code = 'ximo_pos'
+           where p.code = $1
+           for update of p`,
+          [planCode],
+        );
+        if (!plan.rows[0]) throw notFound('Active plan');
+
+        if (uniqueCodes.length > 0) {
+          const modules = await transaction.query<{ id: string; code: string }>(
+            `select m.id, m.code
+             from modules m
+             join applications application
+               on application.id = m.application_id and application.code = 'ximo_pos'
+             where m.code = any($1::text[])`,
+            [uniqueCodes],
+          );
+          if (modules.rows.length !== uniqueCodes.length) {
+            const found = new Set(modules.rows.map((row) => row.code));
+            const missing = uniqueCodes.filter((code) => !found.has(code));
+            throw badRequest(
+              'INVALID_MODULE_CODES',
+              `Unknown module code(s): ${missing.join(', ')}`,
+            );
+          }
+
+          await transaction.query('delete from plan_modules where plan_id = $1', [plan.rows[0].id]);
+          await transaction.query(
+            `insert into plan_modules (plan_id, module_id)
+             select $1, m.id
+             from modules m
+             join applications application
+               on application.id = m.application_id and application.code = 'ximo_pos'
+             where m.code = any($2::text[])`,
+            [plan.rows[0].id, uniqueCodes],
+          );
+
+          await transaction.query(
+            `delete from plan_entitlements pe
+             using application_entitlements ae
+             where pe.plan_id = $1
+               and pe.entitlement_id = ae.id
+               and ae.code like 'module.%'`,
+            [plan.rows[0].id],
+          );
+          await transaction.query(
+            `insert into plan_entitlements (plan_id, entitlement_id, value)
+             select $1, ae.id, 'true'::jsonb
+             from modules m
+             join applications application
+               on application.id = m.application_id and application.code = 'ximo_pos'
+             join application_entitlements ae
+               on ae.application_id = application.id
+              and ae.code = 'module.' || m.code
+             where m.code = any($2::text[])
+             on conflict (plan_id, entitlement_id) do update set
+               value = excluded.value,
+               updated_at = now()`,
+            [plan.rows[0].id, uniqueCodes],
+          );
+        } else {
+          await transaction.query('delete from plan_modules where plan_id = $1', [plan.rows[0].id]);
+          await transaction.query(
+            `delete from plan_entitlements pe
+             using application_entitlements ae
+             where pe.plan_id = $1
+               and pe.entitlement_id = ae.id
+               and ae.code like 'module.%'`,
+            [plan.rows[0].id],
+          );
+        }
+
+        const modules = await transaction.query<{ code: string; name: string }>(
+          `select m.code, m.name
+           from plan_modules pm
+           join modules m on m.id = pm.module_id
+           where pm.plan_id = $1
+           order by m.name`,
+          [plan.rows[0].id],
+        );
+
+        await transaction.query(
+          `insert into platform_audit_logs (
+            api_client_id, action, before_data, after_data, metadata
+           ) values ($1, 'plan.modules.updated', $2::jsonb, $3::jsonb, $4::jsonb)`,
+          [
+            client.id,
+            JSON.stringify({ planCode: plan.rows[0].code }),
+            JSON.stringify({
+              planCode: plan.rows[0].code,
+              moduleCodes: modules.rows.map((row) => row.code),
+            }),
+            JSON.stringify(auditMetadata(request, response)),
+          ],
+        );
+
+        return {
+          code: plan.rows[0].code,
+          name: plan.rows[0].name,
+          modules: modules.rows,
+        };
+      });
+
+      sendData(response, updated);
+    },
+  );
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
 
   router.get('/modules', requirePlatformScope('platform:read'), async (_request, response) => {
     await database.query(

@@ -35,6 +35,7 @@ import { salesRouter } from './modules/sales/routes.js';
 import { settingsRouter } from './modules/settings/routes.js';
 import { stockTransfersRouter } from './modules/stock-transfers/routes.js';
 import { usersRouter } from './modules/users/routes.js';
+import { forbidden } from './shared/errors.js';
 import { sendData } from './shared/http.js';
 
 export interface AppDependencies {
@@ -109,9 +110,46 @@ export function createApp(dependencies: AppDependencies) {
   const protectedApi = express.Router();
   protectedApi.use(authenticate(dependencies.database, dependencies.verifyToken));
   protectedApi.get('/auth/current', (request, response) => sendData(response, request.authUser));
+  protectedApi.post(
+    '/auth/change-password',
+    validateBody(
+      z.object({
+        password: z
+          .string()
+          .min(10)
+          .max(200)
+          .regex(/[a-z]/)
+          .regex(/[A-Z]/)
+          .regex(/[0-9]/),
+      }),
+    ),
+    async (request, response) => {
+      if (!dependencies.authActions.changePassword) {
+        throw new Error('Password changes are not configured');
+      }
+      await dependencies.authActions.changePassword(request.authUser!.id, request.body.password);
+      await dependencies.database.query(
+        'update profiles set must_change_password=false,updated_at=now() where id=$1',
+        [request.authUser!.id],
+      );
+      sendData(response, { changed: true });
+    },
+  );
   protectedApi.post('/auth/logout', (_request, response) =>
     sendData(response, { signedOut: true }),
   );
+  protectedApi.use((request, _response, next) => {
+    if (request.authUser?.mustChangePassword) {
+      next(
+        forbidden(
+          'PASSWORD_CHANGE_REQUIRED',
+          'Create your password before using the POS',
+        ),
+      );
+      return;
+    }
+    next();
+  });
   protectedApi.use(
     '/organizations',
     organizationsRouter(dependencies.database, dependencies.assetStorage),

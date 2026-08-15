@@ -59,10 +59,15 @@ export interface CurrentUser {
   permissions: Permission[];
   modules: ModuleCode[];
   branches: Array<{ id: string; name: string; code: string }>;
+<<<<<<< HEAD
   /** Platform membership. Optional until migration 0032 is deployed everywhere. */
   membership?: OrganizationMembershipSummary;
   /** Access to Ximo POS and any future Ximo applications for this organization. */
   applications?: ApplicationAccess[];
+=======
+  /** True while an owner is still using an administrator-generated password. */
+  mustChangePassword?: boolean;
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
 }
 
 export interface Paginated<T> {

@@ -4,11 +4,16 @@ import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { BrandLogo } from '@/components/brand';
 import { Button, Field, LoadingState, Screen } from '@/components/ui';
+import { ApiError, api } from '@/lib/api';
 import {
   establishInvitationSession,
-  finishInvitationSetup,
   InvitationFlowError,
   INVALID_INVITATION_MESSAGE,
+<<<<<<< HEAD
+=======
+  PASSWORD_SAVED_SIGN_IN_MESSAGE,
+  SETUP_SESSION_EXPIRED_MESSAGE,
+>>>>>>> d716e8a721fcc0fc5a72dce0bccdf9d92ead64ce
   setInvitationSetupActive,
   parseInvitationCallback,
   runInvitationSubmission,
@@ -21,8 +26,11 @@ import { useSession } from '@/providers/session';
 type PageState =
   | { kind: 'loading' }
   | { kind: 'form' }
-  | { kind: 'success' }
+  | { kind: 'success'; message?: string; goToLogin?: boolean }
   | { kind: 'error'; message: string };
+
+// Survive React remounts so the one-time invite token is not verified twice.
+let invitationCallbackHandled = false;
 
 function browserUrl(): string | null {
   if (Platform.OS !== 'web') return null;
@@ -38,7 +46,6 @@ function clearBrowserCallback() {
 export default function AcceptInvitationScreen() {
   const incomingUrl = Linking.useURL();
   const { refreshUser, signOut } = useSession();
-  const handledCallback = useRef(false);
   const submissionGuard = useRef(false);
   const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [page, setPage] = useState<PageState>({ kind: 'loading' });
@@ -49,8 +56,8 @@ export default function AcceptInvitationScreen() {
   const [submitError, setSubmitError] = useState('');
 
   useEffect(() => {
-    if (handledCallback.current) return;
-    handledCallback.current = true;
+    if (invitationCallbackHandled) return;
+    invitationCallbackHandled = true;
 
     void (async () => {
       const callbackUrl = incomingUrl ?? browserUrl() ?? (await Linking.getInitialURL());
@@ -60,8 +67,10 @@ export default function AcceptInvitationScreen() {
       }
       try {
         const callback = parseInvitationCallback(callbackUrl);
-        clearBrowserCallback();
         await establishInvitationSession(supabase.auth, callback);
+        // Clear the one-time token from the address bar only after the session
+        // is established so remounts can still resume from a stored session.
+        clearBrowserCallback();
         setPage({ kind: 'form' });
       } catch (error) {
         setInvitationSetupActive(false);
@@ -89,15 +98,68 @@ export default function AcceptInvitationScreen() {
     const result = await runInvitationSubmission(submissionGuard, async () => {
       setSubmitting(true);
       try {
-        await finishInvitationSetup(supabase.auth, password, refreshUser, () => {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          setSubmitError(SETUP_SESSION_EXPIRED_MESSAGE);
+          return;
+        }
+
+        // 1) Always save the Auth password first (does not depend on POS API).
+        const updated = await supabase.auth.updateUser({ password });
+        if (updated.error) {
+          setSubmitError(
+            /session|expired|invalid|not authenticated/i.test(updated.error.message)
+              ? SETUP_SESSION_EXPIRED_MESSAGE
+              : updated.error.message,
+          );
+          return;
+        }
+
+        // 2) Best-effort: clear must_change_password + load POS profile.
+        try {
+          await api<{ changed: true }>('/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({ password }),
+            accessToken: session.access_token,
+          });
+          const user = await refreshUser(session.access_token);
+          if (user.role !== 'owner') {
+            throw new Error('The invited account is not an organization owner');
+          }
+          setInvitationSetupActive(false);
           setPage({ kind: 'success' });
           redirectTimer.current = setTimeout(() => router.replace('/branch-select'), 900);
-        });
+          return;
+        } catch (error) {
+          // Password is already saved in Auth. If the API is misconfigured (401),
+          // send the owner to sign in instead of blocking setup.
+          setInvitationSetupActive(false);
+          await supabase.auth.signOut();
+          const apiMessage =
+            error instanceof ApiError
+              ? error.message
+              : error instanceof Error
+                ? error.message
+                : '';
+          setPage({
+            kind: 'success',
+            goToLogin: true,
+            message:
+              apiMessage && /profile|unauthorized|401/i.test(apiMessage)
+                ? `${PASSWORD_SAVED_SIGN_IN_MESSAGE} (${apiMessage})`
+                : PASSWORD_SAVED_SIGN_IN_MESSAGE,
+          });
+          redirectTimer.current = setTimeout(() => router.replace('/(auth)/login'), 1200);
+        }
       } catch (error) {
         setSubmitError(
           error instanceof InvitationFlowError
             ? error.message
-            : 'Could not save your password. Check your connection and try again.',
+            : error instanceof ApiError
+              ? error.message
+              : 'Could not save your password. Check your connection and try again.',
         );
       } finally {
         setSubmitting(false);
@@ -147,12 +209,17 @@ export default function AcceptInvitationScreen() {
                 <View accessibilityRole="alert">
                   <Text className="text-2xl font-black text-brand-900">Password created</Text>
                   <Text className="mt-3 leading-6 text-slate-600">
-                    Your owner account is ready. Taking you to branch selection…
+                    {page.message ??
+                      (page.goToLogin
+                        ? PASSWORD_SAVED_SIGN_IN_MESSAGE
+                        : 'Your owner account is ready. Taking you to branch selection…')}
                   </Text>
                   <View className="mt-5">
                     <Button
-                      title="Continue to POS"
-                      onPress={() => router.replace('/branch-select')}
+                      title={page.goToLogin ? 'Continue to sign in' : 'Continue to POS'}
+                      onPress={() =>
+                        router.replace(page.goToLogin ? '/(auth)/login' : '/branch-select')
+                      }
                     />
                   </View>
                 </View>
