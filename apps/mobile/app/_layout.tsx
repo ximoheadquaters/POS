@@ -26,7 +26,10 @@ export default function RootLayout() {
   }, [hydrateBranch]);
   useEffect(() => {
     if (Platform.OS !== 'web' || !('serviceWorker' in navigator)) return;
-    if (__DEV__) {
+    const onInviteRoute =
+      typeof globalThis.location !== 'undefined' &&
+      globalThis.location.pathname.includes('/accept-invitation');
+    if (__DEV__ || onInviteRoute) {
       void navigator.serviceWorker
         .getRegistrations()
         .then((registrations) =>

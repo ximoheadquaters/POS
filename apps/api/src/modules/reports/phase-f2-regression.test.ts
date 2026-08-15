@@ -485,8 +485,8 @@ describe('Phase F2 Regression — Financial Formulas', () => {
 
   it('18. End date is exclusive (to + 1 day in ISO bounds)', () => {
     const scope = resolveReportScope(mockOwner, { from: '2026-08-01', to: '2026-08-06' });
-    expect(scope.fromIso).toBe('2026-08-01T00:00:00.000Z');
-    expect(scope.toIso).toBe('2026-08-07T00:00:00.000Z');
+    expect(scope.fromIso).toBe('2026-07-31T16:00:00.000Z');
+    expect(scope.toIso).toBe('2026-08-06T16:00:00.000Z');
   });
 
   it('19. Organization timezone is passed into period grouping queries', async () => {

@@ -12,7 +12,11 @@ const dateFilter = z.object({
   to: z.iso.datetime({ offset: true }),
 });
 
-const workspaceReportFilter = dateFilter.extend({
+const reportDate = z.union([z.iso.date(), z.iso.datetime({ offset: true })]);
+
+const workspaceReportFilter = z.object({
+  from: reportDate,
+  to: reportDate,
   branchId: uuidSchema.optional(),
 });
 
@@ -183,19 +187,21 @@ export function reportsRouter(database: Queryable): Router {
   });
 
   router.get('/workspace', validateQuery(workspaceReportFilter), async (request, response) => {
-    const { from, to, branchId } = request.query as z.infer<typeof workspaceReportFilter>;
-    const organizationId = request.authUser!.organization.id;
-    const allBranches =
-      request.authUser!.permissions.includes('reports:view_all_branches') ||
-      request.authUser!.permissions.includes('sales:read_all');
-    const allowedBranchIds = request.authUser!.branches.map((branch) => branch.id);
-    if (
-      branchId &&
-      !allBranches &&
-      !request.authUser!.branches.some((branch) => branch.id === branchId)
-    ) {
-      throw notFound('Branch');
-    }
+    const requested = request.query as z.infer<typeof workspaceReportFilter>;
+    const scopeInput: { from: string; to: string; branchId?: string } = {
+      from: requested.from,
+      to: requested.to,
+    };
+    if (requested.branchId) scopeInput.branchId = requested.branchId;
+    const scope = resolveReportScope(request.authUser!, scopeInput);
+    const from = scope.fromIso;
+    const to = scope.toIso;
+    const branchId = scope.branchId ?? undefined;
+    const organizationId = scope.organizationId;
+    const allBranches = scope.hasAllBranchesAccess;
+    const allowedBranchIds = scope.allowedBranchIds;
+    const ownRecordsOnly = request.authUser!.role === 'cashier';
+    const currentUserId = request.authUser!.id;
     const values = [
       organizationId,
       from,
@@ -203,10 +209,25 @@ export function reportsRouter(database: Queryable): Router {
       branchId ?? null,
       allBranches,
       allowedBranchIds,
+      ownRecordsOnly,
+      currentUserId,
     ] as const;
-    const branchScope = (alias: string) =>
-      `($4::uuid is null or ${alias}.branch_id=$4)
-       and ($5::boolean or ${alias}.branch_id=any($6::uuid[]))`;
+    const branchScope = (alias: string) => {
+      const ownRecordPredicate =
+        alias === 's'
+          ? `${alias}.cashier_id=$8::uuid`
+          : alias === 'r'
+            ? `exists (
+                select 1 from sales owned_sale
+                where owned_sale.id=${alias}.sale_id and owned_sale.cashier_id=$8::uuid
+              )`
+            : alias === 'rs'
+              ? `${alias}.cashier_id=$8::uuid`
+              : '$8::uuid is not null';
+      return `($4::uuid is null or ${alias}.branch_id=$4)
+       and ($5::boolean or ${alias}.branch_id=any($6::uuid[]))
+       and (not $7::boolean or ${ownRecordPredicate})`;
+    };
     const inventoryValues = [
       organizationId,
       branchId ?? null,
@@ -375,6 +396,7 @@ export function reportsRouter(database: Queryable): Router {
          left join sales s on s.branch_id=b.id and s.completed_at >= $2
            and s.completed_at < $3
            and s.status in ('completed','partially_refunded','refunded')
+           and (not $7::boolean or s.cashier_id=$8::uuid)
          where b.organization_id=$1
            and ($4::uuid is null or b.id=$4)
            and ($5::boolean or b.id=any($6::uuid[]))

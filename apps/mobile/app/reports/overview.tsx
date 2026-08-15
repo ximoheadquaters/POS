@@ -1,5 +1,5 @@
-import { ReportsWorkspaceScreen } from '@/screens/reports-workspace';
+import { ReportsTableWorkspaceScreen } from '@/screens/reports-table-workspace';
 
 export default function ReportsOverviewRoute() {
-  return <ReportsWorkspaceScreen initialSection="overview" />;
+  return <ReportsTableWorkspaceScreen initialSection="overview" />;
 }

@@ -5939,7 +5939,13 @@ function ReportStandardsPanel({
   );
 }
 
-function ReportsContent({ initialSection = 'sales' }: { initialSection?: ReportSection }) {
+function ReportsContent({
+  initialSection = 'sales',
+  workspaceTitle = 'Reports',
+}: {
+  initialSection?: ReportSection;
+  workspaceTitle?: string;
+}) {
   const { width } = useWindowDimensions();
   const phone = width < 640;
   // Account for desktop sidebar so the report stays centered in the content pane.
@@ -6200,7 +6206,7 @@ function ReportsContent({ initialSection = 'sales' }: { initialSection?: ReportS
   return (
     <Screen>
       <Header
-        title={activeMetricDrilldown ? activeMetricDrilldown.title : 'Reports'}
+        title={activeMetricDrilldown ? activeMetricDrilldown.title : workspaceTitle}
         subtitle={
           activeMetricDrilldown
             ? `${rangeLabel} · ${reportBranchName}`
@@ -6235,7 +6241,7 @@ function ReportsContent({ initialSection = 'sales' }: { initialSection?: ReportS
           {!activeMetricDrilldown ? (
             <View className="flex-row flex-wrap items-end justify-between gap-3">
               <View className="min-w-[220px] flex-1">
-                <Text className="text-2xl font-semibold text-slate-900">Reports</Text>
+                <Text className="text-2xl font-semibold text-slate-900">{workspaceTitle}</Text>
                 <Text className="mt-1 text-sm text-slate-500">
                   Store performance for {rangeLabel}
                   {reportBranchName ? ` · ${reportBranchName}` : ''}.
@@ -6739,12 +6745,14 @@ function ReportsContent({ initialSection = 'sales' }: { initialSection?: ReportS
 
 export function ReportsWorkspaceScreen({
   initialSection = 'sales',
+  workspaceTitle = 'Reports',
 }: {
   initialSection?: ReportSection;
+  workspaceTitle?: string;
 }) {
   return (
     <AppSidebarProvider>
-      <ReportsContent initialSection={initialSection} />
+      <ReportsContent initialSection={initialSection} workspaceTitle={workspaceTitle} />
     </AppSidebarProvider>
   );
 }

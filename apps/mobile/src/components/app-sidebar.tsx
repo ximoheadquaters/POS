@@ -108,10 +108,25 @@ const sidebarSections: SidebarSection[] = [
         id: 'reports',
         title: 'Income & Reports',
         icon: 'trending-up',
+        module: 'reports',
         children: [
           { title: 'Overview', href: '/reports/overview', module: 'reports' },
+          { title: 'Sales', href: '/reports/sales', module: 'reports' },
+          { title: 'Products', href: '/reports/products', module: 'reports' },
           { title: 'Inventory', href: '/reports/inventory' as Href, module: 'reports' },
+          { title: 'Purchasing', href: '/reports/purchasing' as Href, module: 'reports' },
+          { title: 'Profit', href: '/reports/profit' as Href, module: 'reports', permission: 'reports:view_profit' },
+          { title: 'Cash & shifts', href: '/reports/cash' as Href, module: 'reports' },
+          { title: 'Audit', href: '/reports/audit' as Href, module: 'audit', permission: 'audit:read' },
+          { title: 'Repacking', href: '/reports/repacking' as Href, module: 'reports' },
         ],
+      },
+      {
+        id: 'analytics',
+        title: 'Analytics',
+        icon: 'bar-chart-2',
+        href: '/analytics' as Href,
+        module: 'reports',
       },
       {
         id: 'settings',
@@ -369,7 +384,7 @@ function SidebarMenu({ close }: { close(): void }) {
                           {isGroupDisabled ? (
                             <View className="flex-row items-center gap-1 rounded-full bg-amber-100/80 px-2 py-0.5">
                               <Feather name="lock" size={10} color="#B45309" />
-                              <Text className="text-[10px] font-bold text-amber-800">Pro</Text>
+                              <Text className="text-[10px] font-bold text-amber-800">Locked</Text>
                             </View>
                           ) : null}
                         </Pressable>

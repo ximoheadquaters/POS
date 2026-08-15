@@ -10,6 +10,10 @@ import {
 } from 'pdf-lib/cjs/index.js';
 import * as XLSX from 'xlsx-js-style';
 import type { ReportExportMetadata, ReportsWorkspace } from './report-types';
+import {
+  buildReportDocument,
+  type ReportSectionId,
+} from './report-table-model';
 
 const BRAND = rgb(0.102, 0.349, 0.231);
 const TEXT = rgb(0.059, 0.09, 0.165);
@@ -41,6 +45,20 @@ function reportFileStem(metadata: ReportExportMetadata): string {
     .replace(/^-|-$/g, '')
     .slice(0, 30);
   return `ximo-reports-${branch || 'all-branches'}-${start}-to-${end}`;
+}
+
+function asReportSection(value: string | undefined): ReportSectionId | null {
+  return value === 'overview' ||
+    value === 'sales' ||
+    value === 'products' ||
+    value === 'inventory' ||
+    value === 'purchasing' ||
+    value === 'profit' ||
+    value === 'cash' ||
+    value === 'audit' ||
+    value === 'repacking'
+    ? value
+    : null;
 }
 
 function addSheet(
@@ -178,6 +196,32 @@ export function buildReportsExcel(
     Author: 'Ximo POS',
     CreatedDate: metadata.generatedAt ?? new Date(),
   };
+
+  const requestedSection = asReportSection(activeSection);
+  if (requestedSection) {
+    const document = buildReportDocument(report, requestedSection);
+    const rows: Array<Array<string | number>> = [
+      [`${metadata.organizationName} - ${document.title}`],
+      ['Branch', metadata.branchName],
+      ['Date range', metadata.rangeLabel],
+      ['Generated', (metadata.generatedAt ?? new Date()).toISOString()],
+      [],
+    ];
+    for (const table of document.tables) {
+      rows.push([table.title], table.columns, ...table.rows.map((row) => row.map((cell) => cell == null ? '' : String(cell))), []);
+    }
+    addSheet(workbook, document.title.slice(0, 31), rows, document.tables[0]?.columns.map(() => 24) ?? [28, 28]);
+    const output = XLSX.write(workbook, {
+      bookType: 'xlsx',
+      type: 'array',
+      compression: true,
+      cellDates: true,
+    }) as ArrayBuffer;
+    return {
+      bytes: new Uint8Array(output),
+      fileName: `${reportFileStem(metadata)}-${requestedSection}.xlsx`,
+    };
+  }
 
   addSheet(
     workbook,
@@ -433,88 +477,30 @@ export function buildReportsCsv(
   metadata: ReportExportMetadata,
   activeSection = 'overview',
 ): { bytes: Uint8Array; fileName: string } {
-  const common: Array<Array<string | number>> = [
+  const section = asReportSection(activeSection) ?? 'overview';
+  const document = buildReportDocument(report, section);
+  const rows: Array<Array<string | number>> = [
     ['Organization', metadata.organizationName],
     ['Branch', metadata.branchName],
     ['Date range', metadata.rangeLabel],
     ['Generated', (metadata.generatedAt ?? new Date()).toISOString()],
-    ['Report', activeSection],
+    ['Report', document.title],
     [],
   ];
-  let rows: Array<Array<string | number>>;
-  if (activeSection === 'inventory') {
-    rows = [
-      ['Metric', 'Value'],
-      ['Inventory Value (Cost)', amount(report.inventory.inventoryValue)],
-      ['Inventory Value (Retail)', amount(report.inventory.retailValue)],
-      ['Inventory Quantity', report.inventory.unitsOnHand],
-      ['Stock Turnover', amount(report.inventory.stockTurnover)],
-      ['Dead Stock', report.inventory.deadStockCount ?? 0],
+  for (const table of document.tables) {
+    rows.push(
+      [table.title],
+      table.columns,
+      ...table.rows.map((row) => row.map((cell) => cell == null ? '' : String(cell))),
       [],
-      ['Product', 'SKU', 'Branch', 'Unit', 'On hand', 'Low stock level', 'Cost value'],
-      ...report.inventory.lowStock.map((item) => [item.name, item.sku, item.branchName, item.unit, item.quantity, item.lowStockLevel, amount(item.inventoryValue)]),
-    ];
-  } else if (activeSection === 'purchasing') {
-    rows = [
-      ['Metric', 'Value'],
-      ['Purchase Value', amount(report.purchasing.orderedValue)],
-      ['Receiving Accuracy (%)', amount(report.purchasing.receivingAccuracy)],
-      ['Supplier Fulfillment Rate (%)', amount(report.purchasing.supplierFulfillmentRate)],
-      ['Outstanding Payables', amount(report.purchasing.outstandingPayables)],
-      [],
-      ['Supplier', 'Orders', 'Value'],
-      ...report.purchasing.topSuppliers.map((supplier) => [supplier.name, supplier.orders, amount(supplier.value)]),
-    ];
-  } else if (activeSection === 'cash') {
-    rows = [
-      ['Metric', 'Value'],
-      ['Cash Drawer Balance', amount(report.cash.drawerBalance)],
-      ['Expected Cash', amount(report.cash.expectedCash)],
-      ['Counted Cash', amount(report.cash.countedCash)],
-      ['Cash Variance', amount(report.cash.variance)],
-      [],
-      ['Cashier', 'Branch', 'Opened', 'Closed', 'Status', 'Expected', 'Counted', 'Variance'],
-      ...(report.cash.shiftLogs ?? []).map((shift) => [shift.cashierName ?? '', shift.branchName ?? '', shift.openedAt ?? '', shift.closedAt ?? '', shift.status, amount(shift.expectedCash), amount(shift.countedCash), amount(shift.variance)]),
-    ];
-  } else if (activeSection === 'audit') {
-    rows = [
-      ['Date', 'Type', 'Record', 'Details', 'Amount', 'Employee', 'Branch'],
-      ...(report.audit?.events ?? []).map((event) => [event.createdAt, event.type, event.title, event.detail, amount(event.amount), event.actorName ?? '', event.branchName]),
-    ];
-  } else if (activeSection === 'repacking') {
-    rows = [
-      ['Batch', 'Product', 'Produced', 'Input', 'Unit Cost', 'Total Cost', 'Yield (%)', 'Date'],
-      ...(report.repacking?.batchRows ?? []).map((batch) => [batch.batchNumber, batch.productName, batch.quantityProduced, batch.inputQuantity, amount(batch.unitCost), amount(batch.totalCost), amount(batch.yieldPercent), batch.createdAt]),
-    ];
-  } else if (activeSection === 'products') {
-    rows = [
-      ['Product', 'SKU', 'Category', 'Unit', 'Quantity', 'Gross Sales', 'COGS', 'Gross Profit'],
-      ...report.sales.topProducts.map((item) => [item.name, item.sku, item.category ?? 'Uncategorized', item.unit, item.quantity, amount(item.sales), amount(item.cost), amount(item.profit)]),
-    ];
-  } else {
-    rows = [
-      ['Metric', 'Value'],
-      ['Gross Sales', amount(report.kpis.grossSales)],
-      ['Total Discounts', amount(report.kpis.discounts)],
-      ['Refund Amount', amount(report.kpis.customerRefunds)],
-      ['Net Sales', amount(report.kpis.netSales)],
-      ['Completed Transactions', report.kpis.transactions],
-      ['Average Transaction Value', amount(report.kpis.averageTransaction)],
-      ['Average Items per Transaction', amount(report.kpis.averageItemsPerTransaction)],
-      ['COGS', amount(report.kpis.netCost)],
-      ['Gross Profit', amount(report.kpis.grossProfit)],
-      ['Profit Margin (%)', amount(report.kpis.grossMarginPercent)],
-      [],
-      ['Date', 'Sales', 'Transactions'],
-      ...report.sales.trend.map((item) => [item.date, amount(item.sales), item.transactions]),
-    ];
+    );
   }
-  const csv = [...common, ...rows]
+  const csv = rows
     .map((row) => row.map((value) => csvCell(value)).join(','))
     .join('\r\n');
   return {
     bytes: new TextEncoder().encode(`\uFEFF${csv}`),
-    fileName: `${reportFileStem(metadata)}-${activeSection}.csv`,
+    fileName: `${reportFileStem(metadata)}-${section}.csv`,
   };
 }
 
@@ -662,6 +648,7 @@ function kpiTable(context: PdfContext, rows: Array<[string, string]>): void {
 export async function buildReportsPdf(
   report: ReportsWorkspace,
   metadata: ReportExportMetadata,
+  activeSection?: string,
 ): Promise<{ bytes: Uint8Array; fileName: string }> {
   const document = await PDFDocument.create();
   const regular = await document.embedFont(StandardFonts.Helvetica);
@@ -680,6 +667,45 @@ export async function buildReportsPdf(
     metadata,
   };
   drawPageHeader(context);
+
+  const requestedSection = asReportSection(activeSection);
+  if (requestedSection) {
+    const reportDocument = buildReportDocument(report, requestedSection);
+    sectionTitle(context, reportDocument.title, reportDocument.purpose);
+    for (const table of reportDocument.tables) {
+      sectionTitle(context, table.title, table.description);
+      const columnWidth = 515 / Math.max(table.columns.length, 1);
+      pdfTable(
+        context,
+        table.columns,
+        table.rows.map((row) =>
+          row.map((cell) =>
+            cell == null
+              ? '-'
+              : String(cell)
+                  .replaceAll('₱', 'PHP ')
+                  .replaceAll('—', '-')
+                  .replaceAll('−', '-'),
+          ),
+        ),
+        table.columns.map(() => columnWidth),
+      );
+    }
+    const generatedAt = metadata.generatedAt ?? new Date();
+    for (const page of document.getPages()) {
+      page.drawText(`Generated by Ximo POS on ${generatedAt.toLocaleString('en-PH')}`, {
+        x: 40,
+        y: 25,
+        size: 7,
+        font: regular,
+        color: MUTED,
+      });
+    }
+    return {
+      bytes: await document.save(),
+      fileName: `${reportFileStem(metadata)}-${requestedSection}.pdf`,
+    };
+  }
 
   sectionTitle(context, 'Business report', 'Consolidated KPIs and detailed operational reports');
   kpiTable(context, [

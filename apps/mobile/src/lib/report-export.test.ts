@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib/cjs/index.js';
 import * as XLSX from 'xlsx-js-style';
 import { describe, expect, it } from 'vitest';
 import { buildReportsCsv, buildReportsExcel, buildReportsPdf } from './report-export';
+import { buildReportDocument } from './report-table-model';
 import type { ReportExportMetadata, ReportsWorkspace } from './report-types';
 
 const metadata: ReportExportMetadata = {
@@ -139,8 +140,23 @@ describe('report exports', () => {
 
     expect(output.fileName).toBe('ximo-reports-main-branch-2026-07-01-to-2026-07-31-sales.csv');
     expect(csv).toContain('Organization,Jethro Store');
-    expect(csv).toContain('Gross Sales,12500');
-    expect(csv).toContain('Date,Sales,Transactions');
+    expect(csv).toContain('Gross Sales');
+    expect(csv).toContain('12,500.00');
+    expect(csv).toContain('Transaction history');
+    expect(csv).not.toContain('Inventory by category');
+  });
+
+  it('creates a single-report Excel workbook when a report is selected', () => {
+    const output = buildReportsExcel(report, metadata, 'inventory');
+    const workbook = XLSX.read(output.bytes, { type: 'array' });
+    expect(workbook.SheetNames).toEqual(['Inventory Report']);
+    expect(output.fileName).toContain('-inventory.xlsx');
+  });
+
+  it('builds table-only report documents without chart or visual contracts', () => {
+    const document = buildReportDocument(report, 'sales');
+    expect(document.tables.map((table) => table.id)).toEqual(['metrics', 'transactions', 'payments']);
+    expect(document.tables.every((table) => Array.isArray(table.columns) && Array.isArray(table.rows))).toBe(true);
   });
 
   it('creates a readable, paginated PDF report', async () => {
@@ -156,5 +172,12 @@ describe('report exports', () => {
       await mkdir(process.env.REPORT_EXPORT_FIXTURE_DIR, { recursive: true });
       await writeFile(`${process.env.REPORT_EXPORT_FIXTURE_DIR}/${output.fileName}`, output.bytes);
     }
+  });
+
+  it('creates a section-specific PDF document', async () => {
+    const output = await buildReportsPdf(report, metadata, 'cash');
+    expect(output.fileName).toContain('-cash.pdf');
+    const document = await PDFDocument.load(output.bytes);
+    expect(document.getPageCount()).toBeGreaterThan(0);
   });
 });

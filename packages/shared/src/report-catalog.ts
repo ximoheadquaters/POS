@@ -29,6 +29,7 @@ export interface ReportDefinition {
   availableFilters: string[];
   availableGroupings: string[];
   availableSorting: string[];
+  /** Operational Reports are table-only. Graphs and visual exploration belong to Analytics. */
   supportedCharts: Array<'kpi' | 'table' | 'line' | 'bar' | 'horizontal_bar' | 'donut' | 'pie' | 'timeline' | 'radial'>;
   supportedExports: Array<'pdf' | 'xlsx' | 'csv'>;
   drillDownPath: string[];
@@ -57,7 +58,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['dateRange', 'branchId', 'cashierId', 'paymentMethod'],
     availableGroupings: ['day', 'branch', 'category', 'paymentMethod'],
     availableSorting: ['highestRevenue', 'lowestRevenue', 'quantitySold', 'alphabetical'],
-    supportedCharts: ['kpi', 'line', 'donut', 'bar', 'table'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Dashboard Overview', 'Report Category', 'Source Records'],
     refreshStrategy: 'real_time',
@@ -83,7 +84,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['dateRange', 'branchId'],
     availableGroupings: ['product', 'category', 'branch'],
     availableSorting: ['highestRevenue', 'lowestRevenue', 'quantitySold'],
-    supportedCharts: ['kpi', 'line', 'bar', 'table'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Sales Summary', 'Transaction History', 'Transaction Details'],
     refreshStrategy: 'real_time',
@@ -109,7 +110,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['dateRange', 'branchId', 'categoryId'],
     availableGroupings: ['product', 'category', 'sellingUnit'],
     availableSorting: ['highestRevenue', 'lowestRevenue', 'quantitySold', 'alphabetical'],
-    supportedCharts: ['kpi', 'bar', 'horizontal_bar', 'donut', 'table'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Product Performance', 'Product', 'Transaction Details'],
     refreshStrategy: 'five_minutes',
@@ -135,7 +136,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['branchId', 'categoryId'],
     availableGroupings: ['category', 'branch', 'status'],
     availableSorting: ['highestValue', 'lowestValue', 'quantity', 'alphabetical'],
-    supportedCharts: ['kpi', 'radial', 'donut', 'bar', 'table', 'timeline'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Inventory Summary', 'Product Stock', 'Inventory Movement Ledger'],
     refreshStrategy: 'real_time',
@@ -161,7 +162,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['dateRange', 'branchId', 'supplierId'],
     availableGroupings: ['supplier', 'status'],
     availableSorting: ['highestValue', 'lowestValue', 'alphabetical', 'status'],
-    supportedCharts: ['kpi', 'bar', 'radial', 'table', 'timeline'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Purchasing Summary', 'Purchase Order', 'Receiving / Return / Payment Records'],
     refreshStrategy: 'five_minutes',
@@ -187,7 +188,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['dateRange', 'branchId'],
     availableGroupings: ['day', 'branch', 'product', 'category'],
     availableSorting: ['highestRevenue', 'highestProfit', 'lowestMargin'],
-    supportedCharts: ['kpi', 'line', 'bar', 'table'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Profit Analysis', 'Date / Product / Category', 'Source Transactions'],
     refreshStrategy: 'on_demand',
@@ -213,7 +214,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['dateRange', 'branchId'],
     availableGroupings: ['recipe', 'ingredient'],
     availableSorting: ['highestCost', 'lowestYield', 'latest'],
-    supportedCharts: ['kpi', 'bar', 'radial', 'table', 'timeline'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Repacking Performance', 'Production Batch', 'Consumed Ingredients'],
     refreshStrategy: 'real_time',
@@ -239,7 +240,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['dateRange', 'branchId', 'cashierId', 'status'],
     availableGroupings: ['cashier', 'register', 'day', 'status'],
     availableSorting: ['latest', 'largestVariance', 'cashier'],
-    supportedCharts: ['kpi', 'bar', 'table', 'timeline'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Cash & Shifts', 'Shift', 'Cash Movements / Payments'],
     refreshStrategy: 'real_time',
@@ -265,7 +266,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     availableFilters: ['dateRange', 'branchId', 'employeeId', 'eventType'],
     availableGroupings: ['eventType', 'employee', 'day', 'branch'],
     availableSorting: ['latest', 'oldest', 'highestValue'],
-    supportedCharts: ['kpi', 'bar', 'table', 'timeline'],
+    supportedCharts: ['table'],
     supportedExports: ['pdf', 'xlsx', 'csv'],
     drillDownPath: ['Audit Activity', 'Event Type', 'Source Record'],
     refreshStrategy: 'real_time',

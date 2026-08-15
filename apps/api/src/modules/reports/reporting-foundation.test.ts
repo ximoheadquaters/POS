@@ -193,8 +193,17 @@ describe('Phase F1 — Reporting Foundation & Sales Summary Proof Tests', () => 
 
   it('16 & 17. Date boundaries resolve to inclusive start and exclusive end in org timezone', () => {
     const scope = resolveReportScope(mockOwner, { from: '2026-08-01', to: '2026-08-06' });
-    expect(scope.fromIso).toBe('2026-08-01T00:00:00.000Z');
-    expect(scope.toIso).toBe('2026-08-07T00:00:00.000Z');
+    expect(scope.fromIso).toBe('2026-07-31T16:00:00.000Z');
+    expect(scope.toIso).toBe('2026-08-06T16:00:00.000Z');
+  });
+
+  it('17b. Exact ISO report boundaries remain valid and are not parsed as date-only values', () => {
+    const scope = resolveReportScope(mockOwner, {
+      from: '2026-07-31T16:00:00.000Z',
+      to: '2026-08-06T16:00:00.000Z',
+    });
+    expect(scope.fromIso).toBe('2026-07-31T16:00:00.000Z');
+    expect(scope.toIso).toBe('2026-08-06T16:00:00.000Z');
   });
 
   it('18. Unsupported filters are rejected by Zod schema', () => {

@@ -24,6 +24,10 @@ const validProduct = {
 };
 
 describe('createProductSchema', () => {
+  it('treats a null optional barcode as no barcode on create', () => {
+    expect(createProductSchema.parse({ ...validProduct, barcode: null }).barcode).toBeUndefined();
+  });
+
   it('accepts a scanned product with opening stock', () => {
     expect(
       createProductSchema.parse({

@@ -19,6 +19,23 @@ import { validateBody, validateQuery } from '../../middleware/validation.js';
 import { badRequest, conflict, forbidden, notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
 
+const CORE_PRODUCT_UNITS: Record<
+  string,
+  { name: string; kind: 'discrete' | 'decimal'; defaultStep: number }
+> = {
+  piece: { name: 'Piece', kind: 'discrete', defaultStep: 1 },
+  serving: { name: 'Serving', kind: 'discrete', defaultStep: 1 },
+  box: { name: 'Box', kind: 'discrete', defaultStep: 1 },
+  pack: { name: 'Pack', kind: 'discrete', defaultStep: 1 },
+  sack: { name: 'Sack', kind: 'discrete', defaultStep: 1 },
+  bottle: { name: 'Bottle', kind: 'discrete', defaultStep: 1 },
+  can: { name: 'Can', kind: 'discrete', defaultStep: 1 },
+  ml: { name: 'Milliliter', kind: 'decimal', defaultStep: 100 },
+  l: { name: 'Liter', kind: 'decimal', defaultStep: 0.1 },
+  g: { name: 'Gram', kind: 'decimal', defaultStep: 100 },
+  kg: { name: 'Kilogram', kind: 'decimal', defaultStep: 0.1 },
+};
+
 async function validateProductMasters(
   database: Queryable,
   organizationId: string,
@@ -42,9 +59,24 @@ async function validateProductMasters(
     [organizationId, input.unit, input.categoryId ?? null, input.brandId ?? null, branchId],
   );
   const state = result.rows[0];
-  if (!state?.unitValid) throw badRequest('INVALID_PRODUCT_UNIT', 'Select an active product unit');
-  if (!state.categoryValid) throw badRequest('INVALID_CATEGORY', 'Select an active category');
-  if (!state.brandValid) throw badRequest('INVALID_BRAND', 'Select an active brand');
+  if (!state?.unitValid) {
+    // Organizations provisioned by an older platform release can be missing a
+    // built-in unit used by the current Add Product presets. Repair only the
+    // known system unit; custom or unknown unit codes must still be rejected.
+    const coreUnit = CORE_PRODUCT_UNITS[input.unit];
+    if (!coreUnit) throw badRequest('INVALID_PRODUCT_UNIT', 'Select an active product unit');
+    await database.query(
+      `insert into product_units (
+         organization_id,code,name,kind,default_step,is_system,is_active
+       ) values ($1,$2,$3,$4,$5,true,true)
+       on conflict (organization_id,code) do update set
+         name=excluded.name,kind=excluded.kind,default_step=excluded.default_step,
+         is_system=true,is_active=true,updated_at=now()`,
+      [organizationId, input.unit, coreUnit.name, coreUnit.kind, coreUnit.defaultStep],
+    );
+  }
+  if (!state?.categoryValid) throw badRequest('INVALID_CATEGORY', 'Select an active category');
+  if (!state?.brandValid) throw badRequest('INVALID_BRAND', 'Select an active brand');
 }
 
 function recipeUnitFamily(unit: string): 'mass' | 'volume' | 'piece' | null {

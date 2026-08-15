@@ -9,30 +9,27 @@ export interface ReportMetricDefinition {
   auditRule?: string;
 }
 
-/**
- * Canonical Ximo reporting glossary. UI cards, APIs, exports, and tests should
- * reference these IDs instead of inventing local definitions.
- */
+/** Canonical glossary from the Ximo Reports Module Specification v1.0. */
 export const REPORT_METRICS: Record<string, ReportMetricDefinition> = {
   gross_sales: {
     id: 'gross_sales',
     label: 'Gross Sales',
-    description: 'Completed sale value before discounts and customer refunds.',
-    formula: 'SUM(sale_items.unit_price × sale_items.quantity)',
+    description: 'Completed line-item selling value before discounts and refunds; voids and cancelled sales are excluded.',
+    formula: 'SUM(Line Item Selling Price × Quantity)',
     format: 'currency',
   },
   total_discounts: {
     id: 'total_discounts',
     label: 'Total Discounts',
-    description: 'All promotion, manual, statutory, and employee discounts.',
-    formula: 'SUM(sales.discount_total)',
+    description: 'All promotion, manual, senior, PWD, and employee discounts.',
+    formula: 'SUM(All Discount Amounts)',
     format: 'currency',
   },
   refund_amount: {
     id: 'refund_amount',
     label: 'Refund Amount',
     description: 'Value returned to customers during the selected period.',
-    formula: 'SUM(returns.refund_total)',
+    formula: 'SUM(Refund Totals)',
     format: 'currency',
     auditRule: 'Read directly from immutable return records.',
   },
@@ -46,8 +43,8 @@ export const REPORT_METRICS: Record<string, ReportMetricDefinition> = {
   cogs: {
     id: 'cogs',
     label: 'Cost of Goods Sold (COGS)',
-    description: 'Inventory cost attached to sold quantities, net of returned cost.',
-    formula: 'SUM(sale item cost × quantity sold) − returned item cost',
+    description: 'Inventory cost attached to sold quantities.',
+    formula: 'SUM(Product Cost × Quantity Sold)',
     format: 'currency',
   },
   gross_profit: {
@@ -81,7 +78,7 @@ export const REPORT_METRICS: Record<string, ReportMetricDefinition> = {
   inventory_value_cost: {
     id: 'inventory_value_cost',
     label: 'Inventory Value (Cost)',
-    description: 'Current on-hand stock valued at weighted average unit cost.',
+    description: 'Current stock valued at its unit cost.',
     formula: 'SUM(Current Stock × Unit Cost)',
     format: 'currency',
   },
@@ -109,14 +106,14 @@ export const REPORT_METRICS: Record<string, ReportMetricDefinition> = {
   dead_stock: {
     id: 'dead_stock',
     label: 'Dead Stock',
-    description: 'Products with on-hand stock and no sales in the last 90 days.',
-    formula: 'COUNT(products with stock > 0 and no completed sale in 90 days)',
+    description: 'Products with stock and no sales within the configured inactivity period.',
+    formula: 'Store threshold > Category threshold > System threshold; default 90 days',
     format: 'number',
   },
   purchase_value: {
     id: 'purchase_value',
     label: 'Purchase Value',
-    description: 'Value of non-draft, non-cancelled purchase orders.',
+    description: 'Total purchase-order value.',
     formula: 'SUM(Purchase Order Total)',
     format: 'currency',
   },
@@ -131,7 +128,7 @@ export const REPORT_METRICS: Record<string, ReportMetricDefinition> = {
     id: 'supplier_fulfillment_rate',
     label: 'Supplier Fulfillment Rate',
     description: 'Share of purchase orders fully delivered.',
-    formula: '(Orders Fully Delivered ÷ Total Purchase Orders) × 100',
+    formula: '(Fully Delivered POs ÷ Total POs) × 100',
     format: 'percentage',
   },
   cash_variance: {
@@ -166,13 +163,20 @@ export const REPORT_METRICS: Record<string, ReportMetricDefinition> = {
   cost_allocation: {
     id: 'cost_allocation',
     label: 'Cost Allocation',
-    description: 'Weighted average ingredient cost allocated to output.',
-    formula: 'SUM(consumed ingredient cost) ÷ Output Quantity',
+    description: 'Proportional weighted-average ingredient cost allocated to output unless a fixed conversion is configured.',
+    formula: 'SUM(Consumed Ingredient Cost) ÷ Output Quantity',
     format: 'currency',
   },
 };
 
-export type ReportAccessLevel = 'full' | 'own' | 'limited' | 'receiving' | 'read_only' | 'none' | 'optional';
+export type ReportAccessLevel =
+  | 'full'
+  | 'own'
+  | 'limited'
+  | 'receiving'
+  | 'read_only'
+  | 'none'
+  | 'optional';
 
 export const REPORT_PERMISSION_MATRIX: Record<string, Record<string, ReportAccessLevel>> = {
   overview: { owner: 'full', administrator: 'full', manager: 'full', cashier: 'own', inventory_staff: 'limited', purchasing_staff: 'limited', auditor: 'full' },
@@ -182,7 +186,8 @@ export const REPORT_PERMISSION_MATRIX: Record<string, Record<string, ReportAcces
   purchasing: { owner: 'full', administrator: 'full', manager: 'full', cashier: 'none', inventory_staff: 'receiving', purchasing_staff: 'full', auditor: 'full' },
   financial: { owner: 'full', administrator: 'full', manager: 'optional', cashier: 'none', inventory_staff: 'none', purchasing_staff: 'none', auditor: 'read_only' },
   cash: { owner: 'full', administrator: 'full', manager: 'full', cashier: 'own', inventory_staff: 'none', purchasing_staff: 'none', auditor: 'full' },
+  customers: { owner: 'full', administrator: 'full', manager: 'full', cashier: 'limited', inventory_staff: 'none', purchasing_staff: 'none', auditor: 'full' },
+  customer_credit: { owner: 'full', administrator: 'full', manager: 'full', cashier: 'limited', inventory_staff: 'none', purchasing_staff: 'none', auditor: 'full' },
   audit: { owner: 'full', administrator: 'full', manager: 'full', cashier: 'none', inventory_staff: 'none', purchasing_staff: 'none', auditor: 'read_only' },
   repacking: { owner: 'full', administrator: 'full', manager: 'full', cashier: 'none', inventory_staff: 'full', purchasing_staff: 'limited', auditor: 'full' },
 };
-

@@ -58,7 +58,8 @@ export class EntitlementService {
        where (
          case
            when om.module_id is not null then om.enabled
-           else (pm.module_id is not null and coalesce(bpm.enabled_by_default, false))
+           -- Missing business_profile_modules row must not hide a plan module.
+           else (pm.module_id is not null and coalesce(bpm.enabled_by_default, true))
          end
        ) = true`,
       [organizationId, overrideProfile ?? null],

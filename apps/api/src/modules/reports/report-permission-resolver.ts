@@ -17,9 +17,45 @@ export interface ReportScopeContext {
 }
 
 export function dateAtLocalMidnight(dateStr: string, _timezone: string = 'UTC'): Date {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(Date.UTC(year!, month! - 1, day!));
-  return date;
+  // Workspace requests already send exact ISO boundaries. Re-parsing an ISO
+  // timestamp as YYYY-MM-DD previously turned the day into NaN (for example,
+  // "13T16:00:00.000Z") and caused every report query to fail.
+  if (dateStr.includes('T')) {
+    const instant = new Date(dateStr);
+    if (!Number.isNaN(instant.getTime())) return instant;
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) return new Date(Number.NaN);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utcGuess = new Date(Date.UTC(year, month - 1, day));
+
+  // Convert the store's local midnight into an exact UTC instant. This keeps
+  // grouping and range boundaries aligned with the configured store timezone.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: _timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(utcGuess);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((item) => item.type === type)?.value ?? 0);
+  const representedAsUtc = Date.UTC(
+    part('year'),
+    part('month') - 1,
+    part('day'),
+    part('hour'),
+    part('minute'),
+    part('second'),
+  );
+  const timezoneOffset = representedAsUtc - utcGuess.getTime();
+  return new Date(utcGuess.getTime() - timezoneOffset);
 }
 
 export function resolveReportScope(
@@ -49,7 +85,9 @@ export function resolveReportScope(
   const orgTimezone = authUser.organization?.timezone || 'Asia/Manila';
   const startDate = dateAtLocalMidnight(query.from, orgTimezone);
   const endDate = dateAtLocalMidnight(query.to, orgTimezone);
-  endDate.setUTCDate(endDate.getUTCDate() + 1);
+  // Date-only filters are inclusive through the selected end date. Exact ISO
+  // timestamps are already explicit boundaries and must not gain another day.
+  if (!query.to.includes('T')) endDate.setUTCDate(endDate.getUTCDate() + 1);
 
   const canViewCost = permissions.includes('reports:view_cost');
   const canViewProfit = permissions.includes('reports:view_profit');

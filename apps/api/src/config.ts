@@ -13,6 +13,7 @@ const envSchema = z
     PORT: z.coerce.number().int().positive().default(4000),
     DATABASE_URL: z.string().min(1),
     DATABASE_SSL: z.enum(['true', 'false']).default('false'),
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(10).default(4),
     SUPABASE_URL: z.url(),
     SUPABASE_ANON_KEY: z.string().min(1),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
