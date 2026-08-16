@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { api } from '@/lib/api';
 import { useSession } from '@/providers/session';
@@ -73,7 +74,7 @@ export default function BranchSelectionScreen() {
                 await select(item);
                 router.replace('/(tabs)');
               } catch (error) {
-                Alert.alert(
+                appAlert(
                   'Could not select branch',
                   error instanceof Error ? error.message : 'Please try again.',
                 );

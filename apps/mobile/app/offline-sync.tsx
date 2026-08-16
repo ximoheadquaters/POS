@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { AppSidebarProvider } from '@/components/app-sidebar';
@@ -42,7 +43,7 @@ function OfflineSyncContent() {
     try {
       const result = await syncOfflineSales();
       await refresh();
-      Alert.alert(
+      appAlert(
         'Synchronization finished',
         `${result.synced} synced · ${result.pending} pending · ${result.failed} need attention`,
       );
@@ -125,7 +126,7 @@ function OfflineSyncContent() {
                 </Pressable>
                 <Pressable
                   onPress={() =>
-                    Alert.alert(
+                    appAlert(
                       'Remove unsynced sale?',
                       'Only remove it after confirming the transaction should not be recorded.',
                       [

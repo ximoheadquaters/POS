@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -43,6 +43,8 @@ import {
   formatReceivingConversionExplanation,
   formatStockPreview,
   formatUnitDeductionExplanation,
+  formatVariantAutoName,
+  formatVariantQuantityLabel,
   getCompatibleUnitsForDimension,
   pluralizeUnit,
 } from '@/lib/unit-preview-helpers';
@@ -1002,8 +1004,8 @@ function ProductFormContent() {
                   {
                     name:
                       input.inventoryRole === 'ingredient'
-                        ? `${alternateUnit.toUpperCase()} storage package (${conversion} ${input.unit})`
-                        : `${alternateUnit.toUpperCase()} of ${conversion}`,
+                        ? `${alternateUnit.toUpperCase()} storage package (${formatVariantQuantityLabel(conversion, input.unit)})`
+                        : formatVariantAutoName(alternateUnit, conversion, input.unit),
                     sku: alternateSku.trim() || `${input.sku}-${alternateUnit.toUpperCase()}`,
                     barcode: alternateBarcode.trim() || undefined,
                     unit: alternateUnit,
@@ -2144,7 +2146,7 @@ function ProductFormContent() {
                           {isEditing
                             ? inventoryRole === 'ingredient'
                               ? 'Storage packages'
-                              : 'Selling units'
+                              : 'Variants'
                             : inventoryRole === 'ingredient'
                               ? 'Storage package'
                               : 'Package setup'}
@@ -2164,7 +2166,7 @@ function ProductFormContent() {
                               </Text>
                               <Text className="mt-1 text-sm leading-5 text-slate-500">
                                 {isEditing
-                                  ? 'Manage every alternate selling unit, conversion, price, SKU, and barcode.'
+                                  ? 'Manage every alternate variant, conversion, price, SKU, and barcode.'
                                   : inventoryRole === 'ingredient'
                                     ? 'This package is never shown in BOM units. It only tells Ximo how much measured stock it contains.'
                                     : 'Enter the package size normally; Ximo handles the inventory conversion.'}
@@ -2187,7 +2189,7 @@ function ProductFormContent() {
                               >
                                 <Feather name="settings" size={15} color="#1A593B" />
                                 <Text className="ml-2 text-sm font-medium text-brand-700">
-                                  Manage units
+                                  Manage variants
                                 </Text>
                               </Pressable>
                             ) : null}

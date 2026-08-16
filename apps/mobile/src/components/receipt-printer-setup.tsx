@@ -12,7 +12,7 @@ const PAPER_OPTIONS: ReadonlyArray<{
   { value: 'full_page', label: 'Full page', detail: 'A4 or Letter' },
 ];
 
-function ToggleRow({
+function ToggleCard({
   label,
   detail,
   value,
@@ -24,10 +24,10 @@ function ToggleRow({
   onChange(value: boolean): void;
 }) {
   return (
-    <View className="min-h-16 flex-row items-center border-t border-slate-100 py-3">
-      <View className="flex-1 pr-4">
-        <Text className="text-sm font-semibold text-slate-900">{label}</Text>
-        <Text className="mt-0.5 text-xs leading-4 text-slate-500">{detail}</Text>
+    <View className="flex-1 min-w-[240px] flex-row items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+      <View className="flex-1 pr-3">
+        <Text className="text-xs font-bold text-slate-900">{label}</Text>
+        <Text className="mt-0.5 text-[11px] leading-4 text-slate-500">{detail}</Text>
       </View>
       <Switch
         accessibilityLabel={label}
@@ -61,146 +61,144 @@ export function ReceiptPrinterSetup({
     key: K,
     nextValue: ReceiptPrinterSettings[K],
   ) => onChange({ ...value, [key]: nextValue });
-  const resolvedSaveLabel = saveLabel ?? (saving ? 'Saving…' : 'Save printer settings');
+  const resolvedSaveLabel = saveLabel ?? (saving ? 'Saving…' : 'Save Printer Settings');
   const saveDisabled = saving;
 
   return (
-    <View className="mt-4 gap-0">
-      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <View className="flex-row items-start bg-slate-50 px-4 py-4">
-          <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
-            <Feather name="printer" size={19} color="#1A593B" />
+    <View className="mt-3 gap-4">
+      {/* Printing Method */}
+      <View>
+        <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+          Printing Method
+        </Text>
+        <View className="flex-row items-center rounded-xl border border-brand-200 bg-brand-50/80 p-3.5">
+          <View className="h-9 w-9 items-center justify-center rounded-lg bg-brand-100">
+            <Feather name="monitor" size={16} color="#1A593B" />
           </View>
-          <View className="flex-1">
-            <Text className="text-sm font-bold text-slate-900">Receipt printer setup</Text>
-            <Text className="mt-1 text-xs leading-4 text-slate-500">
-              Saved on this device for this branch and available while offline.
+          <View className="ml-3 flex-1">
+            <Text className="text-xs font-bold text-brand-950">System Print Dialog</Text>
+            <Text className="mt-0.5 text-[11px] text-slate-600">
+              Uses system print dialog. Supports any thermal, USB, network, or desktop printer.
             </Text>
           </View>
-        </View>
-
-        <View className="px-4 py-4">
-          <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Printing method
-          </Text>
-          <View className="mt-2 flex-row items-center rounded-xl border border-brand-200 bg-brand-50 p-3">
-            <Feather name="monitor" size={17} color="#1A593B" />
-            <View className="ml-3 flex-1">
-              <Text className="text-sm font-semibold text-brand-900">System print dialog</Text>
-              <Text className="mt-0.5 text-xs leading-4 text-slate-600">
-                Select any printer installed on this computer or device.
-              </Text>
-            </View>
-            <Feather name="check-circle" size={18} color="#1A593B" />
-          </View>
-
-          <Text className="mt-5 text-xs font-bold uppercase tracking-wider text-slate-500">
-            Receipt paper
-          </Text>
-          <View className="mt-2 flex-row flex-wrap gap-2">
-            {PAPER_OPTIONS.map((option) => {
-              const selected = value.paperSize === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selected }}
-                  onPress={() => update('paperSize', option.value)}
-                  className={`min-h-16 min-w-28 flex-1 rounded-xl border px-3 py-3 ${
-                    selected ? 'border-brand-700 bg-brand-50' : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <Text
-                    className={`text-sm font-bold ${selected ? 'text-brand-900' : 'text-slate-800'}`}
-                  >
-                    {option.label}
-                  </Text>
-                  <Text className="mt-0.5 text-xs text-slate-500">{option.detail}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <View className="mt-5">
-            <Text className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-              Receipt contents
-            </Text>
-            <ToggleRow
-              label="Branch address"
-              detail="Show the selling branch address below the business name."
-              value={value.includeBranchAddress}
-              onChange={(next) => update('includeBranchAddress', next)}
-            />
-            <ToggleRow
-              label="Cashier name"
-              detail="Identify the employee who completed the sale."
-              value={value.includeCashierName}
-              onChange={(next) => update('includeCashierName', next)}
-            />
-            <ToggleRow
-              label="Tax breakdown"
-              detail="Show the tax total separately when the sale has tax."
-              value={value.includeTaxBreakdown}
-              onChange={(next) => update('includeTaxBreakdown', next)}
-            />
-            <ToggleRow
-              label="Receipt footer"
-              detail="Include the thank-you and Ximo POS footer."
-              value={value.includeFooter}
-              onChange={(next) => update('includeFooter', next)}
-            />
-            <ToggleRow
-              label="Print automatically after payment"
-              detail="Open the system print dialog when the completed-sale screen loads."
-              value={value.autoPrintAfterSale}
-              onChange={(next) => update('autoPrintAfterSale', next)}
-            />
+          <View className="flex-row items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5">
+            <Feather name="check" size={12} color="#1A593B" />
+            <Text className="text-[10px] font-bold text-brand-900">Active</Text>
           </View>
         </View>
       </View>
 
-      <View className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-4">
-        <View className="flex-row flex-wrap gap-2">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: testing }}
-            disabled={testing}
-            onPress={onTest}
-            style={Platform.OS === 'web' ? ({ cursor: testing ? 'default' : 'pointer' } as object) : undefined}
-            className={`min-h-11 min-w-[160px] flex-1 flex-row items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-4 ${testing ? 'opacity-50' : ''}`}
-          >
-            <Feather name="printer" size={16} color="#1A593B" />
-            <Text className="ml-2 text-sm font-bold text-brand-800">
-              {testing ? 'Opening print dialog…' : 'Print test receipt'}
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Save printer settings"
-            accessibilityState={{ disabled: saveDisabled }}
-            disabled={saveDisabled}
-            onPress={() => {
-              if (saveDisabled) return;
-              onSave();
-            }}
-            style={
-              Platform.OS === 'web'
-                ? ({ cursor: saveDisabled ? 'default' : 'pointer' } as object)
-                : undefined
-            }
-            className={`min-h-11 min-w-[160px] flex-1 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800 ${
-              saveDisabled ? 'opacity-50' : ''
-            }`}
-          >
-            <Feather name="save" size={16} color="#FFFFFF" />
-            <Text className="ml-2 text-sm font-bold text-white">{resolvedSaveLabel}</Text>
-          </Pressable>
-        </View>
-
-        <Text className="mt-3 text-xs leading-4 text-slate-500">
-          Ximo formats the receipt, but your browser still controls the physical printer, margins,
-          copies, and final print confirmation.
+      {/* Paper Size */}
+      <View>
+        <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+          Paper Width / Size
         </Text>
+        <View className="flex-row flex-wrap gap-2.5">
+          {PAPER_OPTIONS.map((option) => {
+            const selected = value.paperSize === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+                onPress={() => update('paperSize', option.value)}
+                className={`min-w-[130px] flex-1 rounded-xl border px-3.5 py-3 ${
+                  selected ? 'border-brand-600 bg-brand-50/90 shadow-sm' : 'border-slate-200 bg-white active:bg-slate-50'
+                }`}
+              >
+                <View className="flex-row items-center justify-between">
+                  <Text
+                    className={`text-xs font-bold ${selected ? 'text-brand-900' : 'text-slate-800'}`}
+                  >
+                    {option.label}
+                  </Text>
+                  {selected ? <Feather name="check-circle" size={14} color="#1A593B" /> : null}
+                </View>
+                <Text className="mt-1 text-[11px] text-slate-500">{option.detail}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Receipt Contents */}
+      <View>
+        <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+          Receipt Layout & Elements
+        </Text>
+        <View className="flex-row flex-wrap gap-2.5">
+          <ToggleCard
+            label="Branch Address"
+            detail="Show selling branch address below store name"
+            value={value.includeBranchAddress}
+            onChange={(next) => update('includeBranchAddress', next)}
+          />
+          <ToggleCard
+            label="Cashier Name"
+            detail="Show cashier name who processed checkout"
+            value={value.includeCashierName}
+            onChange={(next) => update('includeCashierName', next)}
+          />
+          <ToggleCard
+            label="Tax Breakdown"
+            detail="Separate tax totals on taxable items"
+            value={value.includeTaxBreakdown}
+            onChange={(next) => update('includeTaxBreakdown', next)}
+          />
+          <ToggleCard
+            label="Receipt Footer"
+            detail="Include thank-you message & branding"
+            value={value.includeFooter}
+            onChange={(next) => update('includeFooter', next)}
+          />
+          <ToggleCard
+            label="Auto-Print on Checkout"
+            detail="Open print dialog automatically after payment"
+            value={value.autoPrintAfterSale}
+            onChange={(next) => update('autoPrintAfterSale', next)}
+          />
+        </View>
+      </View>
+
+      {/* Actions */}
+      <View className="mt-1 flex-row flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: testing }}
+          disabled={testing}
+          onPress={onTest}
+          style={Platform.OS === 'web' ? ({ cursor: testing ? 'default' : 'pointer' } as object) : undefined}
+          className={`min-h-11 min-w-[150px] flex-row items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-4 active:bg-brand-100 ${
+            testing ? 'opacity-50' : ''
+          }`}
+        >
+          <Feather name="printer" size={15} color="#1A593B" />
+          <Text className="ml-2 text-xs font-bold text-brand-800">
+            {testing ? 'Opening Print…' : 'Print Test Receipt'}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Save printer settings"
+          accessibilityState={{ disabled: saveDisabled }}
+          disabled={saveDisabled}
+          onPress={() => {
+            if (saveDisabled) return;
+            onSave();
+          }}
+          style={
+            Platform.OS === 'web'
+              ? ({ cursor: saveDisabled ? 'default' : 'pointer' } as object)
+              : undefined
+          }
+          className={`min-h-11 min-w-[170px] flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:bg-brand-800 ${
+            saveDisabled ? 'opacity-50' : ''
+          }`}
+        >
+          <Feather name="check" size={15} color="#FFFFFF" />
+          <Text className="ml-2 text-xs font-bold text-white">{resolvedSaveLabel}</Text>
+        </Pressable>
       </View>
     </View>
   );

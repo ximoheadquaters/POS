@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FlatList,
   Modal,
@@ -20,6 +20,7 @@ import { useBarcodeScanner } from '@/hooks/use-barcode-scanner';
 import { ApiError, api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { normalizeBarcode } from '@/lib/product-scan';
+import { formatVariantAutoName } from '@/lib/unit-preview-helpers';
 import { useIosAlert } from '@/providers/ios-alert';
 import { useBranchStore } from '@/store/branch';
 
@@ -138,7 +139,7 @@ function ProductChooserModal({
             <View>
               <Text className="text-lg font-bold text-slate-900">Select Target Product</Text>
               <Text className="mt-0.5 text-xs text-slate-500">
-                Choose a product to manage its selling units and barcodes
+                Choose a product to manage its variants and barcodes
               </Text>
             </View>
             <Pressable
@@ -326,8 +327,8 @@ function ProductVariantsContent() {
   const [price, setPrice] = useState('');
   const [barcode, setBarcode] = useState('');
   const [isPortioningContainer, setIsPortioningContainer] = useState(false);
-
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const lastAutoNameRef = useRef('');
 
   const variants = useQuery({
     queryKey: ['product-variants', activeProductId],
@@ -340,9 +341,23 @@ function ProductVariantsContent() {
     queryFn: () => api<Unit[]>('/product-units'),
   });
 
+  useEffect(() => {
+    if (editing) return;
+    const next = formatVariantAutoName(unit, unitsPerBase || '1', activeBaseUnit);
+    setName((current) => {
+      if (!current.trim() || current === lastAutoNameRef.current) {
+        lastAutoNameRef.current = next;
+        return next;
+      }
+      return current;
+    });
+  }, [editing, unit, unitsPerBase, activeBaseUnit]);
+
   const reset = () => {
     setEditing(null);
-    setName('');
+    const auto = formatVariantAutoName('box', '12', activeBaseUnit);
+    lastAutoNameRef.current = auto;
+    setName(auto);
     setSku('');
     setUnit('box');
     setUnitsPerBase('12');
@@ -355,7 +370,7 @@ function ProductVariantsContent() {
   const save = useMutation({
     mutationFn: () => {
       if (!activeProductId) {
-        throw new Error('Please select a product before adding selling units.');
+        throw new Error('Please select a product before adding variants.');
       }
       const bNorm = (activeBaseUnit || '').toLowerCase().trim();
       const uNorm = (unit || '').toLowerCase().trim();
@@ -396,8 +411,8 @@ function ProductVariantsContent() {
     onSuccess: async () => {
       reset();
       showAlert({
-        title: 'Selling Unit Saved',
-        message: 'The selling unit was added successfully.',
+        title: 'Variant Saved',
+        message: 'The variant was added successfully.',
         type: 'success',
       });
       await Promise.all([
@@ -517,7 +532,7 @@ function ProductVariantsContent() {
 
       <View>
         <Text className="text-base font-semibold text-slate-900">
-          {editing ? 'Edit selling unit' : 'Add selling unit or variant'}
+          {editing ? 'Edit variant' : 'Add variant'}
         </Text>
         <Text className="mt-1 text-xs leading-5 text-slate-500">
           One sold unit deducts the conversion quantity from {activeProductName}&apos;s shared{' '}
@@ -532,7 +547,7 @@ function ProductVariantsContent() {
             onChangeText={setName}
             onFocus={() => setFocusedField('name')}
             onBlur={() => setFocusedField(null)}
-            placeholder="e.g. Pack of 12"
+            placeholder="e.g. PACK of 25g"
             placeholderTextColor="#94A3B8"
             className="w-full py-2.5 text-sm text-slate-900"
             style={{ outline: 'none' } as object}
@@ -555,7 +570,7 @@ function ProductVariantsContent() {
 
       <View>
         <Text className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Selling unit
+          Unit
         </Text>
         <View className="flex-row flex-wrap gap-2">
           {units.data
@@ -686,7 +701,7 @@ function ProductVariantsContent() {
         ) : null}
         <View className="flex-1">
           <Button
-            title={save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add selling unit'}
+            title={save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add variant'}
             disabled={
               save.isPending ||
               !activeProductId ||
@@ -705,9 +720,9 @@ function ProductVariantsContent() {
   const listHeader = (
     <View className="mb-3 flex-row items-center justify-between">
       <View>
-        <Text className="text-base font-semibold text-slate-900">Configured units</Text>
+        <Text className="text-base font-semibold text-slate-900">Configured variants</Text>
         <Text className="mt-0.5 text-xs text-slate-500">
-          {(variants.data ?? []).length} unit{(variants.data ?? []).length === 1 ? '' : 's'} for{' '}
+          {(variants.data ?? []).length} variant{(variants.data ?? []).length === 1 ? '' : 's'} for{' '}
           {activeProductName}
         </Text>
       </View>
@@ -772,7 +787,7 @@ function ProductVariantsContent() {
 
   const variantsList =
     variants.isLoading ? (
-      <LoadingState label="Loading selling units…" />
+      <LoadingState label="Loading variants…" />
     ) : variants.isError ? (
       <ErrorState message={variants.error.message} retry={() => void variants.refetch()} />
     ) : (
@@ -785,7 +800,7 @@ function ProductVariantsContent() {
         ListEmptyComponent={
           <View className="items-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10">
             <Feather name="layers" size={28} color="#94A3B8" />
-            <Text className="mt-3 text-sm font-medium text-slate-700">No selling units yet</Text>
+            <Text className="mt-3 text-sm font-medium text-slate-700">No variants yet</Text>
             <Text className="mt-1 max-w-sm text-center text-xs text-slate-500">
               Add a box, pack, or other sellable unit for {activeProductName}.
             </Text>
@@ -798,7 +813,7 @@ function ProductVariantsContent() {
   return (
     <Screen>
       <Header
-        title="Selling units"
+        title="Variants"
         subtitle={`${activeProductName} · base inventory in ${activeBaseUnit}`}
         showBack
         backLabel="Products"
@@ -845,7 +860,7 @@ function ProductVariantsContent() {
           }
           ListEmptyComponent={
             variants.isLoading ? (
-              <LoadingState label="Loading selling units…" />
+              <LoadingState label="Loading variants…" />
             ) : variants.isError ? (
               <ErrorState
                 message={variants.error.message}
@@ -854,7 +869,7 @@ function ProductVariantsContent() {
             ) : (
               <View className="items-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10">
                 <Feather name="layers" size={28} color="#94A3B8" />
-                <Text className="mt-3 text-sm font-medium text-slate-700">No selling units yet</Text>
+                <Text className="mt-3 text-sm font-medium text-slate-700">No variants yet</Text>
                 <Text className="mt-1 max-w-sm text-center text-xs text-slate-500">
                   Add a box, pack, or other sellable unit for {activeProductName}.
                 </Text>

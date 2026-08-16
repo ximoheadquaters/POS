@@ -1,5 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { allocateComboUnitPrices, comboCartLines, comboSoldOut } from './combo-cart';
+import {
+  allocateComboUnitPrices,
+  cartComponentQuantities,
+  checkoutLineTotalMinor,
+  comboCartBundle,
+  comboCartLines,
+  comboIncludesLabel,
+  comboSoldOut,
+  expandCartItemsForApi,
+} from './combo-cart';
+
+const snackCombo = {
+  id: 'promo-1',
+  name: 'Snack Combo',
+  type: 'combo_bundle' as const,
+  comboPrice: '40.00',
+  components: [
+    {
+      productId: 'a',
+      id: 'a',
+      name: 'Chips',
+      sku: 'C1',
+      requiredQuantity: 1,
+      role: 'combo_component',
+      sellingPrice: '30.00',
+      taxRate: '0.00',
+      isTaxInclusive: true,
+    },
+    {
+      productId: 'b',
+      id: 'b',
+      name: 'Drink',
+      sku: 'D1',
+      requiredQuantity: 1,
+      role: 'combo_component',
+      sellingPrice: '25.00',
+      taxRate: '0.00',
+      isTaxInclusive: true,
+    },
+  ],
+};
 
 describe('allocateComboUnitPrices', () => {
   it('splits combo price proportional to regular line totals', () => {
@@ -28,36 +68,7 @@ describe('allocateComboUnitPrices', () => {
 
 describe('comboCartLines', () => {
   it('locks allocated prices on cart products', () => {
-    const lines = comboCartLines({
-      id: 'promo-1',
-      name: 'Snack Combo',
-      type: 'combo_bundle',
-      comboPrice: '40.00',
-      components: [
-        {
-          productId: 'a',
-          id: 'a',
-          name: 'Chips',
-          sku: 'C1',
-          requiredQuantity: 1,
-          role: 'combo_component',
-          sellingPrice: '30.00',
-          taxRate: '0.00',
-          isTaxInclusive: true,
-        },
-        {
-          productId: 'b',
-          id: 'b',
-          name: 'Drink',
-          sku: 'D1',
-          requiredQuantity: 1,
-          role: 'combo_component',
-          sellingPrice: '25.00',
-          taxRate: '0.00',
-          isTaxInclusive: true,
-        },
-      ],
-    });
+    const lines = comboCartLines(snackCombo);
     expect(lines).toHaveLength(2);
     expect(lines[0]?.product.priceLocked).toBe(true);
     expect(lines[0]?.product.promoName).toBe('Snack Combo');
@@ -65,6 +76,66 @@ describe('comboCartLines', () => {
       Number(lines[0]!.product.sellingPrice) * lines[0]!.quantity +
       Number(lines[1]!.product.sellingPrice) * lines[1]!.quantity;
     expect(totalMinor).toBe(40);
+  });
+});
+
+describe('comboCartBundle', () => {
+  it('stores a single combo row with expandable components', () => {
+    const bundle = comboCartBundle(snackCombo);
+    expect(bundle.isComboBundle).toBe(true);
+    expect(bundle.name).toBe('Snack Combo');
+    expect(bundle.sellingPrice).toBe('40.00');
+    expect(bundle.comboComponents).toHaveLength(2);
+    expect(comboIncludesLabel(bundle.comboComponents)).toBe('Chips · Drink');
+  });
+});
+
+describe('expandCartItemsForApi', () => {
+  it('expands combo bundles into priced component lines', () => {
+    const bundle = comboCartBundle(snackCombo);
+    const expanded = expandCartItemsForApi([{ product: bundle, quantity: 2 }]);
+    expect(expanded).toHaveLength(2);
+    expect(expanded[0]?.quantity).toBe(2);
+    expect(expanded[1]?.quantity).toBe(2);
+    expect(expanded[0]?.unitPrice).toBeTruthy();
+    expect(expanded[0]?.promoId).toBe('promo-1');
+  });
+
+  it('keeps checkout totals equal to the combo sticker when components are tax-exclusive', () => {
+    const exclusiveCombo = {
+      ...snackCombo,
+      id: 'promo-tax',
+      comboPrice: '40.00',
+      components: snackCombo.components.map((component) => ({
+        ...component,
+        taxRate: '12.00',
+        isTaxInclusive: false,
+      })),
+    };
+    const bundle = comboCartBundle(exclusiveCombo);
+    const expanded = expandCartItemsForApi([{ product: bundle, quantity: 1 }]);
+    const due = exclusiveCombo.components.reduce((sum, component, index) => {
+      const line = expanded[index]!;
+      return (
+        sum +
+        checkoutLineTotalMinor(
+          line.unitPrice!,
+          line.quantity,
+          component.taxRate,
+          component.isTaxInclusive,
+        )
+      );
+    }, 0n);
+    expect(due).toBe(4000n);
+  });
+});
+
+describe('cartComponentQuantities', () => {
+  it('counts combo component demand for stock checks', () => {
+    const bundle = comboCartBundle(snackCombo);
+    const quantities = cartComponentQuantities([{ product: bundle, quantity: 1 }]);
+    expect(quantities.get('a')).toBe(1);
+    expect(quantities.get('b')).toBe(1);
   });
 });
 

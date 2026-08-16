@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 
@@ -22,21 +22,132 @@ interface IosAlertContextType {
   hideAlert: () => void;
 }
 
+type AlertBridge = {
+  showAlert: (options: AlertOptions) => void;
+  confirm: (title: string, message: string, confirmLabel?: string) => Promise<boolean>;
+};
+
 const IosAlertContext = createContext<IosAlertContextType | undefined>(undefined);
+
+let alertBridge: AlertBridge | null = null;
+
+function inferAlertType(title: string, message?: string): AlertType {
+  const text = `${title} ${message ?? ''}`.toLowerCase();
+  if (
+    /error|fail|could not|invalid|needed|denied|insufficient|mismatch|sold out|inactive/.test(text)
+  ) {
+    return 'error';
+  }
+  if (
+    /success|saved|updated|opened|received|dispatched|refreshed|created|recorded|cancelled|parked|printed|complete/.test(
+      text,
+    )
+  ) {
+    return 'success';
+  }
+  if (/sign out|\?|confirm|change |required|start return|discard|delete|remove|hold /.test(text)) {
+    return 'warning';
+  }
+  return 'info';
+}
+
+/** Modal drop-in for React Native `Alert.alert(...)`. */
+export function appAlert(
+  title: string,
+  message?: string,
+  buttons?: AlertButton[],
+): void {
+  if (!alertBridge) {
+    console.warn('[appAlert] Alert provider is not mounted yet:', title, message);
+    return;
+  }
+  alertBridge.showAlert({
+    title,
+    message,
+    buttons,
+    type: inferAlertType(title, message),
+  });
+}
+
+export function showAppAlert(options: AlertOptions): void {
+  if (!alertBridge) {
+    console.warn('[showAppAlert] Alert provider is not mounted yet:', options.title);
+    return;
+  }
+  alertBridge.showAlert(options);
+}
+
+export function confirmAppAction(
+  title: string,
+  message: string,
+  confirmLabel = 'Continue',
+): Promise<boolean> {
+  if (!alertBridge) {
+    console.warn('[confirmAppAction] Alert provider is not mounted yet:', title);
+    return Promise.resolve(false);
+  }
+  return alertBridge.confirm(title, message, confirmLabel);
+}
 
 export function IosAlertProvider({ children }: { children: ReactNode }) {
   const [visible, setVisible] = useState(false);
   const [options, setOptions] = useState<AlertOptions | null>(null);
-
-  const showAlert = (opts: AlertOptions) => {
-    setOptions(opts);
-    setVisible(true);
-  };
+  const confirmResolver = useRef<((value: boolean) => void) | null>(null);
 
   const hideAlert = () => {
     setVisible(false);
     setOptions(null);
   };
+
+  const showAlert = (opts: AlertOptions) => {
+    if (confirmResolver.current) {
+      confirmResolver.current(false);
+      confirmResolver.current = null;
+    }
+    setOptions(opts);
+    setVisible(true);
+  };
+
+  const confirm = (title: string, message: string, confirmLabel = 'Continue') =>
+    new Promise<boolean>((resolve) => {
+      if (confirmResolver.current) {
+        confirmResolver.current(false);
+      }
+      confirmResolver.current = resolve;
+      setOptions({
+        title,
+        message,
+        type: 'warning',
+        buttons: [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => {
+              confirmResolver.current = null;
+              resolve(false);
+            },
+          },
+          {
+            text: confirmLabel,
+            style: 'default',
+            onPress: () => {
+              confirmResolver.current = null;
+              resolve(true);
+            },
+          },
+        ],
+      });
+      setVisible(true);
+    });
+
+  useEffect(() => {
+    alertBridge = { showAlert, confirm };
+    return () => {
+      if (alertBridge?.showAlert === showAlert) {
+        alertBridge = null;
+      }
+    };
+  });
 
   const handleButtonPress = (btn?: AlertButton) => {
     hideAlert();
@@ -46,9 +157,10 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
   };
 
   const type = options?.type ?? 'info';
-  const buttons = options?.buttons && options.buttons.length > 0
-    ? options.buttons
-    : [{ text: 'OK', style: 'default' as const }];
+  const buttons =
+    options?.buttons && options.buttons.length > 0
+      ? options.buttons
+      : [{ text: 'OK', style: 'default' as const }];
 
   const iconDetails = {
     success: { name: 'check-circle' as const, bg: 'bg-emerald-100', color: '#059669' },
@@ -67,7 +179,13 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
         animationType="fade"
         statusBarTranslucent
         presentationStyle="overFullScreen"
-        onRequestClose={hideAlert}
+        onRequestClose={() => {
+          if (confirmResolver.current) {
+            confirmResolver.current(false);
+            confirmResolver.current = null;
+          }
+          hideAlert();
+        }}
       >
         <View
           style={[
@@ -78,15 +196,15 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
           ]}
           className="items-center justify-center bg-black/45 p-5"
         >
-          {/* iOS Alert Card Container */}
-          <View className="w-full max-w-[310px] overflow-hidden rounded-[24px] bg-white/95 backdrop-blur-xl shadow-2xl border border-slate-100/50">
-            {/* Header Icon & Text Content */}
-            <View className="items-center px-6 pt-6 pb-5">
-              <View className={`mb-3 h-12 w-12 items-center justify-center rounded-2xl ${iconDetails.bg}`}>
+          <View className="w-full max-w-[310px] overflow-hidden rounded-[24px] border border-slate-100/50 bg-white/95 shadow-2xl backdrop-blur-xl">
+            <View className="items-center px-6 pb-5 pt-6">
+              <View
+                className={`mb-3 h-12 w-12 items-center justify-center rounded-2xl ${iconDetails.bg}`}
+              >
                 <Feather name={iconDetails.name} size={24} color={iconDetails.color} />
               </View>
 
-              <Text className="text-center text-[17px] font-bold tracking-tight text-slate-900 leading-6">
+              <Text className="text-center text-[17px] font-bold leading-6 tracking-tight text-slate-900">
                 {options?.title}
               </Text>
 
@@ -97,10 +215,8 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
               ) : null}
             </View>
 
-            {/* iOS Action Buttons Divider */}
             <View className="border-t border-slate-200/80" />
 
-            {/* iOS Action Buttons Container */}
             <View className={buttons.length === 2 ? 'flex-row' : 'flex-col'}>
               {buttons.map((btn, index) => {
                 const isDestructive = btn.style === 'destructive';
@@ -109,7 +225,7 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
 
                 return (
                   <Pressable
-                    key={index}
+                    key={`${btn.text}-${index}`}
                     accessibilityRole="button"
                     onPress={() => handleButtonPress(btn)}
                     className={`min-h-[48px] flex-1 items-center justify-center px-4 py-3 active:bg-slate-100/80 ${

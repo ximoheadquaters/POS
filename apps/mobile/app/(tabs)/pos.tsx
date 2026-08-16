@@ -1,27 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
-import {
-  Alert,
-  FlatList,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { FlatList, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { minorToMoney, moneyToMinor, type POSBarcodeItem } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
-import { useIosAlert } from '@/providers/ios-alert';
+import { useIosAlert, appAlert } from '@/providers/ios-alert';
 import { liveDataQueryOptions } from '@/lib/live-data';
 import {
-  comboCartLines,
+  cartComponentQuantities,
+  comboCartBundle,
+  comboIncludesLabel,
   comboSoldOut,
+  expandCartItemsForApi,
   type PosComboPromotion,
 } from '@/lib/combo-cart';
 import { evaluateCartPromotions, type PromotionRule } from '@/lib/promo-evaluator';
@@ -218,10 +210,12 @@ export default function PosScreen() {
           shiftId: activeShift?.id,
           customerId: useCartStore.getState().customerId,
           note: holdNote.trim() || undefined,
-          items: items.map((item) => ({
-            productId: item.product.id,
-            variantId: item.product.variantId ?? undefined,
+          items: expandCartItemsForApi(items).map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId ?? undefined,
             quantity: item.quantity,
+            ...(item.unitPrice ? { unitPrice: item.unitPrice } : {}),
+            ...(item.promoId ? { promoId: item.promoId } : {}),
           })),
         }),
       }),
@@ -370,16 +364,7 @@ export default function PosScreen() {
       (row) => row.kind === 'product' && row.product.categoryName === category,
     );
   }, [availableProducts, category, combos]);
-  const cartQuantities = useMemo(() => {
-    const quantities = new Map<string, number>();
-    for (const item of items) {
-      quantities.set(
-        item.product.id,
-        (quantities.get(item.product.id) ?? 0) + item.quantity * (item.product.unitsPerBase ?? 1),
-      );
-    }
-    return quantities;
-  }, [items]);
+  const cartQuantities = useMemo(() => cartComponentQuantities(items), [items]);
   const hasStockConflict = hasCartStockConflict(items);
   const scannerEnabled = currentUser?.modules.includes('barcode_scanner') ?? false;
   const customerDisplayEnabled = currentUser?.modules.includes('customer_display') ?? false;
@@ -498,14 +483,7 @@ export default function PosScreen() {
       });
       return;
     }
-    for (const line of comboCartLines(promo)) {
-      addQuantity(line.product, line.quantity);
-    }
-    showAlert({
-      title: 'Combo added',
-      message: `${promo.name} added at ${formatMoney(promo.comboPrice)}.`,
-      type: 'success',
-    });
+    addQuantity(comboCartBundle(promo), 1);
     focusInput();
   };
 
@@ -533,7 +511,7 @@ export default function PosScreen() {
 
       if (!exact) {
         if (currentUser?.permissions.includes('products:manage')) {
-          Alert.alert('New product', `Barcode ${barcode} is not in the catalogue. Add it now?`, [
+          appAlert('New product', `Barcode ${barcode} is not in the catalogue. Add it now?`, [
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Add product',
@@ -545,7 +523,7 @@ export default function PosScreen() {
             },
           ]);
         } else {
-          Alert.alert(
+          appAlert(
             'Product not found',
             'Ask an owner or manager to add this barcode before selling it.',
           );
@@ -553,7 +531,7 @@ export default function PosScreen() {
         return;
       }
       if (exact.status === 'inactive') {
-        Alert.alert('Product is inactive', 'Ask an owner or manager to reactivate this product.');
+        appAlert('Product is inactive', 'Ask an owner or manager to reactivate this product.');
         return;
       }
       if (
@@ -561,7 +539,7 @@ export default function PosScreen() {
         exact.availableQuantity !== undefined &&
         exact.availableQuantity <= 0
       ) {
-        Alert.alert(
+        appAlert(
           'Product is sold out',
           'Stock changed on another register. Refreshing products.',
         );
@@ -581,7 +559,7 @@ export default function PosScreen() {
         setDebounced('');
       }
     } catch (error) {
-      Alert.alert(
+      appAlert(
         'Could not scan product',
         error instanceof Error ? error.message : 'Please try again.',
       );
@@ -866,13 +844,24 @@ export default function PosScreen() {
                 </View>
               ) : (
                 items.map((item) => (
-                  <View key={cartProductKey(item.product)} className="rounded-xl bg-slate-50 p-3">
+                  <View key={cartProductKey(item.product)} className="rounded-2xl border border-slate-100 bg-white p-3.5">
                     <View className="flex-row">
                       <View className="flex-1 pr-2">
-                        <Text className="font-medium text-slate-900">{item.product.name}</Text>
-                        <Text className="mt-1 text-[10px] uppercase text-slate-400">
-                          {item.product.promoName
-                            ? `${item.product.promoName} · ${item.product.sku}`
+                        <View className="flex-row items-center gap-1.5">
+                          {item.product.isComboBundle ? (
+                            <View className="rounded-md bg-brand-50 px-1.5 py-0.5">
+                              <Text className="text-[9px] font-bold uppercase text-brand-800">Combo</Text>
+                            </View>
+                          ) : null}
+                          <Text className="flex-1 font-semibold text-slate-900" numberOfLines={2}>
+                            {item.product.isComboBundle
+                              ? item.product.promoName || item.product.name
+                              : item.product.name}
+                          </Text>
+                        </View>
+                        <Text className="mt-1 text-[11px] text-slate-500" numberOfLines={2}>
+                          {item.product.isComboBundle
+                            ? comboIncludesLabel(item.product.comboComponents)
                             : item.product.sku}
                         </Text>
                       </View>
@@ -890,7 +879,7 @@ export default function PosScreen() {
                             item.quantity - quantityStep(item.product),
                           )
                         }
-                        className="h-8 w-8 items-center justify-center rounded-full bg-white"
+                        className="h-8 w-8 items-center justify-center rounded-full bg-slate-100"
                       >
                         <Feather name="minus" size={15} color="#6B6158" />
                       </Pressable>
@@ -909,7 +898,7 @@ export default function PosScreen() {
                             item.quantity + quantityStep(item.product),
                           )
                         }
-                        className="h-8 w-8 items-center justify-center rounded-full bg-white"
+                        className="h-8 w-8 items-center justify-center rounded-full bg-slate-100"
                       >
                         <Feather name="plus" size={15} color="#1A593B" />
                       </Pressable>
@@ -948,52 +937,60 @@ export default function PosScreen() {
                 </Text>
               ) : null}
               {activeShift ? (
-                <View className="flex-row gap-2">
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open parked sales${heldCount ? `, ${heldCount} parked` : ''}`}
-                    onPress={() => router.push('/food/parked-sales')}
-                    className="min-h-11 flex-row items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 active:bg-amber-100"
-                  >
-                    <Feather name="pause-circle" size={16} color="#B45309" />
-                    <Text className="ml-1.5 text-xs font-bold text-amber-900">
-                      Parked{heldCount > 0 ? ` (${heldCount})` : ''}
-                    </Text>
-                  </Pressable>
-                  <View className="flex-1">
-                    <Button
-                      title="Continue to Payment  ›"
-                      disabled={!items.length || hasStockConflict}
-                      onPress={() => router.push('/payment')}
-                    />
+                <View className="gap-2">
+                  <Button
+                    title="Continue to Payment"
+                    disabled={!items.length || hasStockConflict}
+                    onPress={() => router.push('/payment')}
+                  />
+                  <View className="flex-row gap-2">
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open parked sales${heldCount ? `, ${heldCount} parked` : ''}`}
+                      onPress={() => router.push('/food/parked-sales')}
+                      className="min-h-11 flex-1 flex-row items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 active:bg-amber-100"
+                    >
+                      <Feather name="pause-circle" size={16} color="#B45309" />
+                      <Text className="ml-1.5 text-xs font-bold text-amber-900">
+                        Parked{heldCount > 0 ? ` (${heldCount})` : ''}
+                      </Text>
+                    </Pressable>
+                    {items.length ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Hold sale"
+                        disabled={holdMutation.isPending}
+                        onPress={() => setHoldModalVisible(true)}
+                        className={`min-h-11 flex-1 flex-row items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 ${
+                          holdMutation.isPending ? 'opacity-50' : 'active:bg-slate-100'
+                        }`}
+                      >
+                        <Feather name="archive" size={15} color="#475569" />
+                        <Text className="ml-1.5 text-xs font-semibold text-slate-700">
+                          {holdMutation.isPending ? 'Holding…' : 'Hold sale'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
               ) : (
                 <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
               )}
               {items.length ? (
-                <View className="mt-2 gap-2">
-                  <Button
-                    title={holdMutation.isPending ? 'Holding Sale…' : 'Hold Sale (Park Cart)'}
-                    variant="secondary"
-                    disabled={holdMutation.isPending}
-                    onPress={() => setHoldModalVisible(true)}
-                  />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear order"
-                    onPress={() => {
-                      clearCart();
-                      focusInput();
-                    }}
-                    className="min-h-10 items-center justify-center"
-                  >
-                    <View className="flex-row items-center gap-1">
-                      <Feather name="trash-2" size={13} color="#DC2626" />
-                      <Text className="text-xs font-medium text-red-600">Clear Order</Text>
-                    </View>
-                  </Pressable>
-                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear order"
+                  onPress={() => {
+                    clearCart();
+                    focusInput();
+                  }}
+                  className="mt-3 min-h-10 items-center justify-center"
+                >
+                  <View className="flex-row items-center gap-1">
+                    <Feather name="trash-2" size={13} color="#DC2626" />
+                    <Text className="text-xs font-medium text-red-600">Clear order</Text>
+                  </View>
+                </Pressable>
               ) : null}
             </View>
           </View>
@@ -1318,13 +1315,27 @@ export default function PosScreen() {
                     >
                       <View className="flex-row">
                         <View className="flex-1 pr-3">
-                          <Text className="font-medium text-slate-900">{item.product.name}</Text>
-                          <Text className="mt-1 text-xs text-slate-500">
-                            {formatMoney(item.product.sellingPrice)} per{' '}
-                            {item.product.unit ?? 'piece'}
+                          <View className="flex-row items-center gap-1.5">
+                            {item.product.isComboBundle ? (
+                              <View className="rounded-md bg-brand-50 px-1.5 py-0.5">
+                                <Text className="text-[9px] font-bold uppercase text-brand-800">
+                                  Combo
+                                </Text>
+                              </View>
+                            ) : null}
+                            <Text className="flex-1 font-medium text-slate-900" numberOfLines={2}>
+                              {item.product.isComboBundle
+                                ? item.product.promoName || item.product.name
+                                : item.product.name}
+                            </Text>
+                          </View>
+                          <Text className="mt-1 text-xs text-slate-500" numberOfLines={2}>
+                            {item.product.isComboBundle
+                              ? comboIncludesLabel(item.product.comboComponents)
+                              : `${formatMoney(item.product.sellingPrice)} per ${item.product.unit ?? 'piece'}`}
                           </Text>
-                          {hasPromo ? (
-                            <View className="mt-1 flex-row items-center gap-1 self-start rounded-md bg-emerald-50 px-1.5 py-0.5 border border-emerald-200">
+                          {hasPromo && !item.product.isComboBundle ? (
+                            <View className="mt-1 flex-row items-center gap-1 self-start rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
                               <Feather name="trending-up" size={10} color="#047857" />
                               <Text className="text-[10px] font-bold text-emerald-800">
                                 {activePromo?.name || 'Volume Discount Applied'}
@@ -1359,6 +1370,7 @@ export default function PosScreen() {
                           accessibilityRole="button"
                           accessibilityLabel={`Increase ${item.product.name}`}
                           disabled={
+                            !item.product.isComboBundle &&
                             item.product.availableQuantity !== null &&
                             item.product.availableQuantity !== undefined &&
                             item.quantity >= item.product.availableQuantity
@@ -1377,9 +1389,9 @@ export default function PosScreen() {
                           accessibilityRole="button"
                           accessibilityLabel={`Remove ${item.product.name}`}
                           onPress={() => setQuantity(cartProductKey(item.product), 0)}
-                          className="ml-auto min-h-10 justify-center px-2"
+                          className="ml-auto px-2 py-2"
                         >
-                          <Text className="text-sm font-medium text-red-700">Remove</Text>
+                          <Feather name="trash-2" size={16} color="#DC2626" />
                         </Pressable>
                       </View>
                     </View>
@@ -1394,7 +1406,7 @@ export default function PosScreen() {
                   <Text className="text-xs font-semibold text-slate-800">{formatMoney(posSubtotal)}</Text>
                 </View>
                 {activePromo ? (
-                  <View className="flex-row items-center justify-between rounded-xl bg-emerald-50 px-2.5 py-1.5 border border-emerald-200">
+                  <View className="flex-row items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5">
                     <View className="flex-row items-center gap-1.5">
                       <Feather name="trending-up" size={12} color="#047857" />
                       <Text className="text-xs font-bold text-emerald-900">{activePromo.name}</Text>

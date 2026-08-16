@@ -207,6 +207,24 @@ export function productsRouter(database: Database): Router {
           .enum(['true', 'false'])
           .optional()
           .transform((value) => value === 'true'),
+        status: z
+          .string()
+          .optional()
+          .transform((val, ctx) => {
+            if (!val) return undefined;
+            const parts = val.split(',').map((s) => s.trim()).filter(Boolean);
+            const valid = ['active', 'inactive', 'pending_receipt'];
+            for (const p of parts) {
+              if (!valid.includes(p)) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  message: `Invalid status filter value: ${p}`,
+                });
+                return z.NEVER;
+              }
+            }
+            return parts;
+          }),
         usage: z.enum(['pos', 'bom']).optional(),
         inventoryRole: z
           .string()
@@ -277,8 +295,8 @@ export function productsRouter(database: Database): Router {
         `select p.id,p.name,p.sku,p.unit,p.inventory_role as "inventoryRole",
           coalesce(p.preparation_behavior, 'standard') as "preparationBehavior",
           exists(select 1 from product_recipes pr where pr.parent_product_id=p.id and pr.organization_id=p.organization_id) as "hasRecipe",
-          pu.kind as "unitKind",
-          pu.default_step::float8 as "defaultStep",p.category_id as "categoryId",
+          coalesce(pu.kind, 'discrete') as "unitKind",
+          coalesce(pu.default_step, 1)::float8 as "defaultStep",p.category_id as "categoryId",
           p.brand_id as "brandId",p.track_inventory as "trackInventory",
           p.cost::text,p.selling_price::text as "sellingPrice",
           effective.cost::text as "averageCost",
@@ -321,7 +339,7 @@ export function productsRouter(database: Database): Router {
           ),'[]') as "sellingUnits",
           count(*) over()::int as total
          from products p
-         join product_units pu on pu.organization_id=p.organization_id and pu.code=p.unit
+         left join product_units pu on pu.organization_id=p.organization_id and pu.code=p.unit
          join organization_settings os on os.organization_id=p.organization_id
          left join branch_inventory costing_inventory
            on costing_inventory.organization_id=p.organization_id
@@ -357,7 +375,7 @@ export function productsRouter(database: Database): Router {
            p.name ilike '%'||$2||'%' or p.sku ilike '%'||$2||'%' or exists (
              select 1 from product_barcodes pb where pb.product_id=p.id and pb.barcode=$2
            ))
-          and ($9::text[] is null or p.inventory_role = any($9::text[]))
+          and ($9::text[] is null or coalesce(p.inventory_role, 'sellable') = any($9::text[]))
           and ($10::text[] is null or coalesce(p.preparation_behavior, 'standard') = any($10::text[]))
           and ($11::boolean is null or (
             ($11 = true and exists(select 1 from product_recipes pr where pr.parent_product_id=p.id and pr.organization_id=p.organization_id))
@@ -371,8 +389,8 @@ export function productsRouter(database: Database): Router {
           pageSize,
           offset,
           branchId ?? null,
-          includeIncoming,
-          includeInactive,
+          includeIncoming ?? false,
+          includeInactive ?? false,
           usage ?? null,
           inventoryRole ?? null,
           preparationBehavior ?? null,
@@ -401,15 +419,29 @@ export function productsRouter(database: Database): Router {
       sellable: number;
       ingredient: number;
       both: number;
+      enabled: number;
+      disabled: number;
     }>(
       `select count(*)::int as all,
-        count(*) filter (where inventory_role='sellable')::int as sellable,
+        count(*) filter (where coalesce(inventory_role, 'sellable')='sellable')::int as sellable,
         count(*) filter (where inventory_role='ingredient')::int as ingredient,
-        count(*) filter (where inventory_role='both')::int as both
+        count(*) filter (where inventory_role='both')::int as both,
+        count(*) filter (where status='active')::int as enabled,
+        count(*) filter (where status='inactive')::int as disabled
        from products where organization_id=$1 and branch_id=$2`,
       [request.authUser!.organization.id, branchId],
     );
-    sendData(response, result.rows[0] ?? { all: 0, sellable: 0, ingredient: 0, both: 0 });
+    sendData(
+      response,
+      result.rows[0] ?? {
+        all: 0,
+        sellable: 0,
+        ingredient: 0,
+        both: 0,
+        enabled: 0,
+        disabled: 0,
+      },
+    );
     },
   );
   router.post(
@@ -644,6 +676,24 @@ export function productsRouter(database: Database): Router {
     if (!result.rows[0]) throw notFound('Product');
     sendData(response, result.rows[0]);
   });
+  router.post(
+    '/:id/status',
+    requirePermission('products:manage'),
+    validateBody(z.object({ status: z.enum(['active', 'inactive']) })),
+    async (request, response) => {
+      const id = uuidSchema.parse(request.params.id);
+      const status = request.body.status as 'active' | 'inactive';
+      const organizationId = request.authUser!.organization.id;
+      const result = await database.query(
+        `update products set status=$3
+         where id=$1 and organization_id=$2 and branch_id=any($4::uuid[])
+         returning id,name,sku,unit,status,inventory_role as "inventoryRole"`,
+        [id, organizationId, status, request.authUser!.branches.map((branch) => branch.id)],
+      );
+      if (!result.rows[0]) throw notFound('Product');
+      sendData(response, result.rows[0]);
+    },
+  );
   router.patch(
     '/:id',
     requirePermission('products:manage'),
@@ -663,7 +713,33 @@ export function productsRouter(database: Database): Router {
       const input = { ...existing.rows[0], ...request.body };
       // Barcode omission means "leave unchanged"; null means "remove it".
       const barcodeWasProvided = Object.prototype.hasOwnProperty.call(request.body, 'barcode');
+      const statusOnlyUpdate =
+        Object.keys(request.body).length > 0 &&
+        Object.keys(request.body).every((key) => key === 'status');
       const updated = await database.transaction(async (tx) => {
+        if (statusOnlyUpdate) {
+          const row = await tx.query(
+            `update products set status=$3
+             where id=$1 and organization_id=$2
+             returning id,name,sku,unit,inventory_role as "inventoryRole",
+               track_inventory as "trackInventory",
+               cost::text,selling_price::text as "sellingPrice",status`,
+            [id, organizationId, request.body.status],
+          );
+          await tx.query(
+            `insert into audit_logs (
+              organization_id,actor_id,action,entity_type,entity_id,before_data,after_data
+             ) values ($1,$2,'product.updated','product',$3,$4::jsonb,$5::jsonb)`,
+            [
+              organizationId,
+              request.authUser!.id,
+              id,
+              JSON.stringify({ status: existing.rows[0].status }),
+              JSON.stringify({ status: request.body.status }),
+            ],
+          );
+          return row.rows[0];
+        }
         await validateProductMasters(tx, organizationId, existing.rows[0].branch_id, input);
         const row = await tx.query(
           `update products set category_id=$3,brand_id=$4,name=$5,sku=$6,unit=$7,

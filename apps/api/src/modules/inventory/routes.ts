@@ -25,17 +25,23 @@ export function inventoryRouter(database: Database): Router {
         branchId: stockAdjustmentSchema.shape.branchId,
         inventoryRole: z.enum(['sellable', 'ingredient', 'both']).optional(),
         sort: z.enum(['name', 'quantity_asc', 'quantity_desc']).optional(),
+        activeOnly: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((value) => value === 'true'),
       }),
     ),
     async (request, response) => {
-      const { branchId, page, pageSize, search, inventoryRole, sort } = request.query as unknown as {
-        branchId: string;
-        page: number;
-        pageSize: number;
-        search?: string;
-        inventoryRole?: 'sellable' | 'ingredient' | 'both';
-        sort?: 'name' | 'quantity_asc' | 'quantity_desc';
-      };
+      const { branchId, page, pageSize, search, inventoryRole, sort, activeOnly } =
+        request.query as unknown as {
+          branchId: string;
+          page: number;
+          pageSize: number;
+          search?: string;
+          inventoryRole?: 'sellable' | 'ingredient' | 'both';
+          sort?: 'name' | 'quantity_asc' | 'quantity_desc';
+          activeOnly?: boolean;
+        };
       // Whitelist only — never interpolate raw query input into ORDER BY.
       const orderBy =
         sort === 'quantity_asc'
@@ -72,6 +78,7 @@ export function inventoryRouter(database: Database): Router {
          where bi.organization_id=$1 and bi.branch_id=$2 and p.track_inventory
            and ($3::text is null or p.name ilike '%'||$3||'%' or p.sku ilike '%'||$3||'%')
            and ($6::text is null or coalesce(p.inventory_role, 'sellable') = $6)
+           and ($7::boolean is not true or p.status = 'active')
          order by ${orderBy}
          limit $4 offset $5`,
         [
@@ -81,6 +88,7 @@ export function inventoryRouter(database: Database): Router {
           pageSize,
           (page - 1) * pageSize,
           inventoryRole ?? null,
+          activeOnly ?? false,
         ],
       );
       const total = result.rows[0]?.total ?? 0;

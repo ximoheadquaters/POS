@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
@@ -99,7 +100,7 @@ function StockTransfersContent() {
         }),
       }),
     onSuccess: async () => {
-      Alert.alert('Transfer dispatched', 'Stock transfer created and marked in transit.');
+      appAlert('Transfer dispatched', 'Stock transfer created and marked in transit.');
       setModalVisible(false);
       setSelectedItems([]);
       setNotes('');
@@ -107,29 +108,29 @@ function StockTransfersContent() {
       await client.invalidateQueries({ queryKey: ['stock-transfers'] });
       await client.invalidateQueries({ queryKey: ['inventory'] });
     },
-    onError: (error) => Alert.alert('Transfer failed', error.message),
+    onError: (error) => appAlert('Transfer failed', error.message),
   });
 
   const receiveMutation = useMutation({
     mutationFn: (transferId: string) =>
       api(`/stock-transfers/${transferId}/receive`, { method: 'POST' }),
     onSuccess: async () => {
-      Alert.alert('Transfer received', 'Stock has been added to destination branch inventory.');
+      appAlert('Transfer received', 'Stock has been added to destination branch inventory.');
       await client.invalidateQueries({ queryKey: ['stock-transfers'] });
       await client.invalidateQueries({ queryKey: ['inventory'] });
     },
-    onError: (error) => Alert.alert('Failed to receive transfer', error.message),
+    onError: (error) => appAlert('Failed to receive transfer', error.message),
   });
 
   const cancelMutation = useMutation({
     mutationFn: (transferId: string) =>
       api(`/stock-transfers/${transferId}/cancel`, { method: 'POST' }),
     onSuccess: async () => {
-      Alert.alert('Transfer cancelled', 'Stock has been returned to sender branch.');
+      appAlert('Transfer cancelled', 'Stock has been returned to sender branch.');
       await client.invalidateQueries({ queryKey: ['stock-transfers'] });
       await client.invalidateQueries({ queryKey: ['inventory'] });
     },
-    onError: (error) => Alert.alert('Failed to cancel transfer', error.message),
+    onError: (error) => appAlert('Failed to cancel transfer', error.message),
   });
 
   const transfers = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
@@ -201,7 +202,7 @@ function StockTransfersContent() {
             title="+ New Transfer"
             onPress={() => {
               if (otherBranches.length === 0) {
-                Alert.alert('Multi-branch required', 'You need at least 2 active branches to transfer stock.');
+                appAlert('Multi-branch required', 'You need at least 2 active branches to transfer stock.');
                 return;
               }
               setToBranchId(otherBranches[0]?.id ?? '');
@@ -304,7 +305,7 @@ function StockTransfersContent() {
                   <Pressable
                     disabled={receiveMutation.isPending}
                     onPress={() =>
-                      Alert.alert(
+                      appAlert(
                         'Receive transfer?',
                         `Receive stock items from ${item.fromBranchName} into ${item.toBranchName}?`,
                         [
@@ -324,7 +325,7 @@ function StockTransfersContent() {
                   <Pressable
                     disabled={cancelMutation.isPending}
                     onPress={() =>
-                      Alert.alert(
+                      appAlert(
                         'Cancel transfer?',
                         'Stock items will be restored to the sender branch.',
                         [

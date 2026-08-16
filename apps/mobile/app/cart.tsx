@@ -11,6 +11,7 @@ import { useIosAlert } from '@/providers/ios-alert';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
 import { evaluateCartPromotions, type PromotionRule } from '@/lib/promo-evaluator';
+import { comboIncludesLabel, expandCartItemsForApi } from '@/lib/combo-cart';
 import {
   cartLineTotal,
   cartProductKey,
@@ -77,10 +78,12 @@ export default function CartScreen() {
           shiftId: activeShift?.id,
           customerId: useCartStore.getState().customerId,
           note: holdNote.trim() || undefined,
-          items: items.map((item) => ({
-            productId: item.product.id,
-            variantId: item.product.variantId ?? undefined,
+          items: expandCartItemsForApi(items).map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId ?? undefined,
             quantity: item.quantity,
+            ...(item.unitPrice ? { unitPrice: item.unitPrice } : {}),
+            ...(item.promoId ? { promoId: item.promoId } : {}),
           })),
         }),
       }),
@@ -109,7 +112,7 @@ export default function CartScreen() {
     <Screen>
       <Header
         title="Cart"
-        subtitle={`${items.length} products`}
+        subtitle={`${items.reduce((sum, item) => sum + item.quantity, 0)} items`}
         showBack
         backLabel="Shop"
         fallbackHref="/(tabs)/pos"
@@ -127,19 +130,33 @@ export default function CartScreen() {
             <View className="rounded-2xl border border-slate-100 bg-white p-4">
               <View className="flex-row">
                 <View className="flex-1">
-                  <Text className="font-bold text-slate-900">{item.product.name}</Text>
-                  <Text className="mt-1 text-slate-500">
-                    {formatMoney(item.product.sellingPrice)} per {item.product.unit ?? 'piece'}
+                  <View className="flex-row items-center gap-1.5">
+                    {item.product.isComboBundle ? (
+                      <View className="rounded-md bg-brand-50 px-1.5 py-0.5">
+                        <Text className="text-[9px] font-bold uppercase text-brand-800">Combo</Text>
+                      </View>
+                    ) : null}
+                    <Text className="flex-1 font-bold text-slate-900" numberOfLines={2}>
+                      {item.product.isComboBundle
+                        ? item.product.promoName || item.product.name
+                        : item.product.name}
+                    </Text>
+                  </View>
+                  <Text className="mt-1 text-slate-500" numberOfLines={2}>
+                    {item.product.isComboBundle
+                      ? comboIncludesLabel(item.product.comboComponents)
+                      : `${formatMoney(item.product.sellingPrice)} per ${item.product.unit ?? 'piece'}`}
                   </Text>
-                  {hasPromo ? (
-                    <View className="mt-1.5 flex-row items-center gap-1 self-start rounded-md bg-emerald-50 px-2 py-0.5 border border-emerald-200">
+                  {hasPromo && !item.product.isComboBundle ? (
+                    <View className="mt-1.5 flex-row items-center gap-1 self-start rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5">
                       <Feather name="trending-up" size={11} color="#047857" />
                       <Text className="text-[11px] font-bold text-emerald-800">
                         {activePromo?.name || 'Volume Discount Applied'}
                       </Text>
                     </View>
                   ) : null}
-                  {item.product.availableQuantity !== null &&
+                  {!item.product.isComboBundle &&
+                  item.product.availableQuantity !== null &&
                   item.product.availableQuantity !== undefined ? (
                     <Text
                       className={`mt-1 text-xs font-bold ${
@@ -178,16 +195,19 @@ export default function CartScreen() {
                   accessibilityLabel={`Increase ${item.product.name} quantity`}
                   accessibilityState={{
                     disabled:
+                      !item.product.isComboBundle &&
                       item.product.availableQuantity !== null &&
                       item.product.availableQuantity !== undefined &&
                       item.quantity >= item.product.availableQuantity,
                   }}
                   disabled={
+                    !item.product.isComboBundle &&
                     item.product.availableQuantity !== null &&
                     item.product.availableQuantity !== undefined &&
                     item.quantity >= item.product.availableQuantity
                   }
                   className={`h-12 w-12 items-center justify-center rounded-xl bg-brand-100 ${
+                    !item.product.isComboBundle &&
                     item.product.availableQuantity !== null &&
                     item.product.availableQuantity !== undefined &&
                     item.quantity >= item.product.availableQuantity

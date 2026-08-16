@@ -2,7 +2,7 @@ import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { convertRecipeQuantity } from '@ximo/shared';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';

@@ -41,6 +41,30 @@ describe('browser receipt formatter', () => {
     expect(html).toContain('@page { size: 80mm auto;');
   });
 
+  it('renders a full-page receipt and respects optional receipt content', () => {
+    const html = buildReceiptHtml({
+      saleId: 'sale-1',
+      receiptNumber: 'BCD-0003',
+      paperSize: 'full_page',
+      businessName: 'Ximo Store',
+      branchAddress: 'Hidden address',
+      cashierName: 'Hidden cashier',
+      taxTotal: '12.00',
+      includeBranchAddress: false,
+      includeCashierName: false,
+      includeTaxBreakdown: false,
+      includeFooter: false,
+      total: '112.00',
+      changeDue: '0.00',
+    });
+
+    expect(html).toContain('@page { size: auto;');
+    expect(html).not.toContain('Hidden address');
+    expect(html).not.toContain('Hidden cashier');
+    expect(html).not.toContain('<span>Tax</span>');
+    expect(html).not.toContain('Thank you!');
+  });
+
   it('escapes receipt data before adding it to printable HTML', () => {
     const html = buildReceiptHtml({
       saleId: 'sale-1',

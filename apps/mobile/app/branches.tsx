@@ -1,15 +1,6 @@
 import { useMemo, useState } from 'react';
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  Switch,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { Controller, useForm } from 'react-hook-form';
@@ -58,11 +49,17 @@ function BranchesContent() {
   const selectBranch = useBranchStore((state) => state.select);
   const client = useQueryClient();
   const canManage = currentUser?.permissions?.includes('branches:manage') ?? false;
+  const canManageRegisters =
+    Boolean(currentUser?.permissions?.includes('registers:manage')) ||
+    ['owner', 'administrator', 'manager'].includes(currentUser?.role ?? '');
   const canViewUsers = currentUser?.permissions?.includes('users:read') ?? false;
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [editing, setEditing] = useState<BranchRecord | null>(null);
   const [formVisible, setFormVisible] = useState(false);
+  const [counterBranch, setCounterBranch] = useState<BranchRecord | null>(null);
+  const [counterName, setCounterName] = useState('');
+  const [counterCode, setCounterCode] = useState('');
   const form = useForm<z.input<typeof branchSchema>, unknown, BranchInput>({
     resolver: zodResolver(branchSchema),
     defaultValues: defaults,
@@ -70,6 +67,33 @@ function BranchesContent() {
   const query = useQuery({
     queryKey: ['branches', 'management'],
     queryFn: () => api<BranchRecord[]>('/branches'),
+  });
+
+  const addCounter = useMutation({
+    mutationFn: async () => {
+      if (!counterBranch) return;
+      const code = (
+        counterCode.trim() || `CTR-${(counterBranch.registerCount ?? 0) + 1}`
+      ).toUpperCase();
+      return api('/registers', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: counterBranch.id,
+          name: counterName.trim(),
+          code,
+        }),
+      });
+    },
+    onSuccess: () => {
+      const branchName = counterBranch?.name;
+      setCounterBranch(null);
+      setCounterName('');
+      setCounterCode('');
+      void client.invalidateQueries({ queryKey: ['branches'] });
+      void client.invalidateQueries({ queryKey: ['registers'] });
+      appAlert('Counter added', `Cashier counter has been added to ${branchName ?? 'the branch'}.`);
+    },
+    onError: (error) => appAlert('Could not add counter', error.message),
   });
 
   function openCreate() {
@@ -121,10 +145,10 @@ function BranchesContent() {
         client.invalidateQueries({ queryKey: ['organization', 'current'] }),
         refreshBranchContext(branch),
       ]);
-      Alert.alert(editing ? 'Branch updated' : 'Branch created', `${branch.name} is ready.`);
+      appAlert(editing ? 'Branch updated' : 'Branch created', `${branch.name} is ready.`);
       setEditing(null);
     },
-    onError: (error) => Alert.alert('Could not save branch', error.message),
+    onError: (error) => appAlert('Could not save branch', error.message),
   });
 
   const toggle = useMutation({
@@ -140,7 +164,7 @@ function BranchesContent() {
         refreshBranchContext(branch),
       ]);
     },
-    onError: (error) => Alert.alert('Could not update branch', error.message),
+    onError: (error) => appAlert('Could not update branch', error.message),
   });
 
   function confirmToggle(branch: BranchRecord) {
@@ -148,7 +172,7 @@ function BranchesContent() {
       toggle.mutate(branch);
       return;
     }
-    Alert.alert(
+    appAlert(
       `Deactivate ${branch.name}?`,
       (branch.openShiftCount ?? 0) > 0
         ? 'This branch still has an open cashier shift. Close it before deactivating the branch.'
@@ -325,22 +349,44 @@ function BranchesContent() {
                           ) : null}
                         </View>
                       </View>
-                      {canManage ? (
-                        <View className="flex-row items-center gap-3">
-                          <Pressable
-                            onPress={() => openEdit(branch)}
-                            className="min-h-10 flex-row items-center justify-center rounded-xl border border-slate-200 px-4"
-                          >
-                            <Feather name="edit-2" size={14} color="#1A593B" />
-                            <Text className="ml-2 text-xs font-medium text-brand-700">Edit</Text>
-                          </Pressable>
-                          <Switch
-                            value={branch.isActive}
-                            disabled={toggle.isPending}
-                            onValueChange={() => confirmToggle(branch)}
-                            trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
-                            thumbColor={branch.isActive ? '#1A593B' : '#FFFFFF'}
-                          />
+                      {canManage || canManageRegisters ? (
+                        <View className="flex-row flex-wrap items-center gap-2">
+                          {canManageRegisters ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Add counter to ${branch.name}`}
+                              onPress={() => {
+                                setCounterBranch(branch);
+                                const nextNum = (branch.registerCount ?? 0) + 1;
+                                setCounterName(`Counter ${nextNum}`);
+                                setCounterCode(`CTR-${nextNum}`);
+                              }}
+                              className="min-h-10 flex-row items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-3 active:bg-brand-100"
+                            >
+                              <Feather name="plus-circle" size={14} color="#1A593B" />
+                              <Text className="ml-1.5 text-xs font-semibold text-brand-800">
+                                + Counter
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                          {canManage ? (
+                            <>
+                              <Pressable
+                                onPress={() => openEdit(branch)}
+                                className="min-h-10 flex-row items-center justify-center rounded-xl border border-slate-200 px-3 active:bg-slate-50"
+                              >
+                                <Feather name="edit-2" size={14} color="#1A593B" />
+                                <Text className="ml-1.5 text-xs font-medium text-brand-700">Edit</Text>
+                              </Pressable>
+                              <Switch
+                                value={branch.isActive}
+                                disabled={toggle.isPending}
+                                onValueChange={() => confirmToggle(branch)}
+                                trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
+                                thumbColor={branch.isActive ? '#1A593B' : '#FFFFFF'}
+                              />
+                            </>
+                          ) : null}
                         </View>
                       ) : null}
                     </View>
@@ -507,6 +553,77 @@ function BranchesContent() {
                 </View>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(counterBranch)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!addCounter.isPending) setCounterBranch(null);
+        }}
+      >
+        <View className="flex-1 items-center justify-center bg-black/40 p-5">
+          <View className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl gap-4">
+            <View className="flex-row items-start justify-between">
+              <View className="mr-4 flex-1">
+                <Text className="text-lg font-semibold text-slate-950">Add Cashier Counter</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                  Create a new cash register / counter for {counterBranch?.name}.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close modal"
+                disabled={addCounter.isPending}
+                onPress={() => setCounterBranch(null)}
+                className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
+              >
+                <Feather name="x" size={20} color="#475569" />
+              </Pressable>
+            </View>
+
+            <Field
+              label="Counter Name"
+              value={counterName}
+              onChangeText={setCounterName}
+              placeholder="e.g. Counter 2 or Express Counter"
+            />
+
+            <Field
+              label="Counter Code"
+              value={counterCode}
+              onChangeText={(val) => setCounterCode(val.toUpperCase())}
+              placeholder="e.g. CTR-02"
+              autoCapitalize="characters"
+            />
+
+            <View className="flex-row gap-3 pt-2">
+              <Pressable
+                accessibilityRole="button"
+                disabled={addCounter.isPending}
+                onPress={() => setCounterBranch(null)}
+                className="min-h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white"
+              >
+                <Text className="font-medium text-slate-700">Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={addCounter.isPending || counterName.trim().length < 2}
+                onPress={() => addCounter.mutate()}
+                className={`min-h-12 flex-[2] items-center justify-center rounded-xl bg-brand-700 ${
+                  addCounter.isPending || counterName.trim().length < 2
+                    ? 'opacity-50'
+                    : 'active:opacity-80'
+                }`}
+              >
+                <Text className="font-medium text-white">
+                  {addCounter.isPending ? 'Adding…' : 'Add Counter'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>

@@ -30,6 +30,24 @@ export function pluralizeUnit(quantity: number, unit: string): string {
   return norm;
 }
 
+/** Formats the quantity+base unit portion, e.g. `25g` or `12 pieces`. */
+export function formatVariantQuantityLabel(quantity: number | string, baseUnit: string): string {
+  const qty = String(quantity).trim();
+  const unit = pluralizeUnit(Number(quantity) || 0, baseUnit);
+  if (/^(g|kg|ml|l|m)$/i.test(unit)) return `${qty}${unit.toLowerCase()}`;
+  return `${qty} ${unit}`;
+}
+
+/** Auto name for a package variant, e.g. `PACK of 25g`. */
+export function formatVariantAutoName(
+  packageUnit: string,
+  quantity: number | string,
+  baseUnit: string,
+): string {
+  const pkg = (packageUnit || 'pack').trim().toUpperCase() || 'PACK';
+  return `${pkg} of ${formatVariantQuantityLabel(quantity, baseUnit)}`;
+}
+
 export function formatUnitDeductionExplanation(
   alternateUnitName: string,
   unitsPerBase: number,

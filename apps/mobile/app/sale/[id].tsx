@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { Alert, Platform, ScrollView, Text, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { Platform, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -115,7 +116,7 @@ function SaleDetailsContent() {
                 if (Platform.OS === 'web' || typeof window !== 'undefined') {
                   router.push(`/return/${sale.id}`);
                 } else {
-                  Alert.alert('Start return?', 'The original sale will be preserved.', [
+                  appAlert('Start return?', 'The original sale will be preserved.', [
                     { text: 'Cancel', style: 'cancel' },
                     { text: 'Continue', onPress: () => router.push(`/return/${sale.id}`) },
                   ]);

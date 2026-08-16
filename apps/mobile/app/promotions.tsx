@@ -46,6 +46,7 @@ interface InventoryLookupRow {
   productId: string;
   name: string;
   sku: string;
+  inventoryRole?: 'sellable' | 'ingredient' | 'both';
 }
 
 type PromoType = PromotionSummary['type'];
@@ -249,6 +250,7 @@ function PromotionsContent() {
         page: '1',
         pageSize: '50',
         sort: 'name',
+        activeOnly: 'true',
       });
       if (debouncedProductSearch) params.set('search', debouncedProductSearch);
 
@@ -258,6 +260,7 @@ function PromotionsContent() {
         const fromInventory: ProductItem[] = [];
         for (const row of inventoryRows) {
           if (!row.productId || seen.has(row.productId)) continue;
+          if (row.inventoryRole === 'ingredient') continue;
           seen.add(row.productId);
           fromInventory.push({ id: row.productId, name: row.name, sku: row.sku });
         }
@@ -270,6 +273,8 @@ function PromotionsContent() {
         branchId: branch.id,
         page: '1',
         pageSize: '50',
+        status: 'active',
+        inventoryRole: 'sellable,both',
       });
       if (debouncedProductSearch) productParams.set('search', debouncedProductSearch);
       return api<ProductItem[]>(`/products?${productParams.toString()}`);

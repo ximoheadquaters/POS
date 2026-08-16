@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  checkoutSchema,
   createProductSchema,
   organizationProfileSchema,
   organizationSettingsSchema,
@@ -283,5 +284,32 @@ describe('supplier payable schemas', () => {
         reference: 'Supplier receipt 778',
       }),
     ).toMatchObject({ amount: '45.50' });
+  });
+});
+
+describe('checkoutSchema', () => {
+  it('keeps combo unitPrice on cart items (must not be stripped by Zod)', () => {
+    const parsed = checkoutSchema.parse({
+      branchId: '22222222-2222-4222-8222-222222222222',
+      registerId: '33333333-3333-4333-8333-333333333333',
+      shiftId: '44444444-4444-4444-8444-444444444444',
+      items: [
+        {
+          productId: '55555555-5555-4555-8555-555555555555',
+          quantity: 1,
+          unitPrice: '20.00',
+          promoId: '66666666-6666-4666-8666-666666666666',
+        },
+        {
+          productId: '77777777-7777-4777-8777-777777777777',
+          quantity: 1,
+          unitPrice: '20.00',
+        },
+      ],
+      payments: [{ method: 'cash', amount: '40.00', tendered: '40.00' }],
+    });
+    expect(parsed.items[0]?.unitPrice).toBe('20.00');
+    expect(parsed.items[0]?.promoId).toBe('66666666-6666-4666-8666-666666666666');
+    expect(parsed.items[1]?.unitPrice).toBe('20.00');
   });
 });

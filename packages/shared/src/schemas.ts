@@ -428,6 +428,19 @@ export const paymentSchema = z.object({
   tendered: moneyStringSchema.optional(),
 });
 
+export const createRegisterSchema = z.object({
+  branchId: uuidSchema,
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(120),
+  code: z
+    .string()
+    .trim()
+    .min(2, 'Code must be at least 2 characters')
+    .max(24)
+    .regex(/^[A-Z0-9_-]+$/, 'Code can only contain uppercase letters, numbers, hyphens, and underscores'),
+});
+
+export type CreateRegisterInput = z.infer<typeof createRegisterSchema>;
+
 export const checkoutSchema = z.object({
   branchId: uuidSchema,
   registerId: uuidSchema,

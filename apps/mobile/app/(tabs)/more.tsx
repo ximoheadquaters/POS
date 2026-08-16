@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
@@ -10,7 +10,7 @@ import Feather from '@expo/vector-icons/Feather';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
-import { useIosAlert } from '@/providers/ios-alert';
+import { useIosAlert, appAlert } from '@/providers/ios-alert';
 
 const links: Array<{
   title: string;
@@ -189,7 +189,7 @@ export default function MoreScreen() {
                 accessibilityRole="button"
                 onPress={() => {
                   if (shift) {
-                    Alert.alert(
+                    appAlert(
                       'Close your shift first',
                       'Finish and close the active register shift before changing branches.',
                     );
@@ -225,8 +225,8 @@ export default function MoreScreen() {
               onPress={() => {
                 setRefreshingAccess(true);
                 void refreshUser()
-                  .then(() => Alert.alert('Access refreshed', 'Module changes are now applied.'))
-                  .catch((error) => Alert.alert('Could not refresh access', error.message))
+                  .then(() => appAlert('Access refreshed', 'Module changes are now applied.'))
+                  .catch((error) => appAlert('Could not refresh access', error.message))
                   .finally(() => setRefreshingAccess(false));
               }}
             />
@@ -234,7 +234,7 @@ export default function MoreScreen() {
               title="Sign out"
               variant="secondary"
               onPress={() =>
-                Alert.alert('Sign out?', 'You will need your password to sign in again.', [
+                appAlert('Sign out?', 'You will need your password to sign in again.', [
                   { text: 'Cancel', style: 'cancel' },
                   {
                     text: 'Sign out',

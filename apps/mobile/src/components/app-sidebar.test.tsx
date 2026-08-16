@@ -20,7 +20,7 @@ describe('Retail Navigation and Storyboard UX — 26 Focused Tests', () => {
     ]);
   });
 
-  it('3. Stock Overview is in INVENTORY, not under Product Catalog', () => {
+  it('3. Stock Overview is in INVENTORY, not under Product Catalogue', () => {
     const user = { businessProfile: 'retail' as const };
     const sections = filterSectionsByProfile(user);
     const catalog = sections.find((s: SidebarSectionDef) => s.sectionTitle === 'CATALOG');
@@ -33,7 +33,7 @@ describe('Retail Navigation and Storyboard UX — 26 Focused Tests', () => {
     expect(inventorySubItems.some((item) => item.title === 'Stock Overview')).toBe(true);
   });
 
-  it('4. Stock Adjustments is in INVENTORY, not under Product Catalog', () => {
+  it('4. Stock Adjustments is in INVENTORY, not under Product Catalogue', () => {
     const user = { businessProfile: 'retail' as const };
     const sections = filterSectionsByProfile(user);
     const catalog = sections.find((s: SidebarSectionDef) => s.sectionTitle === 'CATALOG');
@@ -244,7 +244,7 @@ describe('Retail Navigation and Storyboard UX — 26 Focused Tests', () => {
   });
 
   it('27. isPathActive highlights only the exact active item without overlapping /product-variants with /products', () => {
-    // When on Selling Units & Barcodes (/product-variants)
+    // When on Variants (/product-variants)
     expect(isPathActive('/product-variants', '/product-variants')).toBe(true);
     expect(isPathActive('/product-variants', '/products')).toBe(false);
     expect(isPathActive('/product-variants', '/catalogue')).toBe(false);

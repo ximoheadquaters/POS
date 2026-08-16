@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -53,9 +54,9 @@ function RoleDetailContent() {
         queryClient.invalidateQueries({ queryKey: ['access-matrix'] }),
         queryClient.invalidateQueries({ queryKey: ['users'] }),
       ]);
-      Alert.alert('Permissions updated', 'Users with this role will receive the new access rules.');
+      appAlert('Permissions updated', 'Users with this role will receive the new access rules.');
     },
-    onError: (error) => Alert.alert('Could not update permissions', error.message),
+    onError: (error) => appAlert('Could not update permissions', error.message),
   });
 
   if (query.isLoading) {

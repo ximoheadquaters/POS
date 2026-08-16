@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { appAlert, confirmAppAction } from '@/providers/ios-alert';
+import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -141,7 +142,7 @@ function OrganizationContent() {
       if (Platform.OS !== 'web') {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Photo access needed', 'Allow photo access to choose an organization logo.');
+          appAlert('Photo access needed', 'Allow photo access to choose an organization logo.');
           return;
         }
       }
@@ -163,7 +164,7 @@ function OrganizationContent() {
       setLogoRemoved(false);
       setLogoPreview(dataUrl);
     } catch (error) {
-      Alert.alert(
+      appAlert(
         'Could not select logo',
         error instanceof Error ? error.message : 'The selected image could not be processed.',
       );
@@ -218,18 +219,10 @@ function OrganizationContent() {
         queryClient.invalidateQueries({ queryKey: ['settings'] }),
         refreshUser(),
       ]);
-      if (Platform.OS === 'web') {
-        window.alert('Organization updated successfully! Your navigation and session have been refreshed.');
-      } else {
-        Alert.alert('Organization updated', 'The business identity is now updated for every branch.');
-      }
+      appAlert('Organization updated', 'The business identity is now updated for every branch.');
     },
     onError: (error) => {
-      if (Platform.OS === 'web') {
-        window.alert(`Could not update organization: ${error.message}`);
-      } else {
-        Alert.alert('Could not update organization', error.message);
-      }
+      appAlert('Could not update organization', error.message);
     },
   });
   const enabledModules = Array.isArray(query.data?.enabledModules)
@@ -489,7 +482,7 @@ function OrganizationContent() {
                     title={save.isPending ? 'Saving…' : 'Save organization'}
                     disabled={save.isPending || pickingLogo}
                     onPress={form.handleSubmit(
-                      (value) => {
+                      async (value) => {
                         const isChangingProfile =
                           query.data?.businessProfile &&
                           (query.data as any).businessProfile !== value.businessProfile;
@@ -501,26 +494,22 @@ function OrganizationContent() {
                                 ? 'Retail + Food Service'
                                 : 'Retail';
                           const confirmMsg = `Are you sure you want to change your Business Profile to ${targetLabel}?\n\nThis will update your sidebar navigation tabs to show ${targetLabel} features. All existing products and sales will remain 100% safe.`;
-                          if (Platform.OS === 'web') {
-                            if (!window.confirm(confirmMsg)) return;
-                            save.mutate(value);
-                          } else {
-                            Alert.alert('Change Business Profile?', confirmMsg, [
-                              { text: 'Cancel', style: 'cancel' },
-                              { text: 'Confirm & Save', onPress: () => save.mutate(value) },
-                            ]);
-                          }
-                        } else {
-                          save.mutate(value);
+                          const confirmed = await confirmAppAction(
+                            'Change Business Profile?',
+                            confirmMsg,
+                            'Confirm & Save',
+                          );
+                          if (!confirmed) return;
                         }
+                        save.mutate(value);
                       },
                       (errors) => {
                         console.error('Organization validation errors:', errors);
-                        if (Platform.OS === 'web') {
-                          const firstErrKey = Object.keys(errors)[0];
-                          const firstErrMsg = firstErrKey ? (errors as any)[firstErrKey]?.message : 'Please check required fields';
-                          window.alert(`Validation error: ${firstErrMsg}`);
-                        }
+                        const firstErrKey = Object.keys(errors)[0];
+                        const firstErrMsg = firstErrKey
+                          ? (errors as any)[firstErrKey]?.message
+                          : 'Please check required fields';
+                        appAlert('Validation error', String(firstErrMsg || 'Please check required fields'));
                       },
                     )}
                   />

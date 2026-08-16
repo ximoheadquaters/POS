@@ -6,6 +6,7 @@ import {
   moduleCodeSchema,
   paginationSchema,
   uuidSchema,
+  type ModuleCode,
 } from '@ximo/shared';
 import { z } from 'zod';
 import type { AuthActions } from '../../auth/types.js';
@@ -21,7 +22,10 @@ import {
   provisionOrganizationRequestSchema,
 } from '../../platform/provisioning-service.js';
 import { OwnerInvitationService } from '../../platform/owner-invitation-service.js';
-import { EntitlementService } from '../../services/entitlement-service.js';
+import {
+  EntitlementService,
+  expandRequiredDependencies,
+} from '../../services/entitlement-service.js';
 import { badRequest, notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
 
@@ -98,19 +102,32 @@ async function ensureOrganization(database: Queryable, organizationId: string) {
   if (!organization.rows[0]) throw notFound('Organization');
 }
 
-async function moduleStatus(database: Queryable, organizationId: string, moduleCode?: string) {
+async function moduleStatus(
+  database: Queryable,
+  entitlementService: EntitlementService,
+  organizationId: string,
+  moduleCode?: string,
+) {
   await database.query(
     `insert into modules (application_id, code, name, description) values
       ((select id from applications where code='ximo_pos'), 'stock_transfers', 'Stock Transfers', 'Transfer inventory items between multiple branches with dispatch and receiving tracking.')
      on conflict (code) do update set name=excluded.name, description=excluded.description`,
   );
-  const result = await database.query(
-    `${MODULE_STATUS_SQL}
-     ${moduleCode ? 'and m.code=$2' : ''}
-     order by m.name`,
-    moduleCode ? [organizationId, moduleCode] : [organizationId],
-  );
-  return moduleCode ? result.rows[0] : result.rows;
+  const [result, effectiveModules] = await Promise.all([
+    database.query(
+      `${MODULE_STATUS_SQL}
+       ${moduleCode ? 'and m.code=$2' : ''}
+       order by m.name`,
+      moduleCode ? [organizationId, moduleCode] : [organizationId],
+    ),
+    entitlementService.getEffectiveModules(organizationId, null, database),
+  ]);
+  const effective = new Set(effectiveModules);
+  const rows = result.rows.map((row) => ({
+    ...row,
+    effectiveEnabled: effective.has((row as { code: any }).code),
+  }));
+  return moduleCode ? rows[0] : rows;
 }
 
 export function platformRouter(database: Database, authActions: AuthActions): Router {
@@ -171,7 +188,9 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     async (request, response) => {
       const planCode = z.string().trim().min(1).max(80).parse(request.params.planCode);
       const { moduleCodes } = request.body as z.infer<typeof updatePlanModulesSchema>;
-      const uniqueCodes = [...new Set(moduleCodes)];
+      const uniqueCodes = [
+        ...new Set(expandRequiredDependencies(moduleCodes as ModuleCode[])),
+      ];
       const client = platformClient(response);
 
       const updated = await database.transaction(async (transaction) => {
@@ -440,7 +459,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     async (request, response) => {
       const organizationId = uuidSchema.parse(request.params.organizationId);
       await ensureOrganization(database, organizationId);
-      sendData(response, await moduleStatus(database, organizationId));
+      sendData(response, await moduleStatus(database, entitlementService, organizationId));
     },
   );
 
@@ -782,7 +801,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
             JSON.stringify(auditMetadata(request, response)),
           ],
         );
-        return moduleStatus(transaction, organizationId, moduleCode);
+        return moduleStatus(transaction, entitlementService, organizationId, moduleCode);
       });
       sendData(response, status);
     },
@@ -818,7 +837,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
             ],
           );
         }
-        return moduleStatus(transaction, organizationId, moduleCode);
+        return moduleStatus(transaction, entitlementService, organizationId, moduleCode);
       });
       sendData(response, status);
     },

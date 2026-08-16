@@ -97,11 +97,11 @@ export const RETAIL_SIDEBAR_SECTIONS: SidebarSectionDef[] = [
     groups: [
       {
         id: 'products',
-        title: 'Product Catalog',
+        title: 'Product Catalogue',
         items: [
           { title: 'Overview', href: '/products' },
           { title: 'Categories', href: '/catalogue' },
-          { title: 'Selling Units & Barcodes', href: '/product-variants' },
+          { title: 'Variants', href: '/product-variants' },
         ],
       },
       { id: 'customers', title: 'Customers' },

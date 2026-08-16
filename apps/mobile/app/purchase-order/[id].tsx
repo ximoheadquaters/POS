@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -185,7 +186,7 @@ function PurchaseOrderContent() {
     onSuccess: async (result) => {
       if (result) await refresh();
     },
-    onError: (error) => Alert.alert('Could not update order', error.message),
+    onError: (error) => appAlert('Could not update order', error.message),
   });
   const receive = useMutation({
     mutationFn: () =>
@@ -207,9 +208,9 @@ function PurchaseOrderContent() {
       setDeliveryInvoiceNumber('');
       setNotes('');
       await refresh();
-      Alert.alert('Stock received', 'Branch inventory and the movement ledger were updated.');
+      appAlert('Stock received', 'Branch inventory and the movement ledger were updated.');
     },
-    onError: (error) => Alert.alert('Could not receive stock', error.message),
+    onError: (error) => appAlert('Could not receive stock', error.message),
   });
   const createReturn = useMutation({
     mutationFn: () => {
@@ -237,7 +238,7 @@ function PurchaseOrderContent() {
       setSupplierReturnReference('');
       setNotes('');
       await refresh();
-      Alert.alert(
+      appAlert(
         'Supplier return recorded',
         'Returned quantities were removed from branch stock.',
       );
@@ -269,7 +270,7 @@ function PurchaseOrderContent() {
       setInvoiceDueDate('');
       setInvoiceNotes('');
       await refresh();
-      Alert.alert('Supplier invoice recorded', 'The amount is now tracked as payable.');
+      appAlert('Supplier invoice recorded', 'The amount is now tracked as payable.');
     },
   });
   const payInvoice = useMutation({
@@ -300,7 +301,7 @@ function PurchaseOrderContent() {
       setPaymentReference('');
       setPaymentNotes('');
       await refresh();
-      Alert.alert(
+      appAlert(
         'Supplier payment recorded',
         paymentSource === 'cashier_drawer'
           ? 'The payable and cashier shift Cash Out were updated.'
@@ -337,7 +338,7 @@ function PurchaseOrderContent() {
       setRefundReference('');
       setRefundNotes('');
       await refresh();
-      Alert.alert(
+      appAlert(
         'Supplier refund recorded',
         drawerRefund
           ? 'The actual refund amount was added to the active cashier shift as Cash In.'

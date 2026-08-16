@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button, Header, Screen } from '@/components/ui';
@@ -85,7 +86,7 @@ export default function ReceiptScreen() {
         payments: sale.data?.payments,
       });
     },
-    onError: (error) => Alert.alert('Could not print receipt', error.message),
+    onError: (error) => appAlert('Could not print receipt', error.message),
   });
   const autoPrintAttempt = useRef<string | null>(null);
   useEffect(() => {

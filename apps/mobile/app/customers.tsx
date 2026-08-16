@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Text, TextInput, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { FlatList, Text, TextInput, View } from 'react-native';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button, EmptyState, Header, Screen } from '@/components/ui';
@@ -38,7 +39,7 @@ function CustomersContent() {
       setName('');
       await client.invalidateQueries({ queryKey: ['customers'] });
     },
-    onError: (error) => Alert.alert('Could not create customer', error.message),
+    onError: (error) => appAlert('Could not create customer', error.message),
   });
   const customers = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
   return (

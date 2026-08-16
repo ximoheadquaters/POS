@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -51,7 +52,7 @@ function SupplierFormContent() {
       await client.invalidateQueries({ queryKey: ['suppliers'] });
       router.back();
     },
-    onError: (error) => Alert.alert('Could not save supplier', error.message),
+    onError: (error) => appAlert('Could not save supplier', error.message),
   });
   return (
     <Screen>

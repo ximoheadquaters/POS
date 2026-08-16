@@ -138,7 +138,7 @@ export class CheckoutService {
             productId: item.productId,
             variantId: item.variantId ?? null,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
+            ...(item.unitPrice ? { unitPrice: item.unitPrice } : {}),
           });
         }
       }
@@ -303,7 +303,10 @@ export class CheckoutService {
         0n,
       );
       if (paidTotal !== finalTotal) {
-        throw badRequest('PAYMENT_MISMATCH', 'Split payment amounts must equal the final total');
+        throw badRequest(
+          'PAYMENT_MISMATCH',
+          `Split payment amounts must equal the final total (paid ${minorToMoney(paidTotal)}, due ${minorToMoney(finalTotal)})`,
+        );
       }
       let changeDue = 0n;
       for (const payment of input.payments) {

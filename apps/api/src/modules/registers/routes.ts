@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { cashMovementSchema, closeShiftSchema, openShiftSchema, uuidSchema } from '@ximo/shared';
+import { cashMovementSchema, closeShiftSchema, createRegisterSchema, openShiftSchema, uuidSchema } from '@ximo/shared';
 import { z } from 'zod';
 import type { Database } from '../../database/types.js';
 import { requireBranchAccess, requireAnyModule, requirePermission } from '../../middleware/auth.js';
@@ -30,18 +30,7 @@ export function registersRouter(database: Database): Router {
     '/',
     requirePermission('registers:manage'),
     requireBranchAccess('body'),
-    validateBody(
-      z.object({
-        branchId: uuidSchema,
-        name: z.string().trim().min(2).max(120),
-        code: z
-          .string()
-          .trim()
-          .min(2)
-          .max(24)
-          .regex(/^[A-Z0-9_-]+$/),
-      }),
-    ),
+    validateBody(createRegisterSchema),
     async (request, response) => {
       const result = await database.query(
         `insert into registers (organization_id,branch_id,name,code)

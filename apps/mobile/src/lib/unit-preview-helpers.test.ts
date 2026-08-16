@@ -3,6 +3,7 @@ import {
   formatReceivingConversionExplanation,
   formatStockPreview,
   formatUnitDeductionExplanation,
+  formatVariantAutoName,
   getCompatibleUnitsForDimension,
   pluralizeUnit,
 } from './unit-preview-helpers';
@@ -15,6 +16,12 @@ describe('unit-preview-helpers unit tests', () => {
     expect(pluralizeUnit(5, 'box')).toBe('boxes');
     expect(pluralizeUnit(1, 'kg')).toBe('kg');
     expect(pluralizeUnit(25, 'kg')).toBe('kg');
+  });
+
+  it('formats variant auto names with the base unit', () => {
+    expect(formatVariantAutoName('pack', 25, 'g')).toBe('PACK of 25g');
+    expect(formatVariantAutoName('box', 12, 'piece')).toBe('BOX of 12 pieces');
+    expect(formatVariantAutoName('sack', 25, 'kg')).toBe('SACK of 25kg');
   });
 
   it('formats deduction explanation accurately without reversing unitsPerBase factor', () => {

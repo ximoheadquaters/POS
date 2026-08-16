@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
@@ -11,7 +11,7 @@ import { formatMoney } from '@/lib/format';
 import { Button, Field, Header, Screen } from '@/components/ui';
 import { getHardwareDriver } from '@/hardware/registry';
 import { ApiError } from '@/lib/api';
-import { useIosAlert } from '@/providers/ios-alert';
+import { useIosAlert, appAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
 import { cartSubtotal, cartTotal, useCartStore } from '@/store/cart';
 import { useBranchStore } from '@/store/branch';
@@ -19,6 +19,7 @@ import { useShiftStore } from '@/store/shift';
 import { useConnectivityStore } from '@/store/connectivity';
 
 import { evaluateCartPromotions, getQualifyingPromotions, type PromotionRule } from '@/lib/promo-evaluator';
+import { expandCartItemsForApi } from '@/lib/combo-cart';
 
 interface Receipt {
   id: string;
@@ -167,18 +168,7 @@ export default function PaymentScreen() {
       if (!branch || !currentUser) throw new Error('An active branch and account are required');
       const payments = [{ method: 'cash' as const, amount: total, tendered }];
       const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const checkoutItems = items.map((item) => ({
-        productId: item.product.id,
-        variantId: item.product.variantId ?? null,
-        quantity: item.quantity,
-        unitsPerBase: item.product.unitsPerBase ?? 1,
-        ...(item.product.priceLocked
-          ? {
-              unitPrice: item.product.sellingPrice,
-              ...(item.product.promoId ? { promoId: item.product.promoId } : {}),
-            }
-          : {}),
-      }));
+      const checkoutItems = expandCartItemsForApi(items);
       const checkoutDiscount =
         discount && discount !== '0.00' ? { type: 'fixed' as const, value: discount } : undefined;
 
@@ -270,7 +260,7 @@ export default function PaymentScreen() {
             return drawer.open();
           })
           .catch((error) =>
-            Alert.alert(
+            appAlert(
               'Sale completed, but the drawer did not open',
               error instanceof Error ? error.message : 'Open the drawer manually.',
             ),

@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
 import { formatMoney, todayRange } from '@/lib/format';
@@ -275,15 +275,20 @@ export default function DashboardScreen() {
   const phone = width < 720;
   const desktop = width >= 1100;
 
+  const canViewDashboard =
+    Boolean(currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')) &&
+    (currentUser?.role === 'owner' ||
+      currentUser?.role === 'administrator' ||
+      currentUser?.role === 'manager' ||
+      Boolean(currentUser?.permissions.includes('reports:read')));
+
   const summaryQuery = useQuery({
     queryKey: ['dashboard', period, range.from.slice(0, 10), branch?.id],
     queryFn: () =>
       api<Summary>(
         `/reports/summary?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}&branchId=${branch!.id}`,
       ),
-    enabled:
-      Boolean(branch?.id) &&
-      ((currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')) ?? false),
+    enabled: Boolean(branch?.id) && canViewDashboard,
   });
 
   const chartRange = useMemo(() => periodRange('7d'), []);
@@ -295,26 +300,11 @@ export default function DashboardScreen() {
           chartRange.to,
         )}&branchId=${branch!.id}`,
       ),
-    enabled:
-      Boolean(branch?.id) &&
-      ((currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports')) ?? false),
+    enabled: Boolean(branch?.id) && canViewDashboard,
   });
 
-  const canViewDashboard =
-    currentUser?.modules.includes('dashboard') || currentUser?.modules.includes('reports');
-
   if (!canViewDashboard) {
-    return (
-      <Screen>
-        <Header title="Dashboard" subtitle={branch?.name} />
-        <View className="p-5">
-          <Text className="rounded-2xl bg-white p-5 text-slate-600">
-            Dashboard reporting is not included in this plan. POS and product functions remain
-            available.
-          </Text>
-        </View>
-      </Screen>
-    );
+    return <Redirect href="/(tabs)/pos" />;
   }
 
   if (summaryQuery.isLoading) {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
@@ -34,12 +35,12 @@ export default function ProductionScreen() {
 
   const handleExecuteProduction = async () => {
     if (!selectedProductId || !activeBranchId) {
-      Alert.alert('Error', 'Select a product and active branch');
+      appAlert('Error', 'Select a product and active branch');
       return;
     }
     const qty = parseFloat(quantity);
     if (!qty || qty <= 0) {
-      Alert.alert('Error', 'Enter a valid quantity');
+      appAlert('Error', 'Enter a valid quantity');
       return;
     }
 
@@ -53,11 +54,11 @@ export default function ProductionScreen() {
           quantityProduced: qty,
         }),
       });
-      Alert.alert('Success', `Successfully ${isRetail ? 'repacked' : 'produced'} ${qty} ${selectedProduct?.unit || 'units'} of ${selectedProduct?.name}!`);
+      appAlert('Success', `Successfully ${isRetail ? 'repacked' : 'produced'} ${qty} ${selectedProduct?.unit || 'units'} of ${selectedProduct?.name}!`);
       setQuantity('1');
       setSelectedProductId(null);
     } catch (err: any) {
-      Alert.alert(`${titleText} Error`, err.message || 'Operation failed');
+      appAlert(`${titleText} Error`, err.message || 'Operation failed');
     } finally {
       setExecuting(false);
     }

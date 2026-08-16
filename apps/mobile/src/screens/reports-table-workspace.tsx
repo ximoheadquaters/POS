@@ -128,18 +128,52 @@ function isStatusColumn(column: string): boolean {
   return /status/i.test(column);
 }
 
-function statusTone(value: ReportCell): { background: string; text: string } {
+function statusTone(value: ReportCell): {
+  kind: 'success' | 'danger' | 'warning' | 'neutral';
+  icon: keyof typeof Feather.glyphMap;
+  iconBg: string;
+  iconColor: string;
+  textClass: string;
+} {
   const normalized = cellText(value).toLowerCase();
-  if (/completed|active|clear|closed|paid|ready|fulfilled/.test(normalized)) {
-    return { background: '#EAF5EF', text: '#17603E' };
+  if (/failed|cancelled|canceled|voided|overdue|out of stock|flagged|denied|error/.test(normalized)) {
+    return {
+      kind: 'danger',
+      icon: 'x',
+      iconBg: 'bg-red-100',
+      iconColor: '#B91C1C',
+      textClass: 'text-red-700',
+    };
   }
-  if (/failed|cancelled|voided|overdue|out of stock/.test(normalized)) {
-    return { background: '#FDECEC', text: '#B42318' };
+  if (/attention|open|pending|partial|low|draft|in transit/.test(normalized)) {
+    return {
+      kind: 'warning',
+      icon: 'alert-triangle',
+      iconBg: 'bg-amber-100',
+      iconColor: '#D97706',
+      textClass: 'text-amber-800',
+    };
   }
-  if (/attention|open|pending|partial|low/.test(normalized)) {
-    return { background: '#FFF4DE', text: '#9A5B13' };
+  if (
+    /completed|active|clear|closed|paid|ready|fulfilled|success|in stock|received|recorded|approved/.test(
+      normalized,
+    )
+  ) {
+    return {
+      kind: 'success',
+      icon: 'check',
+      iconBg: 'bg-brand-100',
+      iconColor: '#1A593B',
+      textClass: 'text-brand-800',
+    };
   }
-  return { background: '#F1F5F4', text: '#52605A' };
+  return {
+    kind: 'neutral',
+    icon: 'minus',
+    iconBg: 'bg-slate-100',
+    iconColor: '#64748B',
+    textClass: 'text-slate-600',
+  };
 }
 
 function ReportCellValue({
@@ -154,11 +188,11 @@ function ReportCellValue({
   if (isStatusColumn(column)) {
     const tone = statusTone(value);
     return (
-      <View
-        className="self-start rounded-full px-2.5 py-1"
-        style={{ backgroundColor: tone.background }}
-      >
-        <Text selectable className="text-[11px] font-medium" style={{ color: tone.text }}>
+      <View className="flex-row items-center gap-1.5">
+        <View className={`h-5 w-5 items-center justify-center rounded-full ${tone.iconBg}`}>
+          <Feather name={tone.icon} size={12} color={tone.iconColor} />
+        </View>
+        <Text selectable className={`text-sm font-medium ${tone.textClass}`}>
           {cellText(value)}
         </Text>
       </View>
@@ -168,7 +202,10 @@ function ReportCellValue({
   return (
     <Text
       selectable
-      className={`${primary ? 'font-medium text-slate-900' : 'text-slate-600'} text-[13px] leading-5`}
+      numberOfLines={2}
+      className={`${
+        primary ? 'text-sm font-semibold text-slate-900' : 'text-sm text-slate-600'
+      } leading-5`}
     >
       {cellText(value)}
     </Text>
@@ -181,10 +218,10 @@ function CompactReportTable({ table }: { table: ReportTableDefinition }) {
       {table.rows.map((row, rowIndex) => (
         <View
           key={`${table.id}-compact-${rowIndex}`}
-          className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+          className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
         >
-          <View className="bg-[#F8FAF9] px-3 py-3">
-            <Text className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+          <View className="border-b border-slate-100 bg-slate-50 px-3 py-3">
+            <Text className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               {table.columns[0]}
             </Text>
             <ReportCellValue value={row[0]} column={table.columns[0] ?? ''} primary />
@@ -194,9 +231,11 @@ function CompactReportTable({ table }: { table: ReportTableDefinition }) {
             return (
               <View
                 key={`${table.id}-compact-${rowIndex}-${column}`}
-                className="flex-row items-start justify-between gap-4 border-t border-slate-100 px-3 py-2.5"
+                className="flex-row items-start justify-between gap-4 border-t border-slate-100 px-3 py-3"
               >
-                <Text className="max-w-[44%] text-[11px] leading-5 text-slate-500">{column}</Text>
+                <Text className="max-w-[44%] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  {column}
+                </Text>
                 <View className="max-w-[56%] items-end">
                   <ReportCellValue value={row[columnIndex]} column={column} />
                 </View>
@@ -213,8 +252,8 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
   const minWidth = Math.max(760, table.columns.length * 156);
   const recordLabel = `${table.rows.length.toLocaleString('en-PH')} ${table.rows.length === 1 ? 'record' : 'records'}`;
   return (
-    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <View className="flex-row items-start justify-between gap-3 px-4 py-4 md:px-5">
+    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <View className="flex-row items-start justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
         <View className="min-w-0 flex-1">
           <Text className="text-[15px] font-semibold text-slate-900">{table.title}</Text>
           {table.description ? (
@@ -226,7 +265,7 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
         </View>
       </View>
       {table.rows.length === 0 ? (
-        <View className="items-center border-t border-slate-100 px-4 py-10">
+        <View className="items-center px-4 py-10">
           <View className="mb-3 h-10 w-10 items-center justify-center rounded-full bg-slate-100">
             <Feather name="inbox" size={17} color="#94A3B8" />
           </View>
@@ -243,14 +282,14 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
           contentContainerStyle={{ flexGrow: 1 }}
         >
           <View style={{ minWidth, width: '100%' }}>
-            <View className="flex-row border-y border-slate-200 bg-[#F8FAF9]">
+            <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
               {table.columns.map((column, columnIndex) => (
                 <View
                   key={column}
-                  className={`min-w-[140px] px-4 py-3 ${columnIndex === 0 ? 'flex-[1.35]' : 'flex-1'} ${isNumericColumn(column) ? 'items-end' : ''}`}
+                  className={`min-w-[140px] ${columnIndex === 0 ? 'flex-[1.35]' : 'flex-1'} ${isNumericColumn(column) ? 'items-end' : ''}`}
                 >
                   <Text
-                    className={`text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${isNumericColumn(column) ? 'text-right' : ''}`}
+                    className={`text-[11px] font-semibold uppercase tracking-wide text-slate-400 ${isNumericColumn(column) ? 'text-right' : ''}`}
                   >
                     {column}
                   </Text>
@@ -260,12 +299,14 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
             {table.rows.map((row, rowIndex) => (
               <View
                 key={`${table.id}-${rowIndex}`}
-                className={`flex-row ${rowIndex < table.rows.length - 1 ? 'border-b border-slate-100' : ''} ${rowIndex % 2 === 1 ? 'bg-[#FBFCFB]' : 'bg-white'}`}
+                className={`flex-row items-center px-4 py-3.5 ${
+                  rowIndex > 0 ? 'border-t border-slate-100' : ''
+                }`}
               >
                 {table.columns.map((column, columnIndex) => (
                   <View
                     key={`${table.id}-${rowIndex}-${columnIndex}`}
-                    className={`min-w-[140px] justify-center px-4 py-3.5 ${columnIndex === 0 ? 'flex-[1.35]' : 'flex-1'} ${isNumericColumn(column) ? 'items-end' : ''}`}
+                    className={`min-w-[140px] justify-center ${columnIndex === 0 ? 'flex-[1.35] pr-3' : 'flex-1 pr-3'} ${isNumericColumn(column) ? 'items-end' : ''}`}
                   >
                     <View className={isNumericColumn(column) ? 'items-end' : ''}>
                       <ReportCellValue

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
@@ -41,7 +42,7 @@ export default function RecipeEditorScreen() {
           }
         })
         .catch((err: any) => {
-          Alert.alert('Error', err.message || 'Failed to load recipe data');
+          appAlert('Error', err.message || 'Failed to load recipe data');
         })
         .finally(() => setLoading(false));
     }
@@ -72,10 +73,10 @@ export default function RecipeEditorScreen() {
           })),
         }),
       });
-      Alert.alert('Success', 'Recipe updated successfully!');
+      appAlert('Success', 'Recipe updated successfully!');
       router.back();
     } catch (err: any) {
-      Alert.alert('Save Error', err.message || 'Failed to save recipe');
+      appAlert('Save Error', err.message || 'Failed to save recipe');
     } finally {
       setSaving(false);
     }

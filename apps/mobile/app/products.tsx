@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { convertRecipeQuantity } from '@ximo/shared';
@@ -41,15 +42,39 @@ interface Product {
   brandName?: string;
 }
 
-type ProductFilter = 'all' | 'sellable' | 'ingredient' | 'both';
+type StatusFilterId = 'enabled' | 'disabled';
+type RoleFilterId = 'sellable' | 'ingredient' | 'both';
+type ProductFilterId = StatusFilterId | RoleFilterId;
 
-const ALL_PRODUCT_FILTERS: Array<{
-  id: ProductFilter;
+const STATUS_FILTERS: Array<{
+  id: StatusFilterId;
+  title: string;
+  description: string;
+  icon: ComponentProps<typeof Feather>['name'];
+  status: 'active' | 'inactive';
+}> = [
+  {
+    id: 'enabled',
+    title: 'Enabled',
+    description: 'Active products',
+    icon: 'check-circle',
+    status: 'active',
+  },
+  {
+    id: 'disabled',
+    title: 'Disabled',
+    description: 'Hidden from POS and promotions',
+    icon: 'slash',
+    status: 'inactive',
+  },
+];
+
+const ROLE_FILTERS: Array<{
+  id: RoleFilterId;
   title: string;
   description: string;
   icon: ComponentProps<typeof Feather>['name'];
 }> = [
-  { id: 'all', title: 'All products', description: 'Entire catalogue', icon: 'grid' },
   {
     id: 'sellable',
     title: 'Products for sale',
@@ -62,8 +87,15 @@ const ALL_PRODUCT_FILTERS: Array<{
     description: 'Used by recipes',
     icon: 'archive',
   },
-  { id: 'both', title: 'Dual use', description: 'Sold and used in BOM', icon: 'repeat' },
+  {
+    id: 'both',
+    title: 'Dual use',
+    description: 'Sold and used in BOM',
+    icon: 'repeat',
+  },
 ];
+
+const DEFAULT_PRODUCT_FILTERS: ProductFilterId[] = ['enabled'];
 
 function compatibleRecipeUnits(baseUnit?: string) {
   const normalized = (baseUnit ?? '').trim().toLowerCase();
@@ -195,11 +227,11 @@ function RecipeModal({
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['products'] });
       await queryClient.invalidateQueries({ queryKey: ['product-recipe', product.id] });
-      Alert.alert('Recipe Saved', `BOM recipe template for ${product.name} updated.`);
+      appAlert('Recipe Saved', `BOM recipe template for ${product.name} updated.`);
       onClose();
     },
     onError: (err) => {
-      Alert.alert('Error Saving Recipe', err.message);
+      appAlert('Error Saving Recipe', err.message);
     },
   });
 
@@ -412,7 +444,8 @@ function RecipeModal({
 
 function ProductsContent() {
   const [search, setSearch] = useState('');
-  const [productFilter, setProductFilter] = useState<ProductFilter>('all');
+  const [selectedFilters, setSelectedFilters] =
+    useState<ProductFilterId[]>(DEFAULT_PRODUCT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
   const [editingRecipeProduct, setEditingRecipeProduct] = useState<Product | null>(null);
   const { currentUser } = useSession();
@@ -426,46 +459,89 @@ function ProductsContent() {
     businessProfile === 'hybrid' ||
     (currentUser?.modules ?? []).includes('recipes');
 
-  // Filter out raw/ingredient tabs for pure retail businesses
-  const productFilters = useMemo(() => {
+  const roleFilters = useMemo(() => {
     if (!isFoodService) {
-      return ALL_PRODUCT_FILTERS.filter((f) => f.id === 'all' || f.id === 'sellable');
+      return ROLE_FILTERS.filter((f) => f.id === 'sellable');
     }
-    return ALL_PRODUCT_FILTERS;
+    return ROLE_FILTERS;
   }, [isFoodService]);
-  const activeFilter =
-    productFilters.find((filter) => filter.id === productFilter) ?? productFilters[0]!;
+
+  const productFilters = useMemo(
+    () => [...STATUS_FILTERS, ...roleFilters],
+    [roleFilters],
+  );
+
+  const selectedFilterSet = useMemo(() => new Set(selectedFilters), [selectedFilters]);
 
   useEffect(() => {
-    if (!productFilters.some((filter) => filter.id === productFilter)) {
-      setProductFilter('all');
-    }
-  }, [productFilter, productFilters]);
+    const allowed = new Set(productFilters.map((filter) => filter.id));
+    setSelectedFilters((current) => {
+      const next = current.filter((id) => allowed.has(id));
+      const hasStatus = next.some((id) => id === 'enabled' || id === 'disabled');
+      if (!hasStatus) next.unshift('enabled');
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return current;
+      }
+      return next;
+    });
+  }, [productFilters]);
+
+  const roleQuery = useMemo(() => {
+    const roles = roleFilters
+      .map((filter) => filter.id)
+      .filter((id) => selectedFilterSet.has(id));
+    return roles.length ? roles.join(',') : '';
+  }, [roleFilters, selectedFilterSet]);
+
+  const filterSummary = useMemo(() => {
+    const labels = productFilters
+      .filter((filter) => selectedFilterSet.has(filter.id))
+      .map((filter) => filter.title);
+    if (labels.length === 0) return 'Enabled';
+    if (labels.length === 1) return labels[0]!;
+    if (labels.length === 2) return labels.join(' + ');
+    return `${labels.length} filters`;
+  }, [productFilters, selectedFilterSet]);
+
+  const toggleFilter = (id: ProductFilterId) => {
+    setSelectedFilters((current) => {
+      const has = current.includes(id);
+      if (id === 'enabled' || id === 'disabled') {
+        const next = has ? current.filter((item) => item !== id) : [...current, id];
+        const hasStatus = next.some((item) => item === 'enabled' || item === 'disabled');
+        return hasStatus ? next : [...next, 'enabled'];
+      }
+      return has ? current.filter((item) => item !== id) : [...current, id];
+    });
+  };
 
   const query = useInfiniteQuery({
-    queryKey: ['products', branch?.id, search, productFilter],
+    queryKey: ['products', branch?.id, search, roleQuery],
     initialPageParam: 1,
     enabled: Boolean(branch),
-    queryFn: ({ pageParam }) =>
-      api<Product[]>(
-        `/products?branchId=${branch!.id}&includeInactive=true&page=${pageParam}&pageSize=30${
-          productFilter === 'all' ? '' : `&inventoryRole=${productFilter}`
-        }${search ? `&search=${encodeURIComponent(search)}` : ''}`,
-      ),
-    getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
+    staleTime: 0,
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        branchId: branch!.id,
+        page: String(pageParam),
+        pageSize: '30',
+        includeInactive: 'true',
+      });
+      if (roleQuery) params.set('inventoryRole', roleQuery);
+      if (search) params.set('search', search);
+      return api<Product[]>(`/products?${params.toString()}`);
+    },
+    getNextPageParam: (last, pages) =>
+      Array.isArray(last) && last.length === 30 ? pages.length + 1 : undefined,
   });
-  const summaryQuery = useQuery({
-    queryKey: ['product-summary', branch?.id],
-    enabled: Boolean(branch),
-    queryFn: () =>
-      api<{ all: number; sellable: number; ingredient: number; both: number }>(
-        `/products/summary?branchId=${branch!.id}`,
-      ),
-  });
-  const products = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
+  const products = useMemo(() => {
+    const pages = query.data?.pages ?? [];
+    return pages.flatMap((page) => (Array.isArray(page) ? page : []));
+  }, [query.data]);
   const productCounts = useMemo(
     () => ({
-      all: products.length,
+      enabled: products.filter((product) => product.status === 'active').length,
+      disabled: products.filter((product) => product.status === 'inactive').length,
       sellable: products.filter(
         (product) => !product.inventoryRole || product.inventoryRole === 'sellable',
       ).length,
@@ -474,28 +550,59 @@ function ProductsContent() {
     }),
     [products],
   );
-  const displayedProductCounts = summaryQuery.data ?? productCounts;
-  const visibleProducts = products;
+  const displayedProductCounts = productCounts;
+  const visibleProducts = useMemo(() => {
+    const selectedRoles = roleFilters
+      .map((filter) => filter.id)
+      .filter((id) => selectedFilterSet.has(id));
+    const wantsEnabled = selectedFilterSet.has('enabled');
+    const wantsDisabled = selectedFilterSet.has('disabled');
+
+    return products.filter((product) => {
+      const isEnabled = product.status === 'active';
+      const statusMatch =
+        (wantsEnabled && isEnabled) || (wantsDisabled && !isEnabled);
+      if (!statusMatch) return false;
+
+      if (selectedRoles.length === 0) return true;
+      const role = product.inventoryRole ?? 'sellable';
+      return selectedRoles.includes(role);
+    });
+  }, [products, roleFilters, selectedFilterSet]);
+  const applyStatusToProductsCache = (id: string, status: string) => {
+    queryClient.setQueriesData({ queryKey: ['products'] }, (current: unknown) => {
+      if (!current || typeof current !== 'object' || !('pages' in current)) return current;
+      const infinite = current as { pages: Product[][]; pageParams: unknown };
+      return {
+        ...infinite,
+        pages: infinite.pages.map((page) =>
+          Array.isArray(page)
+            ? page.map((product) => (product.id === id ? { ...product, status } : product))
+            : page,
+        ),
+      };
+    });
+  };
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: Pick<Product, 'id' | 'status'>) =>
-      api(`/products/${id}`, {
-        method: 'PATCH',
+      api<{ id: string; status: string }>(`/products/${id}/status`, {
+        method: 'POST',
         body: JSON.stringify({ status }),
       }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['products'] }),
-        queryClient.invalidateQueries({ queryKey: ['pos-products'] }),
-      ]);
+    onSuccess: (updated, { id, status }) => {
+      applyStatusToProductsCache(id, updated.status ?? status);
     },
-    onError: (error) => Alert.alert('Could not update product', error.message),
+    onError: (error) => appAlert('Could not update product', error.message),
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['pos-products'] });
+    },
   });
 
   return (
     <Screen>
       <Header
         title="Products"
-        subtitle="Manage your product catalog"
+        subtitle="Manage your product catalogue"
         action={
           currentUser?.permissions.includes('products:manage') ? (
             <View className="flex-row gap-2">
@@ -558,19 +665,19 @@ function ProductsContent() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Filter product type"
+          accessibilityLabel="Filter products"
           onPress={() => setFilterOpen(true)}
           className="min-h-11 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
         >
           <View className="mr-2 min-w-0 flex-1 flex-row items-center gap-2">
-            <Feather name={activeFilter.icon} size={15} color="#1A593B" />
+            <Feather name="filter" size={15} color="#1A593B" />
             <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-900">
-              {activeFilter.title}
+              {filterSummary}
             </Text>
           </View>
           <View className="flex-row items-center gap-2">
             <Text className="text-sm font-semibold text-brand-800">
-              {displayedProductCounts[activeFilter.id]}
+              {query.isFetching ? '…' : visibleProducts.length}
             </Text>
             <Feather name="chevron-down" size={16} color="#64748B" />
           </View>
@@ -591,9 +698,9 @@ function ProductsContent() {
               <Text className="mt-4 text-base font-bold text-slate-800">
                 {search
                   ? `No products matching "${search}"`
-                  : productFilter === 'all'
+                  : selectedFilters.length === 1 && selectedFilters[0] === 'enabled'
                     ? 'No products yet.'
-                    : 'No products in this group.'}
+                    : 'No products match these filters.'}
               </Text>
               <Text className="mt-2 text-center text-sm text-slate-500 max-w-xs">
                 {search
@@ -665,19 +772,6 @@ function ProductsContent() {
                     <Text numberOfLines={1} className="text-lg font-extrabold text-brand-700">
                       {formatCatalogUnitPrice(item.sellingPrice, item.unit)}
                     </Text>
-                    {item.status === 'active' ? (
-                      <View className="rounded-full bg-emerald-50 px-2.5 py-1">
-                        <Text className="text-xs font-semibold text-emerald-700">
-                          Active (On POS)
-                        </Text>
-                      </View>
-                    ) : (
-                      <View className="rounded-full bg-slate-100 px-2.5 py-1">
-                        <Text className="text-xs font-semibold text-slate-600">
-                          Hidden from POS
-                        </Text>
-                      </View>
-                    )}
                   </View>
                 </View>
 
@@ -770,7 +864,7 @@ function ProductsContent() {
                         className="min-h-9 flex-row items-center justify-center rounded-xl bg-slate-100 px-3 active:bg-slate-200"
                       >
                         <Feather name="copy" size={13} color="#334155" />
-                        <Text className="ml-1.5 text-xs font-semibold text-slate-700">Units</Text>
+                        <Text className="ml-1.5 text-xs font-semibold text-slate-700">Variants</Text>
                       </Pressable>
 
                       {isFoodService && item.inventoryRole !== 'ingredient' ? (
@@ -812,8 +906,12 @@ function ProductsContent() {
                       ) : null}
 
                       <Pressable
-                        accessibilityRole="switch"
-                        accessibilityState={{ checked: item.status === 'active' }}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          item.status === 'active'
+                            ? `${item.name} is enabled. Tap to disable.`
+                            : `${item.name} is disabled. Tap to enable.`
+                        }
                         disabled={statusMutation.isPending}
                         onPress={() =>
                           statusMutation.mutate({
@@ -822,15 +920,15 @@ function ProductsContent() {
                           })
                         }
                         className={`min-h-9 flex-row items-center justify-center rounded-xl px-3 ${
-                          item.status === 'active' ? 'bg-slate-100' : 'bg-brand-50'
+                          item.status === 'active' ? 'bg-emerald-50' : 'bg-slate-100'
                         }`}
                       >
                         <Text
                           className={`text-xs font-semibold ${
-                            item.status === 'active' ? 'text-slate-700' : 'text-brand-800'
+                            item.status === 'active' ? 'text-emerald-800' : 'text-slate-600'
                           }`}
                         >
-                          {item.status === 'active' ? 'Disable' : 'Enable'}
+                          {item.status === 'active' ? 'Enabled' : 'Disabled'}
                         </Text>
                       </Pressable>
                     </View>
@@ -851,13 +949,13 @@ function ProductsContent() {
         <View className="flex-1 items-center justify-center p-4">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close product type filter"
+            accessibilityLabel="Close product filters"
             onPress={() => setFilterOpen(false)}
             className="absolute inset-0 bg-black/40"
           />
           <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
             <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
-              <Text className="text-base font-bold text-slate-900">Product type</Text>
+              <Text className="text-base font-bold text-slate-900">Filters</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close"
@@ -867,52 +965,75 @@ function ProductsContent() {
               </Pressable>
             </View>
             <View className="gap-1">
-              {productFilters.map((filter) => {
-                const selected = productFilter === filter.id;
+              {productFilters.map((filter, index) => {
+                const selected = selectedFilterSet.has(filter.id);
+                const showRoleHeading = index === STATUS_FILTERS.length;
                 return (
-                  <Pressable
-                    key={filter.id}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    onPress={() => {
-                      setProductFilter(filter.id);
-                      setFilterOpen(false);
-                    }}
-                    className={`flex-row items-center justify-between rounded-xl px-3 py-3 ${
-                      selected ? 'border border-brand-200 bg-brand-50' : 'active:bg-slate-100'
-                    }`}
-                  >
-                    <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
-                      <Feather
-                        name={filter.icon}
-                        size={17}
-                        color={selected ? '#1A593B' : '#64748B'}
-                      />
-                      <View className="min-w-0 flex-1">
-                        <Text
-                          className={`text-sm ${
-                            selected ? 'font-bold text-brand-900' : 'font-medium text-slate-700'
+                  <View key={filter.id}>
+                    {showRoleHeading ? (
+                      <Text className="mb-1 mt-3 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Product type
+                      </Text>
+                    ) : null}
+                    {index === 0 ? (
+                      <Text className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Status
+                      </Text>
+                    ) : null}
+                    <Pressable
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selected }}
+                      onPress={() => toggleFilter(filter.id)}
+                      className={`flex-row items-center justify-between rounded-xl px-3 py-3 ${
+                        selected ? 'border border-brand-200 bg-brand-50' : 'active:bg-slate-100'
+                      }`}
+                    >
+                      <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
+                        <View
+                          className={`h-5 w-5 items-center justify-center rounded border ${
+                            selected
+                              ? 'border-brand-700 bg-brand-700'
+                              : 'border-slate-300 bg-white'
                           }`}
                         >
-                          {filter.title}
-                        </Text>
-                        <Text className="mt-0.5 text-xs text-slate-500">{filter.description}</Text>
+                          {selected ? <Feather name="check" size={12} color="#FFFFFF" /> : null}
+                        </View>
+                        <Feather
+                          name={filter.icon}
+                          size={17}
+                          color={selected ? '#1A593B' : '#64748B'}
+                        />
+                        <View className="min-w-0 flex-1">
+                          <Text
+                            className={`text-sm ${
+                              selected ? 'font-bold text-brand-900' : 'font-medium text-slate-700'
+                            }`}
+                          >
+                            {filter.title}
+                          </Text>
+                          <Text className="mt-0.5 text-xs text-slate-500">{filter.description}</Text>
+                        </View>
                       </View>
-                    </View>
-                    <View className="ml-2 flex-row items-center gap-2">
                       <Text
-                        className={`text-sm font-semibold ${
+                        className={`ml-2 text-sm font-semibold ${
                           selected ? 'text-brand-800' : 'text-slate-500'
                         }`}
                       >
-                        {displayedProductCounts[filter.id]}
+                        {displayedProductCounts[filter.id] ?? 0}
                       </Text>
-                      {selected ? <Feather name="check" size={16} color="#1A593B" /> : null}
-                    </View>
-                  </Pressable>
+                    </Pressable>
+                  </View>
                 );
               })}
             </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+              onPress={() => setFilterOpen(false)}
+              className="mt-4 min-h-11 items-center justify-center rounded-xl bg-brand-700 active:bg-brand-800"
+            >
+              <Text className="text-sm font-semibold text-white">Done</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

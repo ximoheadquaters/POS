@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -70,7 +71,14 @@ function RegistersContent() {
   const [movementAmount, setMovementAmount] = useState('');
   const [movementReason, setMovementReason] = useState('');
   const [closeReviewOpen, setCloseReviewOpen] = useState(false);
+  const [addCounterOpen, setAddCounterOpen] = useState(false);
+  const [counterName, setCounterName] = useState('');
+  const [counterCode, setCounterCode] = useState('');
   const client = useQueryClient();
+
+  const canManageRegisters =
+    Boolean(currentUser?.permissions?.includes('registers:manage')) ||
+    ['owner', 'administrator', 'manager'].includes(currentUser?.role ?? '');
 
   useEffect(() => void hydrateBranch(), [hydrateBranch]);
   useEffect(() => void hydrate(), [hydrate]);
@@ -102,6 +110,131 @@ function RegistersContent() {
   const shiftDetail = shiftDetailQuery.data;
   const isModuleEnabled = currentUser?.modules.includes('registers');
 
+  const refreshShiftData = async () => {
+    if (!branch) return;
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ['registers', branch.id] }),
+      client.invalidateQueries({ queryKey: ['shift-report'] }),
+      client.invalidateQueries({ queryKey: ['shift-reports'] }),
+      client.invalidateQueries({ queryKey: ['reports'] }),
+    ]);
+  };
+
+  const createRegister = useMutation({
+    mutationFn: async () => {
+      if (!branch) throw new Error('Select a branch before adding a counter.');
+      const code = (counterCode.trim() || `CTR-${(query.data?.length ?? 0) + 1}`).toUpperCase();
+      return api('/registers', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: branch.id,
+          name: counterName.trim(),
+          code,
+        }),
+      });
+    },
+    onSuccess: () => {
+      setAddCounterOpen(false);
+      setCounterName('');
+      setCounterCode('');
+      void refreshShiftData();
+      appAlert('Counter added', 'New cashier counter has been created for this branch.');
+    },
+    onError: (error) => appAlert('Could not add counter', error.message),
+  });
+
+  useEffect(() => {
+    if (!branch || !query.data || !currentUser) return;
+    const activeRegister = query.data.find(
+      (register) => register.activeShiftId && register.activeCashierId === currentUser.id,
+    );
+    if (activeRegister?.activeShiftId) {
+      if (shift?.id !== activeRegister.activeShiftId || shift.branchId !== branch.id) {
+        void setActive({
+          id: activeRegister.activeShiftId,
+          registerId: activeRegister.id,
+          registerName: activeRegister.name,
+          branchId: branch.id,
+        });
+      }
+    } else if (shift?.branchId === branch.id) {
+      void clear();
+    }
+  }, [branch, clear, currentUser, query.data, setActive, shift]);
+
+  const open = useMutation({
+    mutationFn: async (register: Register) => {
+      if (!branch) throw new Error('Select a branch before opening a shift.');
+      const opened = await api<{ id: string }>('/registers/shifts/open', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: branch.id,
+          registerId: register.id,
+          startingCash: startingCash.trim(),
+        }),
+      });
+      await setActive({
+        id: opened.id,
+        registerId: register.id,
+        registerName: register.name,
+        branchId: branch.id,
+      });
+    },
+    onSuccess: () => {
+      void refreshShiftData();
+      appAlert('Shift opened', 'You can now start accepting sales.');
+    },
+    onError: (error) => appAlert('Could not open shift', error.message),
+  });
+
+  const close = useMutation({
+    mutationFn: () => {
+      if (!shift) throw new Error('No active shift was found.');
+      return api<ClosedShift>(`/registers/shifts/${shift.id}/close`, {
+        method: 'POST',
+        body: JSON.stringify({ actualCash: actualCash.trim() }),
+      });
+    },
+    onSuccess: async (closed) => {
+      setCloseReviewOpen(false);
+      await clear();
+      setActualCash('');
+      await refreshShiftData();
+      appAlert(
+        'Shift closed',
+        `Expected ${formatMoney(closed.expectedCash)}\nCounted ${formatMoney(closed.actualCash)}\nVariance ${formatMoney(closed.variance)}`,
+      );
+    },
+    onError: (error) => appAlert('Could not close shift', error.message),
+  });
+
+  const cashMovement = useMutation({
+    mutationFn: () => {
+      if (!branch) throw new Error('Select a branch before recording cash movement.');
+      if (!shift) throw new Error('No active shift was found.');
+      return api('/registers/cash-movements', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: branch.id,
+          shiftId: shift.id,
+          type: movementType,
+          amount: movementAmount.trim(),
+          reason: movementReason.trim(),
+        }),
+      });
+    },
+    onSuccess: () => {
+      setMovementAmount('');
+      setMovementReason('');
+      void refreshShiftData();
+      appAlert(
+        movementType === 'cash_in' ? 'Cash added' : 'Cash removed',
+        'The drawer movement was recorded.',
+      );
+    },
+    onError: (error) => appAlert('Could not record cash movement', error.message),
+  });
+
   if (!isModuleEnabled) {
     return (
       <Screen>
@@ -131,108 +264,6 @@ function RegistersContent() {
           moneyToMinor(shiftDetail.cashRefunds),
       )
     : null;
-
-  useEffect(() => {
-    if (!branch || !query.data || !currentUser) return;
-    const activeRegister = query.data.find(
-      (register) => register.activeShiftId && register.activeCashierId === currentUser.id,
-    );
-    if (activeRegister?.activeShiftId) {
-      if (shift?.id !== activeRegister.activeShiftId || shift.branchId !== branch.id) {
-        void setActive({
-          id: activeRegister.activeShiftId,
-          registerId: activeRegister.id,
-          registerName: activeRegister.name,
-          branchId: branch.id,
-        });
-      }
-    } else if (shift?.branchId === branch.id) {
-      void clear();
-    }
-  }, [branch, clear, currentUser, query.data, setActive, shift]);
-
-  const refreshShiftData = async () => {
-    if (!branch) return;
-    await Promise.all([
-      client.invalidateQueries({ queryKey: ['registers', branch.id] }),
-      client.invalidateQueries({ queryKey: ['shift-report'] }),
-      client.invalidateQueries({ queryKey: ['shift-reports'] }),
-      client.invalidateQueries({ queryKey: ['reports'] }),
-    ]);
-  };
-
-  const open = useMutation({
-    mutationFn: async (register: Register) => {
-      if (!branch) throw new Error('Select a branch before opening a shift.');
-      const opened = await api<{ id: string }>('/registers/shifts/open', {
-        method: 'POST',
-        body: JSON.stringify({
-          branchId: branch.id,
-          registerId: register.id,
-          startingCash: startingCash.trim(),
-        }),
-      });
-      await setActive({
-        id: opened.id,
-        registerId: register.id,
-        registerName: register.name,
-        branchId: branch.id,
-      });
-    },
-    onSuccess: () => {
-      void refreshShiftData();
-      Alert.alert('Shift opened', 'You can now start accepting sales.');
-    },
-    onError: (error) => Alert.alert('Could not open shift', error.message),
-  });
-
-  const close = useMutation({
-    mutationFn: () => {
-      if (!shift) throw new Error('No active shift was found.');
-      return api<ClosedShift>(`/registers/shifts/${shift.id}/close`, {
-        method: 'POST',
-        body: JSON.stringify({ actualCash: actualCash.trim() }),
-      });
-    },
-    onSuccess: async (closed) => {
-      setCloseReviewOpen(false);
-      await clear();
-      setActualCash('');
-      await refreshShiftData();
-      Alert.alert(
-        'Shift closed',
-        `Expected ${formatMoney(closed.expectedCash)}\nCounted ${formatMoney(closed.actualCash)}\nVariance ${formatMoney(closed.variance)}`,
-      );
-    },
-    onError: (error) => Alert.alert('Could not close shift', error.message),
-  });
-
-  const cashMovement = useMutation({
-    mutationFn: () => {
-      if (!branch) throw new Error('Select a branch before recording cash movement.');
-      if (!shift) throw new Error('No active shift was found.');
-      return api('/registers/cash-movements', {
-        method: 'POST',
-        body: JSON.stringify({
-          branchId: branch.id,
-          shiftId: shift.id,
-          type: movementType,
-          amount: movementAmount.trim(),
-          reason: movementReason.trim(),
-        }),
-      });
-    },
-    onSuccess: () => {
-      setMovementAmount('');
-      setMovementReason('');
-      void refreshShiftData();
-      Alert.alert(
-        movementType === 'cash_in' ? 'Cash added' : 'Cash removed',
-        'The drawer movement was recorded.',
-      );
-    },
-    onError: (error) => Alert.alert('Could not record cash movement', error.message),
-  });
 
   const offlineSales = pendingOfflineSales + failedOfflineSales;
   const countedCashValid = validMoney(actualCash);
@@ -520,7 +551,27 @@ function RegistersContent() {
             </>
           )}
 
-          <SectionLabel>{shift ? 'Registers' : 'Step 2 · Choose a register'}</SectionLabel>
+          <View className="mb-3 flex-row items-center justify-between">
+            <Text className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+              {shift ? 'Registers' : 'Step 2 · Choose a register'}
+            </Text>
+            {canManageRegisters ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add cashier counter"
+                onPress={() => {
+                  const nextNum = (query.data?.length ?? 0) + 1;
+                  setCounterName(`Counter ${nextNum}`);
+                  setCounterCode(`CTR-${nextNum}`);
+                  setAddCounterOpen(true);
+                }}
+                className="flex-row items-center gap-1.5 rounded-xl bg-brand-50 px-3 py-1.5 active:bg-brand-100"
+              >
+                <Feather name="plus-circle" size={14} color="#1A593B" />
+                <Text className="text-xs font-semibold text-brand-800">+ Add Counter</Text>
+              </Pressable>
+            ) : null}
+          </View>
           {query.isLoading ? (
             <View className="min-h-40 rounded-3xl border border-slate-200 bg-white">
               <LoadingState label="Loading registers…" />
@@ -661,6 +712,77 @@ function RegistersContent() {
               >
                 <Text className="font-medium text-white">
                   {close.isPending ? 'Closing…' : 'Confirm and close'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={addCounterOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!createRegister.isPending) setAddCounterOpen(false);
+        }}
+      >
+        <View className="flex-1 items-center justify-center bg-black/40 p-5">
+          <View className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl gap-4">
+            <View className="flex-row items-start justify-between">
+              <View className="mr-4 flex-1">
+                <Text className="text-lg font-semibold text-slate-950">Add Cashier Counter</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                  Create a new cash register / counter for {branch.name}.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close modal"
+                disabled={createRegister.isPending}
+                onPress={() => setAddCounterOpen(false)}
+                className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
+              >
+                <Feather name="x" size={20} color="#475569" />
+              </Pressable>
+            </View>
+
+            <Field
+              label="Counter Name"
+              value={counterName}
+              onChangeText={setCounterName}
+              placeholder="e.g. Counter 2 or Express Counter"
+            />
+
+            <Field
+              label="Counter Code"
+              value={counterCode}
+              onChangeText={(val) => setCounterCode(val.toUpperCase())}
+              placeholder="e.g. CTR-02"
+              autoCapitalize="characters"
+            />
+
+            <View className="flex-row gap-3 pt-2">
+              <Pressable
+                accessibilityRole="button"
+                disabled={createRegister.isPending}
+                onPress={() => setAddCounterOpen(false)}
+                className="min-h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white"
+              >
+                <Text className="font-medium text-slate-700">Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={createRegister.isPending || counterName.trim().length < 2}
+                onPress={() => createRegister.mutate()}
+                className={`min-h-12 flex-[2] items-center justify-center rounded-xl bg-brand-700 ${
+                  createRegister.isPending || counterName.trim().length < 2
+                    ? 'opacity-50'
+                    : 'active:opacity-80'
+                }`}
+              >
+                <Text className="font-medium text-white">
+                  {createRegister.isPending ? 'Adding…' : 'Add Counter'}
                 </Text>
               </Pressable>
             </View>

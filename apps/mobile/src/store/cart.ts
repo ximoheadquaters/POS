@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { minorToMoney, moneyToMinor, type ProductUnit } from '@ximo/shared';
+import type { ComboComponentLine } from '../lib/combo-cart';
 import { appStorage } from '../lib/storage';
 
 export interface CartProduct {
@@ -27,6 +28,9 @@ export interface CartProduct {
   priceLocked?: boolean;
   promoId?: string;
   promoName?: string;
+  /** Single cart row representing a promo combo bundle. */
+  isComboBundle?: boolean;
+  comboComponents?: ComboComponentLine[];
 }
 
 export interface SellingUnit {
@@ -217,6 +221,10 @@ export const useCartStore = create<CartState>((set, get) => ({
                   ...product,
                   sellingPrice: nextPrice,
                   priceLocked: Boolean(item.product.priceLocked || product.priceLocked),
+                  isComboBundle: Boolean(item.product.isComboBundle || product.isComboBundle),
+                  comboComponents: product.comboComponents ?? item.product.comboComponents,
+                  promoId: product.promoId ?? item.product.promoId,
+                  promoName: product.promoName ?? item.product.promoName,
                 },
               }
             : item,
@@ -241,6 +249,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     const latest = new Map(products.map((product) => [product.id, product]));
     set((state) => ({
       items: state.items.map((item) => {
+        if (item.product.isComboBundle) return item;
         const product = latest.get(item.product.id);
         if (!product) return item;
         const unit = product.sellingUnits?.find(
@@ -301,6 +310,20 @@ export function hasCartStockConflict(items: CartItem[]): boolean {
   const consumed = new Map<string, number>();
   const available = new Map<string, number>();
   for (const item of items) {
+    if (item.product.isComboBundle && item.product.comboComponents?.length) {
+      for (const component of item.product.comboComponents) {
+        if (component.trackInventory === false) continue;
+        consumed.set(
+          component.productId,
+          (consumed.get(component.productId) ?? 0) +
+            component.quantityPerBundle * item.quantity * (component.unitsPerBase ?? 1),
+        );
+        if (typeof component.availableQuantity === 'number') {
+          available.set(component.productId, component.availableQuantity);
+        }
+      }
+      continue;
+    }
     if (item.product.trackInventory === false) continue;
     consumed.set(
       item.product.id,

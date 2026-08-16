@@ -1,7 +1,8 @@
 import Feather from '@expo/vector-icons/Feather';
+import { appAlert } from '@/providers/ios-alert';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -129,7 +130,7 @@ function CatalogueContent() {
         client.invalidateQueries({ queryKey: [section] }),
       ]);
     },
-    onError: (error) => Alert.alert('Could not save', error.message),
+    onError: (error) => appAlert('Could not save', error.message),
   });
 
   const toggle = useMutation({
@@ -139,7 +140,7 @@ function CatalogueContent() {
         body: JSON.stringify({ isActive: !item.isActive }),
       }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['catalogue', section] }),
-    onError: (error) => Alert.alert('Could not update', error.message),
+    onError: (error) => appAlert('Could not update', error.message),
   });
 
   const data = useMemo(() => query.data ?? [], [query.data]);
@@ -160,7 +161,7 @@ function CatalogueContent() {
   return (
     <Screen>
       <Header
-        title="Product catalogue"
+        title="Product Catalogue"
         subtitle="Categories and brands"
         showBack
         backLabel="Products"

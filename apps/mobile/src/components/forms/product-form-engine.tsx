@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { appAlert } from '@/providers/ios-alert';
+import { View, Text, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { PreparationBehavior } from '@ximo/shared';
 import { api } from '../../lib/api';
@@ -66,7 +67,7 @@ export const ProductFormEngine: React.FC<ProductFormEngineProps> = ({
           setStatus(item.status || 'active');
         })
         .catch((err: any) => {
-          Alert.alert('Error', err.message || 'Failed to load product details');
+          appAlert('Error', err.message || 'Failed to load product details');
         })
         .finally(() => setLoading(false));
     }
@@ -111,7 +112,7 @@ export const ProductFormEngine: React.FC<ProductFormEngineProps> = ({
         });
       }
 
-      Alert.alert(
+      appAlert(
         'Success',
         `Product ${productId ? 'updated' : 'created'} successfully!`,
       );
@@ -121,7 +122,7 @@ export const ProductFormEngine: React.FC<ProductFormEngineProps> = ({
         router.back();
       }
     } catch (err: any) {
-      Alert.alert('Save Error', err.message || 'Failed to save product');
+      appAlert('Save Error', err.message || 'Failed to save product');
     } finally {
       setSaving(false);
     }

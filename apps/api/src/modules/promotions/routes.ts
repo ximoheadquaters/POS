@@ -231,7 +231,8 @@ export function promotionsRouter(database: Database): Router {
       if (input.items && input.items.length > 0) {
         for (const item of input.items) {
           const validProduct = await tx.query(
-            `select 1 from products where id=$1 and organization_id=$2 and branch_id=$3`,
+            `select 1 from products
+             where id=$1 and organization_id=$2 and branch_id=$3 and status='active'`,
             [item.productId, organizationId, input.branchId],
           );
           if (!validProduct.rowCount) throw notFound('Product');
@@ -304,7 +305,8 @@ export function promotionsRouter(database: Database): Router {
         if (input.items && input.items.length > 0) {
           for (const item of input.items) {
             const validProduct = await tx.query(
-              `select 1 from products where id=$1 and organization_id=$2 and branch_id=$3`,
+              `select 1 from products
+               where id=$1 and organization_id=$2 and branch_id=$3 and status='active'`,
               [item.productId, organizationId, input.branchId],
             );
             if (!validProduct.rowCount) throw notFound('Product');

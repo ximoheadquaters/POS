@@ -2420,10 +2420,10 @@ function MetricDrilldownView({
           activeGroup
             ? sourceItems.some((item) => item.children?.length)
               ? 'Tap a group to narrow further. Leaf rows expand details.'
-              : 'Tap a row to expand details. Use Open product catalog for the product page.'
+              : 'Tap a row to expand details. Use Open product catalogue for the product page.'
             : rootItems.some((item) => item.children?.length)
               ? 'Tap a group to narrow charts and list. Leaf rows expand in place.'
-              : 'Tap a row to expand details. Use Open product catalog for the product page.'
+              : 'Tap a row to expand details. Use Open product catalogue for the product page.'
         }
       >
         {filteredItems.length > 0 ? (
@@ -2573,7 +2573,7 @@ function MetricDrilldownView({
                           >
                             <Feather name="external-link" size={14} color="#FFFFFF" />
                             <Text className="ml-2 text-sm font-semibold text-white">
-                              Open product catalog
+                              Open product catalogue
                             </Text>
                           </Pressable>
                         ) : null}
@@ -2789,7 +2789,7 @@ function OverviewReport({
       label: p.name,
       value: Number(p.sales),
       display: formatMoney(p.sales),
-      note: `${p.quantity} ${p.unit}`,
+      soldLabel: `${p.quantity} ${p.unit}`,
     }));
 
   const categoryRows = report.sales.topCategories.slice(0, 6);
@@ -3149,42 +3149,61 @@ function OverviewReport({
               </Pressable>
             </View>
             {topProductBars.length ? (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                {topProductBars.map((row, index) => {
-                  const share = Math.round(
-                    (row.value / Math.max(topProductBars[0]?.value || 1, 1)) * 100,
-                  );
-                  return (
-                    <View
-                      key={row.key}
-                      className="gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5"
-                      style={{ width: '48.5%', flexGrow: 1, minWidth: 220 }}
-                    >
-                      <View className="flex-row items-center justify-between gap-3">
-                        <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
-                          <View className="h-8 w-8 items-center justify-center rounded-lg bg-brand-50">
-                            <Text className="text-xs font-semibold text-brand-800">{index + 1}</Text>
-                          </View>
-                          <View className="min-w-0 flex-1">
-                            <Text className="text-sm font-medium text-slate-900" numberOfLines={1}>
-                              {row.label}
-                            </Text>
-                            <Text className="text-[11px] text-slate-400" numberOfLines={1}>
-                              {row.note}
-                            </Text>
-                          </View>
-                        </View>
-                        <Text className="text-sm font-semibold text-slate-900">{row.display}</Text>
-                      </View>
-                      <View className="h-1.5 overflow-hidden rounded-full bg-white">
-                        <View
-                          className="h-1.5 rounded-full bg-brand-700"
-                          style={{ width: `${Math.max(share, 4)}%` }}
-                        />
-                      </View>
+              <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+                  <Text style={{ width: 28 }} className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    #
+                  </Text>
+                  <Text
+                    style={{ flex: 1, minWidth: 0 }}
+                    className="text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+                  >
+                    Product
+                  </Text>
+                  <Text
+                    style={{ width: 96, flexShrink: 0, textAlign: 'right' }}
+                    className="text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+                  >
+                    Sold
+                  </Text>
+                  <Text
+                    style={{ width: 104, flexShrink: 0, textAlign: 'right' }}
+                    className="text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+                  >
+                    Sales
+                  </Text>
+                </View>
+                {topProductBars.map((row, index) => (
+                  <View
+                    key={row.key}
+                    className={`flex-row items-center px-4 py-3 ${
+                      index ? 'border-t border-slate-100' : ''
+                    }`}
+                  >
+                    <Text style={{ width: 28 }} className="text-sm font-semibold text-brand-800">
+                      {index + 1}
+                    </Text>
+                    <View style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
+                      <Text className="text-sm font-semibold text-slate-900" numberOfLines={1}>
+                        {row.label}
+                      </Text>
                     </View>
-                  );
-                })}
+                    <Text
+                      style={{ width: 96, flexShrink: 0, textAlign: 'right' }}
+                      className="text-sm font-medium text-slate-800"
+                      numberOfLines={1}
+                    >
+                      {row.soldLabel}
+                    </Text>
+                    <Text
+                      style={{ width: 104, flexShrink: 0, textAlign: 'right' }}
+                      className="text-sm font-semibold text-slate-900"
+                      numberOfLines={1}
+                    >
+                      {row.display}
+                    </Text>
+                  </View>
+                ))}
               </View>
             ) : (
               <Text className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
@@ -4366,9 +4385,9 @@ function InventoryReport({
 
           <ScrollView horizontal showsHorizontalScrollIndicator={true} className="w-full">
             <View className="min-w-[900px] w-full">
-              <View className="flex-row border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
                 <Pressable onPress={() => handleStockSort('name')} className="w-56 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Product Name</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Product Name</Text>
                   {stockSortKey === 'name' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : (
@@ -4377,56 +4396,56 @@ function InventoryReport({
                 </Pressable>
 
                 <Pressable onPress={() => handleStockSort('sku')} className="w-32 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">SKU</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">SKU</Text>
                   {stockSortKey === 'sku' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleStockSort('category')} className="w-36 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Category</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Category</Text>
                   {stockSortKey === 'category' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleStockSort('role')} className="w-28 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Role</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Role</Text>
                   {stockSortKey === 'role' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleStockSort('unit')} className="w-44 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Unit / Conversion</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Unit / Conversion</Text>
                   {stockSortKey === 'unit' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleStockSort('quantity')} className="w-36 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Stock Qty</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Stock Qty</Text>
                   {stockSortKey === 'quantity' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleStockSort('cost')} className="w-32 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Avg Cost</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Avg Cost</Text>
                   {stockSortKey === 'cost' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleStockSort('value')} className="w-36 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Valuation</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Valuation</Text>
                   {stockSortKey === 'value' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleStockSort('status')} className="w-28 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold tracking-wide uppercase text-slate-600">Status</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Status</Text>
                   {stockSortKey === 'status' ? (
                     <Feather name={stockSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
@@ -4438,8 +4457,8 @@ function InventoryReport({
                   <View
                     key={item.id}
                     className={`flex-row items-center px-4 py-3.5 ${
-                      index % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
-                    } border-b border-slate-100 transition-colors hover:bg-emerald-50/30`}
+                      index > 0 ? 'border-t border-slate-100' : ''
+                    } bg-white`}
                   >
                     <View className="w-56 pr-2">
                       <Text className="text-xs font-semibold text-slate-900" numberOfLines={1}>
@@ -4596,48 +4615,48 @@ function InventoryReport({
 
           <ScrollView horizontal showsHorizontalScrollIndicator={true} className="w-full">
             <View className="min-w-[850px] w-full">
-              <View className="flex-row border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
                 <Pressable onPress={() => handleMovementSort('date')} className="w-44 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Date & Time</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Date & Time</Text>
                   {movementSortKey === 'date' ? (
                     <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleMovementSort('name')} className="w-56 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Product Name</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Product Name</Text>
                   {movementSortKey === 'name' ? (
                     <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleMovementSort('type')} className="w-36 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Movement Type</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Movement Type</Text>
                   {movementSortKey === 'type' ? (
                     <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleMovementSort('delta')} className="w-32 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Qty Change</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Qty Change</Text>
                   {movementSortKey === 'delta' ? (
                     <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleMovementSort('after')} className="w-32 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Qty After</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Qty After</Text>
                   {movementSortKey === 'after' ? (
                     <Feather name={movementSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleMovementSort('reason')} className="w-48 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Reason / Ref</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Reason / Ref</Text>
                 </Pressable>
 
                 <Pressable onPress={() => handleMovementSort('by')} className="w-36 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Performed By</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Performed By</Text>
                 </Pressable>
               </View>
 
@@ -4646,8 +4665,8 @@ function InventoryReport({
                   <View
                     key={m.id || index}
                     className={`flex-row items-center px-4 py-3.5 ${
-                      index % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
-                    } border-b border-slate-100 transition-colors hover:bg-emerald-50/30`}
+                      index > 0 ? 'border-t border-slate-100' : ''
+                    } bg-white`}
                   >
                     <View className="w-44 pr-2">
                       <Text className="text-xs font-medium text-slate-800">
@@ -4772,44 +4791,44 @@ function InventoryReport({
 
           <ScrollView horizontal showsHorizontalScrollIndicator={true} className="w-full">
             <View className="min-w-[850px] w-full">
-              <View className="flex-row border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
                 <Pressable onPress={() => handleConversionSort('source')} className="w-56 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Bulk Source Raw Material</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Bulk Source Raw Material</Text>
                   {conversionSortKey === 'source' ? (
                     <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleConversionSort('target')} className="w-56 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Repacked Target Product</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Repacked Target Product</Text>
                   {conversionSortKey === 'target' ? (
                     <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleConversionSort('ratio')} className="w-48 flex-row items-center gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Conversion Ratio</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Conversion Ratio</Text>
                   {conversionSortKey === 'ratio' ? (
                     <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleConversionSort('sourceStock')} className="w-36 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Source Stock</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Source Stock</Text>
                   {conversionSortKey === 'sourceStock' ? (
                     <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleConversionSort('targetStock')} className="w-36 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Repacked Stock</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Repacked Stock</Text>
                   {conversionSortKey === 'targetStock' ? (
                     <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
                 </Pressable>
 
                 <Pressable onPress={() => handleConversionSort('status')} className="w-36 flex-row items-center justify-end gap-1.5">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Repack Status</Text>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Repack Status</Text>
                   {conversionSortKey === 'status' ? (
                     <Feather name={conversionSortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={14} color="#047857" />
                   ) : null}
@@ -4821,8 +4840,8 @@ function InventoryReport({
                   <View
                     key={c.id || index}
                     className={`flex-row items-center px-4 py-3.5 ${
-                      index % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
-                    } border-b border-slate-100 transition-colors hover:bg-emerald-50/30`}
+                      index > 0 ? 'border-t border-slate-100' : ''
+                    } bg-white`}
                   >
                     <View className="w-56 pr-2">
                       <Text className="text-xs font-semibold text-slate-900">{c.sourceName}</Text>

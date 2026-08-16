@@ -121,92 +121,118 @@ function HardwareContent() {
       {query.isLoading ? (
         <LoadingState label="Checking hardware…" />
       ) : (
-        <ScrollView contentContainerClassName="p-5 pb-10">
-          <View className="mb-5 rounded-2xl bg-brand-50 p-4">
-            <Text className="font-bold text-brand-900">Safe until hardware is connected</Text>
-            <Text className="mt-1 text-sm leading-5 text-slate-600">
-              A platform administrator enables each module for the organization. The feature becomes
-              operational only when this device also has a compatible driver.
-            </Text>
-          </View>
+        <ScrollView contentContainerClassName="p-4 md:p-6 pb-12">
+          <View className="w-full max-w-3xl self-center gap-5">
+            {/* Informational banner */}
+            <View className="flex-row items-center rounded-2xl border border-brand-200 bg-brand-50/80 p-4">
+              <View className="mr-3.5 h-10 w-10 items-center justify-center rounded-xl bg-brand-100">
+                <Text className="text-base font-black text-brand-800">⚡</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs font-bold text-brand-950">Hardware Integration Status</Text>
+                <Text className="mt-0.5 text-xs text-slate-600 leading-relaxed">
+                  Modules are enabled by store administrators. Connect compatible drivers or devices to make them operational.
+                </Text>
+              </View>
+            </View>
 
-          <View className="gap-3">
-            {HARDWARE_CAPABILITIES.map((capability) => {
-              const status = query.data?.find((item) => item.code === capability.code);
-              const ready = status?.state === 'ready';
-              const configured = status?.state === 'not_configured';
-              const statusLabel = ready
-                ? 'Ready'
-                : configured
-                  ? 'Driver required'
-                  : 'Module disabled';
-              return (
-                <View
-                  key={capability.code}
-                  className="rounded-2xl border border-slate-100 bg-white p-4"
-                >
-                  <View className="flex-row items-start">
-                    <View className="mr-3 h-11 w-11 items-center justify-center rounded-xl bg-brand-50">
-                      <Text className="font-black text-brand-700">{capability.symbol}</Text>
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-base font-bold text-slate-900">{capability.name}</Text>
-                      <Text className="mt-1 text-sm leading-5 text-slate-500">
-                        {capability.description}
-                      </Text>
-                    </View>
-                  </View>
+            {/* Capabilities list */}
+            <View className="gap-4">
+              {HARDWARE_CAPABILITIES.map((capability) => {
+                const status = query.data?.find((item) => item.code === capability.code);
+                const ready = status?.state === 'ready';
+                const configured = status?.state === 'not_configured';
+                const statusLabel = ready
+                  ? 'Ready'
+                  : configured
+                    ? 'Driver required'
+                    : 'Module disabled';
+                return (
                   <View
-                    className={`mt-4 rounded-xl p-3 ${
-                      ready ? 'bg-emerald-50' : configured ? 'bg-amber-50' : 'bg-slate-100'
-                    }`}
+                    key={capability.code}
+                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
                   >
-                    <Text
-                      className={`text-sm font-bold ${
-                        ready
-                          ? 'text-emerald-800'
-                          : configured
-                            ? 'text-amber-800'
-                            : 'text-slate-600'
-                      }`}
-                    >
-                      {statusLabel} · {status?.driverName}
-                    </Text>
-                    <Text className="mt-1 text-xs leading-4 text-slate-600">{status?.detail}</Text>
-                  </View>
-                  {ready && capability.code !== 'receipt_printer' ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={test.isPending}
-                      onPress={() => test.mutate(capability.code)}
-                      className="mt-3 min-h-11 items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-4 active:bg-brand-100"
-                    >
-                      <Text className="font-bold text-brand-700">Test device</Text>
-                    </Pressable>
-                  ) : null}
-                  {capability.code === 'receipt_printer' && status?.state !== 'unavailable' ? (
-                    <ReceiptPrinterSetup
-                      value={printerSettings}
-                      onChange={setPrinterSettings}
-                      onSave={() => savePrinter.mutate()}
-                      onTest={() => test.mutate('receipt_printer')}
-                      saving={savePrinter.isPending}
-                      testing={test.isPending}
-                      saveLabel={saveLabel}
-                    />
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
+                    <View className="flex-row items-start justify-between">
+                      <View className="mr-3 flex-1 flex-row items-start">
+                        <View className="mr-3 h-11 w-11 items-center justify-center rounded-xl bg-slate-100">
+                          <Text className="text-base font-black text-slate-700">{capability.symbol}</Text>
+                        </View>
+                        <View className="flex-1">
+                          <View className="flex-row flex-wrap items-center gap-2">
+                            <Text className="text-base font-bold text-slate-900">{capability.name}</Text>
+                            <View
+                              className={`rounded-full px-2.5 py-0.5 ${
+                                ready
+                                  ? 'bg-emerald-100'
+                                  : configured
+                                    ? 'bg-amber-100'
+                                    : 'bg-slate-100'
+                              }`}
+                            >
+                              <Text
+                                className={`text-[11px] font-bold ${
+                                  ready
+                                    ? 'text-emerald-800'
+                                    : configured
+                                      ? 'text-amber-800'
+                                      : 'text-slate-600'
+                                }`}
+                              >
+                                {statusLabel}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text className="mt-1 text-xs text-slate-500 leading-normal">
+                            {capability.description}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
 
-          <View className="mt-5">
-            <Button
-              title={refresh.isPending ? 'Refreshing access…' : 'Refresh enabled modules'}
-              variant="secondary"
-              disabled={refresh.isPending}
-              onPress={() => refresh.mutate()}
-            />
+                    {/* Driver details */}
+                    <View className="mt-3 rounded-xl bg-slate-50 p-3">
+                      <Text className="text-xs font-semibold text-slate-800">
+                        Driver: {status?.driverName ?? 'Standard Driver'}
+                      </Text>
+                      <Text className="mt-0.5 text-[11px] text-slate-500">{status?.detail}</Text>
+                    </View>
+
+                    {ready && capability.code !== 'receipt_printer' ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={test.isPending}
+                        onPress={() => test.mutate(capability.code)}
+                        className="mt-3.5 min-h-10 self-start flex-row items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-4 active:bg-brand-100"
+                      >
+                        <Text className="text-xs font-bold text-brand-800">Test Device</Text>
+                      </Pressable>
+                    ) : null}
+
+                    {capability.code === 'receipt_printer' && status?.state !== 'unavailable' ? (
+                      <ReceiptPrinterSetup
+                        value={printerSettings}
+                        onChange={setPrinterSettings}
+                        onSave={() => savePrinter.mutate()}
+                        onTest={() => test.mutate('receipt_printer')}
+                        saving={savePrinter.isPending}
+                        testing={test.isPending}
+                        saveLabel={saveLabel}
+                      />
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Bottom Refresh */}
+            <View className="mt-2 flex-row justify-end">
+              <Button
+                title={refresh.isPending ? 'Refreshing access…' : 'Refresh enabled modules'}
+                variant="secondary"
+                disabled={refresh.isPending}
+                onPress={() => refresh.mutate()}
+              />
+            </View>
           </View>
         </ScrollView>
       )}
