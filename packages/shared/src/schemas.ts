@@ -408,6 +408,9 @@ export const cartItemSchema = z.object({
   productId: uuidSchema,
   variantId: uuidSchema.nullable().optional(),
   quantity: z.number().positive().max(999_999).multipleOf(0.001),
+  /** Optional POS-locked price (e.g. combo allocation). When set, checkout uses this instead of catalog price. */
+  unitPrice: moneyStringSchema.optional(),
+  promoId: uuidSchema.optional(),
 });
 
 export const discountSchema = z.discriminatedUnion('type', [

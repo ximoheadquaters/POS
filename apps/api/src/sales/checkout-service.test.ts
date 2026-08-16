@@ -391,4 +391,26 @@ describe('checkout transaction', () => {
     ).rejects.toMatchObject({ code: 'PAYMENT_MISMATCH' } satisfies Partial<AppError>);
     expect(database.state.sales).toHaveLength(0);
   });
+
+  it('honors locked combo unitPrice overrides so payment totals match', async () => {
+    const database = new CheckoutDatabase();
+    const comboCheckout: CheckoutInput = {
+      ...input,
+      items: [
+        {
+          productId: input.items[0]!.productId,
+          quantity: 2,
+          unitPrice: '10.00',
+        },
+      ],
+      payments: [{ method: 'cash', amount: '22.40', tendered: '22.40' }],
+    };
+    const resultValue = await new CheckoutService(database).complete(
+      actor,
+      comboCheckout,
+      'checkout-combo-price-0001',
+    );
+    expect(resultValue.total).toBe('22.40');
+    expect(database.state.sales).toHaveLength(1);
+  });
 });

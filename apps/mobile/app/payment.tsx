@@ -172,6 +172,12 @@ export default function PaymentScreen() {
         variantId: item.product.variantId ?? null,
         quantity: item.quantity,
         unitsPerBase: item.product.unitsPerBase ?? 1,
+        ...(item.product.priceLocked
+          ? {
+              unitPrice: item.product.sellingPrice,
+              ...(item.product.promoId ? { promoId: item.product.promoId } : {}),
+            }
+          : {}),
       }));
       const checkoutDiscount =
         discount && discount !== '0.00' ? { type: 'fixed' as const, value: discount } : undefined;

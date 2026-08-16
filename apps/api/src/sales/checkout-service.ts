@@ -111,18 +111,36 @@ export class CheckoutService {
       const context = await this.validateContext(transaction, actor, input);
       const requested = new Map<
         string,
-        { productId: string; variantId: string | null; quantity: number }
+        { productId: string; variantId: string | null; quantity: number; unitPrice?: string }
       >();
       for (const item of input.items) {
         const key = `${item.productId}:${item.variantId ?? ''}`;
         const existing = requested.get(key);
-        if (existing) existing.quantity += item.quantity;
-        else
+        if (existing) {
+          if (item.unitPrice && existing.unitPrice) {
+            const oldTotal =
+              moneyToMinor(existing.unitPrice) * BigInt(Math.round(existing.quantity * 1_000));
+            const addTotal =
+              moneyToMinor(item.unitPrice) * BigInt(Math.round(item.quantity * 1_000));
+            const nextThousandths = BigInt(
+              Math.round((existing.quantity + item.quantity) * 1_000),
+            );
+            existing.unitPrice =
+              nextThousandths > 0n
+                ? minorToMoney((oldTotal + addTotal + nextThousandths / 2n) / nextThousandths)
+                : item.unitPrice;
+          } else if (item.unitPrice && !existing.unitPrice) {
+            existing.unitPrice = item.unitPrice;
+          }
+          existing.quantity += item.quantity;
+        } else {
           requested.set(key, {
             productId: item.productId,
             variantId: item.variantId ?? null,
             quantity: item.quantity,
+            unitPrice: item.unitPrice,
           });
+        }
       }
 
       const rows: Array<{
@@ -130,6 +148,7 @@ export class CheckoutService {
         quantity: number;
         inventoryQuantity: number;
         inventoryPool: InventoryPool;
+        unitPrice: string;
       }> = [];
       for (const item of requested.values()) {
         const result = await transaction.query<ProductRow>(
@@ -175,6 +194,7 @@ export class CheckoutService {
             `${product.name} must be sold in whole ${product.selling_unit} quantities`,
           );
         }
+        const unitPrice = item.unitPrice ?? product.unit_price;
         const inventoryQuantity = item.quantity * product.units_per_base;
         const inventoryPool: InventoryPool = product.portioning_variant_id
           ? product.variant_id === product.portioning_variant_id
@@ -204,7 +224,13 @@ export class CheckoutService {
             `${product.name} has insufficient ${poolLabel} inventory`.replace('  ', ' '),
           );
         }
-        rows.push({ product, quantity: item.quantity, inventoryQuantity, inventoryPool });
+        rows.push({
+          product,
+          quantity: item.quantity,
+          inventoryQuantity,
+          inventoryPool,
+          unitPrice,
+        });
       }
       if (!context.allow_negative_inventory) {
         const inventoryDemand = new Map<
@@ -246,9 +272,9 @@ export class CheckoutService {
       let taxTotal = 0n;
       let totalBeforeDiscount = 0n;
       let costTotal = 0n;
-      const calculated = rows.map(({ product, quantity, inventoryQuantity, inventoryPool }) => {
+      const calculated = rows.map(({ product, quantity, inventoryQuantity, inventoryPool, unitPrice }) => {
         const line = calculateLine(
-          product.unit_price,
+          unitPrice,
           product.unit_cost,
           quantity,
           product.tax_rate,
@@ -258,7 +284,7 @@ export class CheckoutService {
         taxTotal += line.tax;
         totalBeforeDiscount += line.total;
         costTotal += line.cost;
-        return { product, quantity, inventoryQuantity, inventoryPool, line };
+        return { product, quantity, inventoryQuantity, inventoryPool, unitPrice, line };
       });
 
       let discountTotal = 0n;
@@ -348,7 +374,7 @@ export class CheckoutService {
             item.product.name,
             item.product.sku,
             item.quantity,
-            item.product.unit_price,
+            item.unitPrice,
             item.product.unit_cost ?? '0.00',
             minorToMoney(allocatedDiscount),
             minorToMoney(item.line.tax),
