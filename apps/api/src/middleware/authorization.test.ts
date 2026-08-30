@@ -151,7 +151,7 @@ describe('API authorization boundaries', () => {
     expect(response.body.error.code).toBe('BRANCH_ACCESS_DENIED');
   });
 
-  it('limits the POS catalogue to tracked products stocked at the selected branch', async () => {
+  it('limits the POS catalog to tracked products stocked at the selected branch', async () => {
     const database = new AuthorizationDatabase();
     const app = createApp({
       database,

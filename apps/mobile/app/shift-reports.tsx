@@ -173,7 +173,7 @@ function ShiftReportsContent() {
             or store owner to enable register management.
           </Text>
           <View className="mt-6 w-full max-w-xs">
-            <Button title="Return to POS" onPress={() => router.push('/(tabs)/pos')} />
+            <Button title="Return To POS" onPress={() => router.push('/(tabs)/pos')} />
           </View>
         </View>
       </Screen>
@@ -183,7 +183,7 @@ function ShiftReportsContent() {
   return (
     <Screen>
       <Header
-        title="Cash and shift reports"
+        title="Cash And Shift Reports"
         subtitle={`${rangeLabel} · ${branch?.name ?? 'All accessible branches'}`}
         showBack
         backLabel="Reports"
@@ -191,11 +191,11 @@ function ShiftReportsContent() {
       />
       <View className="border-b border-slate-200 bg-white p-4">
         <Text className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Date range
+          Date Range
         </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open calendar date range"
+          accessibilityLabel="Open Calendar Date Range"
           onPress={() => {
             const active =
               period === 'custom'
@@ -288,7 +288,7 @@ function ShiftReportsContent() {
                   {item.registerName} · {item.cashierName}
                 </Text>
                 <Text className="mt-1 text-xs text-slate-500">
-                  {new Date(item.openedAt).toLocaleString()} · {item.transactions} transactions
+                  {new Date(item.openedAt).toLocaleString()} · {item.transactions} Transactions
                 </Text>
                 <Text className="mt-1 text-xs capitalize text-brand-700">{item.status}</Text>
               </View>
@@ -323,7 +323,7 @@ function ShiftReportsContent() {
             <ScrollView contentContainerClassName="gap-4 p-5" keyboardShouldPersistTaps="handled">
               <View className="flex-row items-start justify-between gap-3">
                 <View className="min-w-0 flex-1">
-                  <Text className="text-lg font-semibold text-slate-950">Select date range</Text>
+                  <Text className="text-lg font-semibold text-slate-950">Select Date Range</Text>
                   <Text className="mt-1 text-xs leading-4 text-slate-500">
                     Tap a start date, then an end date on the calendar.
                   </Text>
@@ -339,7 +339,7 @@ function ShiftReportsContent() {
 
               <View>
                 <Text className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Quick presets
+                  Quick Presets
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {PERIOD_PRESETS.map((p) => {
@@ -400,7 +400,7 @@ function ShiftReportsContent() {
                 </View>
                 <View className={phone ? '' : 'flex-1'}>
                   <Button
-                    title="Apply range"
+                    title="Apply Range"
                     onPress={() => {
                       if (!isValidDateInput(draftFrom) || !isValidDateInput(draftTo)) {
                         setDateRangeError('Select a valid start and end date on the calendar.');

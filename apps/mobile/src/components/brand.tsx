@@ -8,7 +8,7 @@ interface BrandLogoProps {
 export function BrandLogo({ size = 64 }: BrandLogoProps) {
   return (
     <Image
-      accessibilityLabel="Ximo logo"
+      accessibilityLabel="Ximo Logo"
       accessible
       resizeMode="contain"
       source={logo}

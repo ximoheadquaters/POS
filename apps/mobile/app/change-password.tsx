@@ -59,26 +59,26 @@ export default function ChangePasswordScreen() {
           <View className="mx-auto w-full max-w-xl">
             <View className="mb-5 rounded-3xl bg-brand-700 p-6">
               <BrandLogo size={56} />
-              <Text className="mt-5 text-3xl font-black text-white">Protect your account</Text>
+              <Text className="mt-5 text-3xl font-black text-white">Protect Your Account</Text>
               <Text className="mt-2 leading-6 text-brand-100">
                 Create a password you will use to sign in to Ximo POS.
               </Text>
             </View>
             <View className="rounded-3xl border border-slate-100 bg-white p-5">
-              <Text className="text-2xl font-black text-brand-900">Create your password</Text>
+              <Text className="text-2xl font-black text-brand-900">Create Your Password</Text>
               <Text className="mb-5 mt-2 leading-6 text-slate-500">
                 Use at least 10 characters with uppercase, lowercase, and a number.
               </Text>
-              <Field label="New password" autoCapitalize="none" autoComplete="new-password" secureTextEntry value={password} onChangeText={setPassword} />
-              <Field label="Confirm password" autoCapitalize="none" autoComplete="new-password" secureTextEntry value={confirmation} onChangeText={setConfirmation} onSubmitEditing={submit} />
+              <Field label="New Password" autoCapitalize="none" autoComplete="new-password" secureTextEntry value={password} onChangeText={setPassword} />
+              <Field label="Confirm Password" autoCapitalize="none" autoComplete="new-password" secureTextEntry value={confirmation} onChangeText={setConfirmation} onSubmitEditing={submit} />
               {error ? (
                 <View accessibilityRole="alert" className="mb-4 rounded-xl bg-red-50 p-3">
                   <Text className="text-sm leading-5 text-red-700">{error}</Text>
                 </View>
               ) : null}
-              <Button title={saving ? 'Saving...' : 'Save my password'} disabled={saving} onPress={submit} />
+              <Button title={saving ? 'Saving...' : 'Save My Password'} disabled={saving} onPress={submit} />
               <View className="mt-3">
-                <Button title="Sign out" variant="secondary" onPress={signOut} />
+                <Button title="Sign Out" variant="secondary" onPress={signOut} />
               </View>
             </View>
           </View>

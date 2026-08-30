@@ -190,30 +190,30 @@ export default function ProductScanScreen() {
   return (
     <Screen>
       <Header
-        title="Scan product"
+        title="Scan Product"
         subtitle={
           addToCart
             ? 'Scan an item to add it to the sale.'
-            : 'Scan an item to add it to the catalogue.'
+            : 'Scan an item to add it to the catalog.'
         }
         showBack
         backLabel={addToCart ? 'POS' : 'Products'}
         fallbackHref={addToCart ? '/(tabs)/pos' : '/products'}
       />
       {!permission ? (
-        <LoadingState label="Checking camera permission…" />
+        <LoadingState label="Checking Camera Permission…" />
       ) : (
         <View className="flex-1 p-4">
           {permission.granted && !insecureWebContext ? (
             cameraError ? (
               <View className="mb-4 min-h-72 items-center justify-center rounded-3xl bg-slate-950 p-6">
-                <Text className="text-center font-semibold text-white">Camera could not start</Text>
+                <Text className="text-center font-semibold text-white">Camera Could Not Start</Text>
                 <Text className="mt-2 text-center text-sm leading-5 text-slate-300">
                   {cameraError}
                 </Text>
                 <View className="mt-4 w-full max-w-48">
                   <Button
-                    title="Try camera again"
+                    title="Try Camera Again"
                     onPress={() => {
                       setCameraError('');
                       setCameraReady(false);
@@ -250,14 +250,14 @@ export default function ProductScanScreen() {
                 ) : null}
                 {!cameraReady ? (
                   <View className="absolute inset-0 items-center justify-center bg-black">
-                    <LoadingState label="Starting camera…" />
+                    <LoadingState label="Starting Camera…" />
                   </View>
                 ) : null}
               </View>
             )
           ) : (
             <View className="mb-4 rounded-3xl bg-brand-50 p-5">
-              <Text className="font-bold text-brand-900">Camera access is needed</Text>
+              <Text className="font-bold text-brand-900">Camera Access Is Needed</Text>
               <Text className="mt-1 leading-5 text-slate-600">
                 {insecureWebContext
                   ? 'Camera scanning requires HTTPS or localhost. Open the secure Ximo address and try again.'
@@ -265,7 +265,7 @@ export default function ProductScanScreen() {
               </Text>
               {!insecureWebContext && permission.canAskAgain ? (
                 <View className="mt-4">
-                  <Button title="Allow camera" onPress={() => void requestPermission()} />
+                  <Button title="Allow Camera" onPress={() => void requestPermission()} />
                 </View>
               ) : !insecureWebContext ? (
                 <View className="mt-4 gap-2">
@@ -275,7 +275,7 @@ export default function ProductScanScreen() {
                       : 'Enable camera access for Ximo POS in your phone settings.'}
                 </Text>
                   {Platform.OS !== 'web' ? (
-                    <Button title="Open device settings" onPress={() => void Linking.openSettings()} />
+                    <Button title="Open Device Settings" onPress={() => void Linking.openSettings()} />
                   ) : null}
                 </View>
               ) : null}
@@ -283,7 +283,7 @@ export default function ProductScanScreen() {
           )}
 
           <View className="rounded-2xl border border-slate-100 bg-white p-4">
-            <Text className="font-bold text-slate-900">Scanner or manual entry</Text>
+            <Text className="font-bold text-slate-900">Scanner Or Manual Entry</Text>
             <Text className="mb-3 mt-1 text-sm leading-5 text-slate-500">
               Scan a barcode, or choose SKU before typing a product code.
             </Text>

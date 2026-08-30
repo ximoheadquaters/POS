@@ -311,7 +311,7 @@ export default function DashboardScreen() {
     return (
       <Screen>
         <Header title="Dashboard" subtitle={branch?.name} />
-        <LoadingState label="Loading today’s activity…" />
+        <LoadingState label="Loading Today’s Activity…" />
       </Screen>
     );
   }
@@ -382,7 +382,7 @@ export default function DashboardScreen() {
               onPress={() => router.push('/reports/overview')}
               className="min-h-10 flex-row items-center rounded-xl bg-slate-900 px-3.5"
             >
-              <Text className="text-[13px] font-medium text-white">View reports</Text>
+              <Text className="text-[13px] font-medium text-white">View Reports</Text>
               <Feather name="arrow-right" size={14} color="#FFFFFF" style={{ marginLeft: 6 }} />
             </Pressable>
           </View>
@@ -390,7 +390,7 @@ export default function DashboardScreen() {
 
         <View className="mb-5 flex-row flex-wrap gap-3">
           <MetricCard
-            label="Net sales"
+            label="Net Sales"
             value={formatMoney(data.salesTotal)}
             note={range.label}
             icon="activity"
@@ -406,7 +406,7 @@ export default function DashboardScreen() {
             width={metricWidth}
           />
           <MetricCard
-            label="Average sale"
+            label="Average Sale"
             value={formatMoney(data.averageTransaction)}
             note={`${data.transactions} checkouts`}
             icon="credit-card"
@@ -414,7 +414,7 @@ export default function DashboardScreen() {
             width={metricWidth}
           />
           <MetricCard
-            label="Gross profit"
+            label="Gross Profit"
             value={formatMoney(data.grossProfit)}
             note="After cost of goods"
             icon="trending-up"
@@ -422,7 +422,7 @@ export default function DashboardScreen() {
             width={metricWidth}
           />
           <MetricCard
-            label="Low stock"
+            label="Low Stock"
             value={String(lowStockCount)}
             note={lowStockCount ? 'Needs attention' : 'All clear'}
             icon="alert-circle"
@@ -439,7 +439,7 @@ export default function DashboardScreen() {
             <View className="mb-3 flex-row items-center justify-between gap-3">
               <View>
                 <Text className="text-[15px] font-semibold text-slate-900">Summary</Text>
-                <Text className="mt-0.5 text-xs text-slate-500">Sales trend — last 7 days</Text>
+                <Text className="mt-0.5 text-xs text-slate-500">Sales Trend — Last 7 Days</Text>
               </View>
               <View className="flex-row items-center gap-3">
                 <View className="flex-row items-center gap-1.5">
@@ -449,7 +449,7 @@ export default function DashboardScreen() {
               </View>
             </View>
             {trendQuery.isLoading ? (
-              <LoadingState label="Loading trend…" />
+              <LoadingState label="Loading Trend…" />
             ) : (
               <SummaryChart trend={trendQuery.data?.sales.trend ?? []} />
             )}
@@ -460,7 +460,7 @@ export default function DashboardScreen() {
             style={{ width: phone ? '100%' : '34%', minWidth: phone ? undefined : 280, flexGrow: 1 }}
           >
             <View className="mb-4 flex-row items-center justify-between">
-              <Text className="text-[15px] font-semibold text-slate-900">Most selling products</Text>
+              <Text className="text-[15px] font-semibold text-slate-900">Most Selling Products</Text>
               <Pressable onPress={() => router.push('/reports/overview')}>
                 <Feather name="more-horizontal" size={18} color="#94A3B8" />
               </Pressable>
@@ -499,9 +499,9 @@ export default function DashboardScreen() {
         <View className="flex-row flex-wrap gap-4">
           <View className="rounded-2xl border border-slate-100 bg-white p-5" style={{ width: panelWidth, flexGrow: 1 }}>
             <View className="mb-4 flex-row items-center justify-between">
-              <Text className="text-[15px] font-semibold text-slate-900">Stock alerts</Text>
+              <Text className="text-[15px] font-semibold text-slate-900">Stock Alerts</Text>
               <Pressable onPress={() => router.push('/(tabs)/inventory')}>
-                <Text className="text-sm font-medium text-brand-700">View all</Text>
+                <Text className="text-sm font-medium text-brand-700">View All</Text>
               </Pressable>
             </View>
             {data.lowStock.length ? (
@@ -536,8 +536,8 @@ export default function DashboardScreen() {
 
           <View className="rounded-2xl border border-slate-100 bg-white p-5" style={{ width: panelWidth, flexGrow: 1 }}>
             <View className="mb-4 flex-row items-center justify-between">
-              <Text className="text-[15px] font-semibold text-slate-900">Payment mix</Text>
-              <Text className="text-xs text-slate-400">{paymentCount || 0} methods</Text>
+              <Text className="text-[15px] font-semibold text-slate-900">Payment Mix</Text>
+              <Text className="text-xs text-slate-400">{paymentCount || 0} Methods</Text>
             </View>
             {data.salesByPaymentMethod.length ? (
               <View className="gap-3">
@@ -563,7 +563,7 @@ export default function DashboardScreen() {
                           style={{ width: `${Math.max(pct, 4)}%` }}
                         />
                       </View>
-                      <Text className="text-[11px] text-slate-400">{pct}% of payments</Text>
+                      <Text className="text-[11px] text-slate-400">{pct}% Of Payments</Text>
                     </View>
                   );
                 })}

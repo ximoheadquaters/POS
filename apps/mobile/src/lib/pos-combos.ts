@@ -93,9 +93,10 @@ async function fetchCombosViaPromotionsApi(
   branchId: string,
   search?: string,
 ): Promise<PosComboPromotion[]> {
+  const trimmedSearch = search?.trim();
   const list = await api<PromotionSummary[]>(
     `/promotions?branchId=${branchId}&page=1&pageSize=100${
-      search ? `&search=${encodeURIComponent(search)}` : ''
+      trimmedSearch ? `&search=${encodeURIComponent(trimmedSearch)}` : ''
     }`,
   );
 
@@ -148,7 +149,8 @@ export async function fetchPosCombos(
   branchId: string,
   search?: string,
 ): Promise<PosComboPromotion[]> {
-  const query = search ? `&search=${encodeURIComponent(search)}` : '';
+  const trimmedSearch = search?.trim();
+  const query = trimmedSearch ? `&search=${encodeURIComponent(trimmedSearch)}` : '';
 
   // Try dedicated endpoint first (single fast attempt)
   try {
@@ -157,5 +159,5 @@ export async function fetchPosCombos(
     // Fall through to manual composition
   }
 
-  return fetchCombosViaPromotionsApi(branchId, search);
+  return fetchCombosViaPromotionsApi(branchId, trimmedSearch);
 }

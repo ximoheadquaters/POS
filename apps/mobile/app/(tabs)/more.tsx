@@ -178,7 +178,7 @@ export default function MoreScreen() {
         ListHeaderComponent={
           <View className="mb-2 rounded-2xl bg-brand-700 p-5">
             <Text className="text-xs font-bold uppercase tracking-wider text-brand-100">
-              Current branch
+              Current Branch
             </Text>
             <Text className="mt-1 text-xl font-black text-white">{branch?.name}</Text>
             <Text className="mt-1 text-sm text-brand-100">
@@ -199,7 +199,7 @@ export default function MoreScreen() {
                 }}
                 className="flex-1 min-h-11 items-center justify-center rounded-xl bg-white px-4 active:opacity-80"
               >
-                <Text className="font-bold text-brand-700">Switch branch</Text>
+                <Text className="font-bold text-brand-700">Switch Branch</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -219,7 +219,7 @@ export default function MoreScreen() {
               onPress={() => setPinModalVisible(true)}
             />
             <Button
-              title={refreshingAccess ? 'Refreshing access…' : 'Refresh modules & access'}
+              title={refreshingAccess ? 'Refreshing Access…' : 'Refresh Modules & Access'}
               variant="secondary"
               disabled={refreshingAccess}
               onPress={() => {
@@ -231,7 +231,7 @@ export default function MoreScreen() {
               }}
             />
             <Button
-              title="Sign out"
+              title="Sign Out"
               variant="secondary"
               onPress={() =>
                 appAlert('Sign out?', 'You will need your password to sign in again.', [

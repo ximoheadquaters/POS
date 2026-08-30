@@ -65,7 +65,7 @@ export function LockedFeatureModal({
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close lock explanation"
+                accessibilityLabel="Close Lock Explanation"
                 onPress={onClose}
                 className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
               >

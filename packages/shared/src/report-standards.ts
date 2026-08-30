@@ -14,7 +14,7 @@ export const REPORT_METRICS: Record<string, ReportMetricDefinition> = {
   gross_sales: {
     id: 'gross_sales',
     label: 'Gross Sales',
-    description: 'Completed line-item selling value before discounts and refunds; voids and cancelled sales are excluded.',
+    description: 'Completed line-item selling value before discounts and refunds; voids and canceled sales are excluded.',
     formula: 'SUM(Line Item Selling Price × Quantity)',
     format: 'currency',
   },

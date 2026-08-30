@@ -158,7 +158,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
     return (
       <Screen>
         <Header title={isRetail ? 'Retail Repacking' : 'Production'} showBack />
-        <LoadingState label="Loading available repacking products…" />
+        <LoadingState label="Loading Available Repacking Products…" />
       </Screen>
     );
   }
@@ -244,7 +244,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                 </Text>
               </View>
               <Text className="text-xs text-slate-500">
-                {productsList.length} recipe item{productsList.length === 1 ? '' : 's'}
+                {productsList.length} Recipe Item{productsList.length === 1 ? '' : 's'}
               </Text>
             </View>
 
@@ -313,11 +313,11 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                     <Text className="text-xs font-bold text-white">2</Text>
                   </View>
                   <Text numberOfLines={2} className="flex-1 text-sm font-bold text-slate-900">
-                    Packs to Produce
+                    Packs To Produce
                   </Text>
                 </View>
                 <Text numberOfLines={1} className="max-w-32 text-xs text-slate-500">
-                  {selectedProduct.unit}s output
+                  {selectedProduct.unit}S Output
                 </Text>
               </View>
 
@@ -329,7 +329,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                   placeholder="10"
                   placeholderTextColor="#94A3B8"
                   selectionColor="#1A593B"
-                  accessibilityLabel="Packs to produce"
+                  accessibilityLabel="Packs To Produce"
                   className="h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-center text-base font-bold text-slate-900 focus:border-brand-600"
                 />
                 <View className="flex-row gap-2">
@@ -428,7 +428,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
 
               {previewQuery.isLoading ? (
                 <Text className="py-3 text-center text-xs text-slate-500">
-                  Calculating cost preview…
+                  Calculating Cost Preview…
                 </Text>
               ) : preview ? (
                 <View className="gap-2.5">
@@ -440,7 +440,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                       </Text>
                     </View>
                     <View className="min-w-0 flex-1 items-end">
-                      <Text className="text-xs text-slate-500">Cost per Pack</Text>
+                      <Text className="text-xs text-slate-500">Cost Per Pack</Text>
                       <Text className="mt-0.5 text-base font-black text-brand-700">
                         {formatMoney(preview.estimatedUnitCost)}
                       </Text>
@@ -471,7 +471,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
           <View className="border-t border-slate-200 bg-white px-4 py-3 shadow-lg flex-row items-center gap-3">
             <View className="flex-1">
               <Text className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Ready to Repack
+                Ready To Repack
               </Text>
               <Text className="text-sm font-black text-slate-900" numberOfLines={1}>
                 {preview

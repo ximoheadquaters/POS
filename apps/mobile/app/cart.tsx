@@ -122,7 +122,7 @@ export default function CartScreen() {
         keyExtractor={(item) => cartProductKey(item.product)}
         contentContainerClassName="p-4 gap-3 pb-64"
         ListEmptyComponent={
-          <EmptyState title="Cart is empty" message="Add products from the POS screen." />
+          <EmptyState title="Cart Is Empty" message="Add products from the POS screen." />
         }
         renderItem={({ item }) => {
           const hasPromo = activePromo?.appliedProductIds.has(item.product.id);
@@ -165,7 +165,7 @@ export default function CartScreen() {
                           : 'text-brand-500'
                       }`}
                     >
-                      {item.product.availableQuantity} currently in stock
+                      {item.product.availableQuantity} Currently In Stock
                     </Text>
                   ) : null}
                 </View>
@@ -265,11 +265,22 @@ export default function CartScreen() {
             </Text>
           </Pressable>
           <View className="flex-1">
-            <Button
-              title="Continue to payment"
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Continue To Payment"
               disabled={!items.length || hasStockConflict}
               onPress={() => router.push('/payment')}
-            />
+              className={`min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-3 active:bg-brand-800 ${
+                !items.length || hasStockConflict ? 'opacity-40' : ''
+              }`}
+            >
+              <Text numberOfLines={1} className="shrink text-center text-sm font-bold text-white">
+                Continue To Payment
+              </Text>
+              <View className="ml-2">
+                <Feather name="arrow-right" size={16} color="#FFFFFF" />
+              </View>
+            </Pressable>
           </View>
 
         </View>
@@ -289,7 +300,7 @@ export default function CartScreen() {
               </Text>
             </Pressable>
             <Pressable
-              accessibilityLabel="Clear current order"
+              accessibilityLabel="Clear Current Order"
               onPress={() => {
                 clearCart();
                 router.back();

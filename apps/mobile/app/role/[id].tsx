@@ -63,7 +63,7 @@ function RoleDetailContent() {
     return (
       <Screen>
         <Header
-          title="Role permissions"
+          title="Role Permissions"
           subtitle="Loading role access"
           showBack
           backLabel="Users"
@@ -78,7 +78,7 @@ function RoleDetailContent() {
     return (
       <Screen>
         <Header
-          title="Role permissions"
+          title="Role Permissions"
           subtitle="Role access"
           showBack
           backLabel="Users"
@@ -142,7 +142,7 @@ function RoleDetailContent() {
                 }}
                 className="min-h-11 flex-1 items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-3"
               >
-                <Text className="text-sm font-medium text-brand-800">Select all</Text>
+                <Text className="text-sm font-medium text-brand-800">Select All</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -152,7 +152,7 @@ function RoleDetailContent() {
                 }}
                 className="min-h-11 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-3"
               >
-                <Text className="text-sm font-medium text-slate-700">Clear all</Text>
+                <Text className="text-sm font-medium text-slate-700">Clear All</Text>
               </Pressable>
             </View>
           ) : null}

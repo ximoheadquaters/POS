@@ -534,7 +534,7 @@ export function purchasingRouter(database: Database): Router {
     if (!['draft', 'ordered'].includes(current.rows[0].status)) {
       throw conflict(
         'PURCHASE_ORDER_STATE',
-        'A received or already cancelled order cannot be cancelled',
+        'A received or already canceled order cannot be canceled',
       );
     }
     const received = await database.query(
@@ -542,7 +542,7 @@ export function purchasingRouter(database: Database): Router {
       [id],
     );
     if (received.rows[0]) {
-      throw conflict('PURCHASE_ORDER_RECEIVED', 'An order with received stock cannot be cancelled');
+      throw conflict('PURCHASE_ORDER_RECEIVED', 'An order with received stock cannot be canceled');
     }
     const result = await database.query(
       `update purchase_orders set status='cancelled',cancelled_at=now(),updated_at=now()

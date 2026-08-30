@@ -38,13 +38,13 @@ function SupplierFormContent() {
         method: params.id ? 'PATCH' : 'POST',
         body: JSON.stringify({
           branchId: branch!.id,
-          name,
-          contactName,
-          email,
-          phone,
-          address,
-          taxId,
-          notes,
+          name: name.trim(),
+          contactName: contactName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          address: address.trim(),
+          taxId: taxId.trim(),
+          notes: notes.trim(),
           isActive,
         }),
       }),
@@ -57,7 +57,7 @@ function SupplierFormContent() {
   return (
     <Screen>
       <Header
-        title={editing ? 'Edit supplier' : 'New supplier'}
+        title={editing ? 'Edit Supplier' : 'New Supplier'}
         subtitle="Contact and ordering information"
         showBack
         backLabel="Purchasing"
@@ -71,16 +71,16 @@ function SupplierFormContent() {
                 <Feather name="truck" size={18} color="#1A593B" />
               </View>
               <View className="flex-1">
-                <Text className="font-semibold text-slate-900">Supplier details</Text>
+                <Text className="font-semibold text-slate-900">Supplier Details</Text>
                 <Text className="mt-1 text-sm text-slate-500">
                   Only the supplier name is required.
                 </Text>
               </View>
             </View>
-            <Field label="Supplier name *" value={name} onChangeText={setName} />
+            <Field label="Supplier Name *" value={name} onChangeText={setName} />
             <View className="flex-row flex-wrap gap-x-4">
               <View className="min-w-64 flex-1">
-                <Field label="Contact person" value={contactName} onChangeText={setContactName} />
+                <Field label="Contact Person" value={contactName} onChangeText={setContactName} />
               </View>
               <View className="min-w-64 flex-1">
                 <Field
@@ -134,7 +134,7 @@ function SupplierFormContent() {
               <View className="h-5 w-5 rounded-full bg-white" />
             </View>
             <View className="flex-1">
-              <Text className="font-medium text-slate-900">Supplier is active</Text>
+              <Text className="font-medium text-slate-900">Supplier Is Active</Text>
               <Text className="mt-1 text-sm text-slate-500">
                 Disabled suppliers remain in history but cannot be selected for new orders.
               </Text>
@@ -146,7 +146,7 @@ function SupplierFormContent() {
             </View>
             <View className="min-w-52">
               <Button
-                title={save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add supplier'}
+                title={save.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Add Supplier'}
                 disabled={save.isPending || name.trim().length < 2}
                 onPress={() => save.mutate()}
               />

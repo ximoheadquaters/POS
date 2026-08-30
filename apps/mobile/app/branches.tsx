@@ -220,7 +220,7 @@ function BranchesContent() {
         showBack
         backLabel="More"
         fallbackHref="/(tabs)/more"
-        action={canManage ? <Button title="+ New branch" onPress={openCreate} /> : null}
+        action={canManage ? <Button title="+ New Branch" onPress={openCreate} /> : null}
       />
       <ScrollView contentContainerClassName="items-center p-4 pb-12">
         <View className="w-full max-w-5xl gap-5">
@@ -279,7 +279,7 @@ function BranchesContent() {
 
           {query.isLoading ? (
             <View className="min-h-72 rounded-3xl border border-slate-200 bg-white">
-              <LoadingState label="Loading branches…" />
+              <LoadingState label="Loading Branches…" />
             </View>
           ) : query.isError ? (
             <View className="min-h-72 rounded-3xl border border-slate-200 bg-white">
@@ -288,7 +288,7 @@ function BranchesContent() {
           ) : filtered.length === 0 ? (
             <View className="min-h-72 rounded-3xl border border-slate-200 bg-white">
               <EmptyState
-                title={branches.length ? 'No matching branches' : 'No branches yet'}
+                title={branches.length ? 'No Matching Branches' : 'No Branches Yet'}
                 message={
                   branches.length
                     ? 'Try a different search or status filter.'
@@ -426,7 +426,7 @@ function BranchesContent() {
             >
               <Feather name="users" size={16} color="#1A593B" />
               <Text className="ml-2 text-sm font-medium text-brand-700">
-                Manage staff branch assignments
+                Manage Staff Branch Assignments
               </Text>
             </Pressable>
           ) : null}
@@ -463,7 +463,7 @@ function BranchesContent() {
                 name="name"
                 render={({ field, fieldState }) => (
                   <Field
-                    label="Branch name"
+                    label="Branch Name"
                     value={field.value}
                     placeholder="e.g. Main Branch"
                     onChangeText={field.onChange}
@@ -477,7 +477,7 @@ function BranchesContent() {
                 name="code"
                 render={({ field, fieldState }) => (
                   <Field
-                    label="Branch code"
+                    label="Branch Code"
                     value={field.value}
                     placeholder="e.g. MAIN"
                     autoCapitalize="characters"
@@ -492,7 +492,7 @@ function BranchesContent() {
                 name="address"
                 render={({ field, fieldState }) => (
                   <Field
-                    label="Address (optional)"
+                    label="Address (Optional)"
                     value={field.value ?? ''}
                     placeholder="Street, barangay, city"
                     onChangeText={field.onChange}
@@ -506,7 +506,7 @@ function BranchesContent() {
                 name="phone"
                 render={({ field, fieldState }) => (
                   <Field
-                    label="Phone (optional)"
+                    label="Phone (Optional)"
                     value={field.value ?? ''}
                     placeholder="Branch contact number"
                     keyboardType="phone-pad"
@@ -522,7 +522,7 @@ function BranchesContent() {
                 render={({ field }) => (
                   <View className="flex-row items-center rounded-2xl border border-slate-200 p-4">
                     <View className="flex-1">
-                      <Text className="font-medium text-slate-900">Active branch</Text>
+                      <Text className="font-medium text-slate-900">Active Branch</Text>
                       <Text className="mt-1 text-xs text-slate-500">
                         Active branches can be selected for sales and inventory operations.
                       </Text>
@@ -546,7 +546,7 @@ function BranchesContent() {
                 </View>
                 <View className="flex-1">
                   <Button
-                    title={save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Create branch'}
+                    title={save.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Create Branch'}
                     disabled={save.isPending}
                     onPress={form.handleSubmit((value) => save.mutate(value))}
                   />
@@ -576,7 +576,7 @@ function BranchesContent() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close modal"
+                accessibilityLabel="Close Modal"
                 disabled={addCounter.isPending}
                 onPress={() => setCounterBranch(null)}
                 className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"

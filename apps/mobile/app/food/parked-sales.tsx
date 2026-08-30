@@ -203,7 +203,7 @@ export default function ParkedSalesScreen() {
             )}
             ListEmptyComponent={
               <EmptyState
-                title="No parked sales"
+                title="No Parked Sales"
                 message="Park active orders using the Hold button on POS to resume them later."
               />
             }

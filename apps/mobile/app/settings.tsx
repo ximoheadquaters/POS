@@ -128,6 +128,18 @@ function SettingsContent() {
 
   const editable = currentUser?.permissions.includes('settings:manage') ?? false;
   const watchValues = form.watch();
+  const saveSettings = (value: OrganizationSettingsInput) =>
+    save.mutate({
+      ...value,
+      businessName: value.businessName.trim(),
+      currency: value.currency.trim().toUpperCase(),
+      timezone: value.timezone.trim(),
+      taxRate: value.taxRate.trim(),
+      receiptHeader: value.receiptHeader.trim(),
+      receiptFooter: value.receiptFooter.trim(),
+      targetMarginPercent: value.targetMarginPercent.trim(),
+      lowMarginThresholdPercent: value.lowMarginThresholdPercent.trim(),
+    });
 
   return (
     <Screen>
@@ -146,7 +158,7 @@ function SettingsContent() {
             <Button
               title={save.isPending ? 'Saving…' : 'Save Changes'}
               disabled={save.isPending}
-              onPress={form.handleSubmit((value) => save.mutate(value))}
+              onPress={form.handleSubmit(saveSettings)}
             />
           ) : null
         }
@@ -658,7 +670,7 @@ function SettingsContent() {
             <Button
               title={save.isPending ? 'Saving…' : 'Save Settings'}
               disabled={save.isPending}
-              onPress={form.handleSubmit((value) => save.mutate(value))}
+              onPress={form.handleSubmit(saveSettings)}
             />
           </View>
         ) : null}

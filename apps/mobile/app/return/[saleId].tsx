@@ -136,7 +136,7 @@ function ReturnFormContent() {
   if (query.isLoading)
     return (
       <Screen>
-        <Header title="Return items" showBack backLabel="Receipt" />
+        <Header title="Return Items" showBack backLabel="Receipt" />
         <LoadingState />
       </Screen>
     );
@@ -144,7 +144,7 @@ function ReturnFormContent() {
   if (!isReturnsModuleEnabled) {
     return (
       <Screen>
-        <Header title="Return items" showBack backLabel="Receipt" />
+        <Header title="Return Items" showBack backLabel="Receipt" />
         <View className="flex-1 items-center justify-center p-6">
           <View className="mb-4 h-14 w-14 items-center justify-center rounded-full bg-amber-100">
             <Feather name="lock" size={26} color="#D97706" />
@@ -153,7 +153,7 @@ function ReturnFormContent() {
           <Text className="mb-6 max-w-sm text-center text-sm text-slate-600">
             The customer returns module is not enabled for your organization. You can view receipt details, but returns cannot be processed.
           </Text>
-          <Button title="Back to receipt" variant="secondary" onPress={() => router.back()} />
+          <Button title="Back To Receipt" variant="secondary" onPress={() => router.back()} />
         </View>
       </Screen>
     );
@@ -162,7 +162,7 @@ function ReturnFormContent() {
   return (
     <Screen>
       <Header
-        title="Return items"
+        title="Return Items"
         subtitle={query.data?.receiptNumber}
         showBack
         backLabel="Receipt"
@@ -178,7 +178,7 @@ function ReturnFormContent() {
               onPress={() => router.push('/registers')}
               className="mt-3 min-h-10 items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800"
             >
-              <Text className="text-sm font-semibold text-white">Open registers & shifts</Text>
+              <Text className="text-sm font-semibold text-white">Open Registers & Shifts</Text>
             </Pressable>
           </View>
         ) : null}
@@ -200,7 +200,7 @@ function ReturnFormContent() {
                   <View className="flex-1 pr-3">
                     <Text className="text-base font-bold text-slate-900">{item.productName}</Text>
                     <Text className="mt-1 text-xs text-slate-500">
-                      {formatMoney(item.unitPrice)} each · {item.quantity} originally purchased
+                      {formatMoney(item.unitPrice)} each · {item.quantity} Originally Purchased
                       {item.returnedQuantity ? ` (${item.returnedQuantity} returned)` : ''}
                     </Text>
                     <Text className="mt-1 text-xs font-medium text-brand-700">
@@ -217,7 +217,7 @@ function ReturnFormContent() {
                 {remaining > 0 ? (
                   <View className="mt-4 flex-row items-center border-t border-slate-100 pt-3">
                     <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Return qty:
+                      Return Qty:
                     </Text>
 
                     <View className="ml-auto flex-row items-center gap-2">
@@ -295,7 +295,7 @@ function ReturnFormContent() {
 
         <View className="mt-5 rounded-2xl bg-white p-4">
           <Field
-            label="Return reason"
+            label="Return Reason"
             value={reason}
             onChangeText={setReason}
             placeholder="Reason for return (e.g., damaged item, wrong size, customer request)"
@@ -336,7 +336,7 @@ function ReturnFormContent() {
           <Button
             title={
               mutation.isPending
-                ? 'Processing refund…'
+                ? 'Processing Refund…'
                 : requiresManagerAuth
                   ? `Authorize & Refund ${formatMoney(totalRefund)}`
                   : `Refund ${formatMoney(totalRefund)} to cash`

@@ -116,7 +116,7 @@ export default function ReceiptScreen() {
 
   return (
     <Screen>
-      <Header title={offline ? 'Sale saved offline' : 'Sale complete'} />
+      <Header title={offline ? 'Sale Saved Offline' : 'Sale Complete'} />
       <View className="flex-1 items-center justify-center px-6">
         <View className="w-full max-w-lg rounded-3xl bg-white p-7">
           <View className="mx-auto h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
@@ -143,8 +143,8 @@ export default function ReceiptScreen() {
                   print.isPending
                     ? 'Printing…'
                     : sale.isLoading
-                      ? 'Loading receipt…'
-                      : 'Print receipt'
+                      ? 'Loading Receipt…'
+                      : 'Print Receipt'
                 }
                 disabled={
                   print.isPending ||
@@ -162,12 +162,12 @@ export default function ReceiptScreen() {
             ) : null}
             {!offline ? (
               <Button
-                title="View receipt details"
+                title="View Receipt Details"
                 variant="secondary"
                 onPress={() => router.replace(`/sale/${params.id}`)}
               />
             ) : null}
-            <Button title="New sale" onPress={() => router.replace('/(tabs)/pos')} />
+            <Button title="New Sale" onPress={() => router.replace('/(tabs)/pos')} />
           </View>
         </View>
       </View>

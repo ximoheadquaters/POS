@@ -192,9 +192,9 @@ function OrganizationContent() {
       const profile = await api<OrganizationProfileInput>('/organizations/current', {
         method: 'PUT',
         body: JSON.stringify({
-          name: input.name,
-          currency: input.currency,
-          timezone: input.timezone,
+          name: input.name.trim(),
+          currency: input.currency.trim().toUpperCase(),
+          timezone: input.timezone.trim(),
           logoPath,
         }),
       });
@@ -262,7 +262,7 @@ function OrganizationContent() {
         fallbackHref="/(tabs)/more"
       />
       {query.isLoading ? (
-        <LoadingState label="Loading organization…" />
+        <LoadingState label="Loading Organization…" />
       ) : query.isError ? (
         <ErrorState message={query.error.message} retry={() => void query.refetch()} />
       ) : query.data ? (
@@ -316,7 +316,7 @@ function OrganizationContent() {
                   <Feather name="briefcase" size={18} color="#1A593B" />
                 </View>
                 <View className="flex-1">
-                  <Text className="font-semibold text-slate-950">Organization identity</Text>
+                  <Text className="font-semibold text-slate-950">Organization Identity</Text>
                   <Text className="mt-1 text-sm text-slate-500">
                     These details apply across every branch and user session.
                   </Text>
@@ -328,7 +328,7 @@ function OrganizationContent() {
                   name="name"
                   render={({ field, fieldState }) => (
                     <Field
-                      label="Organization name"
+                      label="Organization Name"
                       value={field.value}
                       editable={editable}
                       onChangeText={field.onChange}
@@ -378,7 +378,7 @@ function OrganizationContent() {
                     <Text className="text-xs font-medium uppercase tracking-wider text-slate-700">
                       Business Type
                     </Text>
-                    <Text className="text-xs font-medium text-slate-500">Managed by Ximo</Text>
+                    <Text className="text-xs font-medium text-slate-500">Managed By Ximo</Text>
                   </View>
                   <Controller
                     control={form.control}
@@ -419,12 +419,12 @@ function OrganizationContent() {
                 </View>
                 <View>
                   <Text className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-700">
-                    Organization logo
+                    Organization Logo
                   </Text>
                   <View className="flex-row items-center rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Choose organization logo"
+                      accessibilityLabel="Choose Organization Logo"
                       disabled={!editable || pickingLogo}
                       onPress={() => void chooseLogo()}
                       className="h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white"
@@ -479,7 +479,7 @@ function OrganizationContent() {
                 </View>
                 {editable ? (
                   <Button
-                    title={save.isPending ? 'Saving…' : 'Save organization'}
+                    title={save.isPending ? 'Saving…' : 'Save Organization'}
                     disabled={save.isPending || pickingLogo}
                     onPress={form.handleSubmit(
                       async (value) => {
@@ -523,7 +523,7 @@ function OrganizationContent() {
 
             <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
               <View className="border-b border-slate-100 p-5">
-                <Text className="font-semibold text-slate-950">Organization identifiers</Text>
+                <Text className="font-semibold text-slate-950">Organization Identifiers</Text>
                 <Text className="mt-1 text-sm text-slate-500">
                   Use the organization ID when contacting support or reviewing integrations.
                 </Text>
@@ -558,7 +558,7 @@ function OrganizationContent() {
                   onPress={() => router.push('/branch-select')}
                   className="min-h-10 flex-row items-center rounded-xl bg-brand-50 px-3"
                 >
-                  <Text className="text-xs font-medium text-brand-700">Switch branch</Text>
+                  <Text className="text-xs font-medium text-brand-700">Switch Branch</Text>
                 </Pressable>
               </View>
               <View>
@@ -602,7 +602,7 @@ function OrganizationContent() {
                   className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-4"
                 >
                   <Feather name="users" size={16} color="#1A593B" />
-                  <Text className="ml-2 font-medium text-brand-700">Manage users and roles</Text>
+                  <Text className="ml-2 font-medium text-brand-700">Manage Users And Roles</Text>
                 </Pressable>
               ) : null}
               {currentUser?.permissions?.includes('settings:manage') ? (
@@ -611,7 +611,7 @@ function OrganizationContent() {
                   className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-4"
                 >
                   <Feather name="settings" size={16} color="#1A593B" />
-                  <Text className="ml-2 font-medium text-brand-700">Business settings</Text>
+                  <Text className="ml-2 font-medium text-brand-700">Business Settings</Text>
                 </Pressable>
               ) : null}
             </View>

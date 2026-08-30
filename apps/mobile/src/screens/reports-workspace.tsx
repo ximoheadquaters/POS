@@ -47,8 +47,43 @@ interface DetailItem {
   statusTone?: 'green' | 'amber' | 'red' | 'blue' | 'slate';
   note?: string;
   actionHref?: string;
+  atomKind?: 'transaction';
+  sortDate?: string;
   /** When set, row is a summary group — tap to view these records. */
   children?: DetailItem[];
+}
+
+interface SaleTransactionDetail {
+  id: string;
+  receiptNumber: string;
+  completedAt: string;
+  status: string;
+  branchName: string;
+  registerName: string;
+  cashierName: string;
+  customerName: string | null;
+  subtotal: string;
+  discountTotal: string;
+  taxTotal: string;
+  total: string;
+  refundTotal: string;
+  netTotal: string;
+  payments: Array<{ method: string; amount: string; reference?: string | null }>;
+  items: Array<{
+    id: string;
+    productName: string;
+    sku: string;
+    sellingUnit: string;
+    quantity: number;
+    baseQuantity: number;
+    baseUnit: string;
+    unitPrice: string;
+    unitCost: string | null;
+    discountTotal: string;
+    taxTotal: string;
+    lineTotal: string;
+    lineProfit: string | null;
+  }>;
 }
 
 interface MetricDrilldownConfig {
@@ -716,7 +751,7 @@ function BarRows({
   if (!rows.length) {
     return (
       <ReportEmptyState
-        title="Nothing to show yet"
+        title="Nothing To Show Yet"
         message={emptyLabel}
       />
     );
@@ -1090,7 +1125,7 @@ function SalesLineChart({
               {new Date(`${lastActive.date}T12:00:00`).toLocaleDateString()}
             </Text>
             <Text className="mt-0.5 text-xs text-slate-500">
-              {lastActive.transactions} transactions
+              {lastActive.transactions} Transactions
             </Text>
           </View>
           <Text className="text-base font-semibold text-slate-950">
@@ -1398,7 +1433,7 @@ function ProfitTrendChart({
   return (
     <View>
       <View className="mb-1 flex-row items-center justify-between">
-        <Text className="text-xs text-slate-500">Daily gross profit — selected period</Text>
+        <Text className="text-xs text-slate-500">Daily Gross Profit — Selected Period</Text>
         <Text className="text-xs text-slate-500">
           Peak <Text className="font-semibold text-slate-800">{formatMoney(maxProfit.toFixed(2))}</Text>
         </Text>
@@ -1538,7 +1573,7 @@ function ProfitTrendChart({
               {new Date(`${lastActive.date}T12:00:00`).toLocaleDateString()}
             </Text>
             <Text className="mt-0.5 text-xs text-slate-500" numberOfLines={1}>
-              {formatMoney(lastActive.netSales)} net sales − {formatMoney(lastActive.netCost)} cost
+              {formatMoney(lastActive.netSales)} net sales − {formatMoney(lastActive.netCost)} Cost
             </Text>
           </View>
           <Text className="text-base font-semibold text-slate-950">
@@ -1645,6 +1680,31 @@ function matchesDetailSearch(item: DetailItem, q: string): boolean {
   );
 }
 
+function latestDetailSortValue(item: DetailItem): number | null {
+  const candidates = [
+    item.sortDate,
+    item.note?.match(/\b(?:Completed|Opened|Issued|Due Date|Order Date):\s*([^·]+)/)?.[1],
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = Date.parse(candidate.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function sortDatedDetailsLatestFirst(items: DetailItem[]): DetailItem[] {
+  if (!items.some((item) => latestDetailSortValue(item) !== null)) return items;
+  return [...items].sort((a, b) => {
+    const aDate = latestDetailSortValue(a);
+    const bDate = latestDetailSortValue(b);
+    if (aDate === null && bDate === null) return 0;
+    if (aDate === null) return 1;
+    if (bDate === null) return -1;
+    return bDate - aDate;
+  });
+}
+
 /** When a drilldown is a flat list of tagged records, group them so users can tap a status to open details. */
 /** Extract the numeric part of a formatted display value like "₱1,344.00" or "12 pieces". */
 function parseDisplayValue(value: string | undefined): number {
@@ -1739,7 +1799,7 @@ function mapPurchaseOrderItem(po: {
   total: string;
   branchName?: string;
 }): DetailItem {
-  const status = po.status.replaceAll('_', ' ').toUpperCase();
+  const status = po.status === 'cancelled' ? 'CANCELED' : po.status.replaceAll('_', ' ').toUpperCase();
   return {
     id: po.id,
     title: po.supplierName,
@@ -1748,6 +1808,7 @@ function mapPurchaseOrderItem(po: {
     note: `Order Date: ${po.orderDate || 'N/A'}`,
     value: formatMoney(po.total),
     statusTag: status,
+    sortDate: po.orderDate,
     statusTone:
       po.status === 'received' || po.status === 'completed'
         ? 'green'
@@ -1781,7 +1842,109 @@ function mapSalesReceiptItem(sr: {
     subValue: `Tax: ${formatMoney(sr.tax || '0')} · Discount: ${formatMoney(sr.discount || '0')}`,
     statusTag: sr.status.replaceAll('_', ' ').toUpperCase(),
     statusTone: sr.status === 'completed' ? 'green' : sr.status === 'partially_refunded' ? 'amber' : 'red',
+    atomKind: 'transaction',
+    sortDate: sr.completedAt,
   };
+}
+
+function TransactionAtomicDetails({ saleId }: { saleId: string }) {
+  const branch = useBranchStore((state) => state.activeBranch);
+  const detailQuery = useQuery({
+    queryKey: ['report-transaction-detail', saleId, branch?.id],
+    enabled: Boolean(saleId),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (branch?.id) params.set('branchId', branch.id);
+      const query = params.toString();
+      return api<SaleTransactionDetail>(`/reports/transactions/${saleId}${query ? `?${query}` : ''}`);
+    },
+  });
+
+  if (detailQuery.isLoading) {
+    return (
+      <View className="rounded-xl bg-white/70 px-3 py-3">
+        <Text className="text-xs font-medium text-slate-500">Loading Atomic Values…</Text>
+      </View>
+    );
+  }
+
+  if (detailQuery.isError) {
+    return (
+      <View className="rounded-xl border border-red-100 bg-red-50 px-3 py-3">
+        <Text className="text-xs font-semibold text-red-700">
+          Could Not Load Atomic Values
+        </Text>
+        <Text className="mt-1 text-xs text-red-600">{detailQuery.error.message}</Text>
+      </View>
+    );
+  }
+
+  const detail = detailQuery.data;
+  if (!detail) return null;
+
+  return (
+    <View className="gap-3 rounded-xl bg-white/70 px-3 py-3">
+      <View className="flex-row flex-wrap gap-x-5 gap-y-1 border-b border-slate-100 pb-3">
+        <Text className="text-xs text-slate-600">
+          Cashier: <Text className="font-semibold text-slate-800">{detail.cashierName}</Text>
+        </Text>
+        <Text className="text-xs text-slate-600">
+          Register: <Text className="font-semibold text-slate-800">{detail.registerName}</Text>
+        </Text>
+        {detail.customerName ? (
+          <Text className="text-xs text-slate-600">
+            Customer: <Text className="font-semibold text-slate-800">{detail.customerName}</Text>
+          </Text>
+        ) : null}
+      </View>
+
+      <View className="gap-2">
+        <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Items
+        </Text>
+        {detail.items.map((line) => (
+          <View key={line.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+            <View className="flex-row items-start justify-between gap-3">
+              <View className="min-w-0 flex-1">
+                <Text className="text-xs font-semibold text-slate-900" numberOfLines={2}>
+                  {line.productName}
+                </Text>
+                <Text className="mt-0.5 text-[11px] text-slate-500">
+                  {line.sku || 'No SKU'} · {line.quantity} {line.sellingUnit}
+                  {line.baseUnit && line.baseUnit !== line.sellingUnit
+                    ? ` · ${line.baseQuantity} ${line.baseUnit}`
+                    : ''}
+                </Text>
+              </View>
+              <Text className="text-xs font-bold text-brand-800">{line.lineTotal}</Text>
+            </View>
+            <Text className="mt-1 text-[11px] leading-4 text-slate-500">
+              Unit Price: {line.unitPrice} · Tax: {line.taxTotal} · Discount: {line.discountTotal}
+              {line.unitCost ? ` · Unit Cost: ${line.unitCost}` : ''}
+              {line.lineProfit ? ` · Profit: ${line.lineProfit}` : ''}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {detail.payments.length ? (
+        <View className="gap-2">
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Payments
+          </Text>
+          {detail.payments.map((payment, index) => (
+            <View key={`${payment.method}-${index}`} className="flex-row justify-between rounded-xl bg-brand-50 px-3 py-2">
+              <Text className="text-xs font-medium text-brand-900">
+                {payment.method.replaceAll('_', ' ').toUpperCase()}
+                {payment.reference ? ` · ${payment.reference}` : ''}
+              </Text>
+              <Text className="text-xs font-bold text-brand-900">{payment.amount}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 function buildSalesByCategoryDrilldown(
@@ -1886,6 +2049,7 @@ function isCriticalTone(item: DetailItem): boolean {
     item.statusTone === 'red' ||
     item.statusTag === 'Out of Stock' ||
     item.statusTag === 'Unpaid Balance' ||
+    item.statusTag === 'CANCELED' ||
     item.statusTag === 'CANCELLED' ||
     item.statusTag === 'Discrepancy'
   );
@@ -2036,7 +2200,8 @@ function MetricDrilldownView({
     [config.items],
   );
   const activeGroup = groupStack[groupStack.length - 1] ?? null;
-  const sourceItems = activeGroup?.children?.length ? activeGroup.children : rootItems;
+  const rawSourceItems = activeGroup?.children?.length ? activeGroup.children : rootItems;
+  const sourceItems = useMemo(() => sortDatedDetailsLatestFirst(rawSourceItems), [rawSourceItems]);
   const atRoot = groupStack.length === 0;
 
   const statusOptions = useMemo(() => {
@@ -2201,12 +2366,12 @@ function MetricDrilldownView({
         <View className="min-w-0 shrink flex-row items-center gap-2">
           {activeGroup ? (
             <Text className="min-w-0 shrink text-right text-xs font-medium text-brand-800" numberOfLines={1}>
-              Level {groupStack.length} · {sourceItems.length} records
+              Level {groupStack.length} · {sourceItems.length} Records
             </Text>
           ) : null}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Export detail report"
+            accessibilityLabel="Export Detail Report"
             disabled={exportingDetail}
             onPress={() => void exportDetailList()}
             className="min-h-9 flex-row items-center rounded-xl bg-brand-700 px-3 active:opacity-90"
@@ -2353,7 +2518,7 @@ function MetricDrilldownView({
           <ResponsivePanel stretch>
             <ReportCard
               fill={!phone}
-              title="Top records"
+              title="Top Records"
               subtitle={
                 activeGroup
                   ? `Largest values in ${activeGroup.title}.`
@@ -2420,10 +2585,10 @@ function MetricDrilldownView({
           activeGroup
             ? sourceItems.some((item) => item.children?.length)
               ? 'Tap a group to narrow further. Leaf rows expand details.'
-              : 'Tap a row to expand details. Use Open product catalogue for the product page.'
+              : 'Tap a row to expand details. Use Open Product Catalog for the product page.'
             : rootItems.some((item) => item.children?.length)
               ? 'Tap a group to narrow charts and list. Leaf rows expand in place.'
-              : 'Tap a row to expand details. Use Open product catalogue for the product page.'
+              : 'Tap a row to expand details. Use Open Product Catalog for the product page.'
         }
       >
         {filteredItems.length > 0 ? (
@@ -2477,6 +2642,13 @@ function MetricDrilldownView({
                               </Text>
                             </View>
                           ) : null}
+                          {item.atomKind === 'transaction' && !hasChildren ? (
+                            <View className="rounded-md bg-brand-100 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold text-brand-800">
+                                Atomic Values
+                              </Text>
+                            </View>
+                          ) : null}
                           {hasChildren ? (
                             <View className="rounded-md bg-white px-2 py-0.5">
                               <Text className="text-[10px] font-bold text-brand-800">
@@ -2514,7 +2686,11 @@ function MetricDrilldownView({
                   {metaText || hasChildren ? (
                     <Text className="mt-1.5 text-xs leading-4 text-slate-500" numberOfLines={2}>
                       {metaText}
-                      {hasChildren ? `${metaText ? ' · ' : ''}Tap to view list` : ''}
+                      {hasChildren
+                        ? `${metaText ? ' · ' : ''}Tap to view list`
+                        : item.atomKind === 'transaction'
+                          ? `${metaText ? ' · ' : ''}Tap to view items and payments`
+                          : ''}
                     </Text>
                   ) : null}
                   {item.subValue ? (
@@ -2564,6 +2740,9 @@ function MetricDrilldownView({
                             <Text className="min-w-0 flex-1 text-xs leading-4 text-slate-700">{value}</Text>
                           </View>
                         ))}
+                        {item.atomKind === 'transaction' ? (
+                          <TransactionAtomicDetails saleId={item.id} />
+                        ) : null}
                         {item.actionHref ? (
                           <Pressable
                             accessibilityRole="button"
@@ -2573,7 +2752,7 @@ function MetricDrilldownView({
                           >
                             <Feather name="external-link" size={14} color="#FFFFFF" />
                             <Text className="ml-2 text-sm font-semibold text-white">
-                              Open product catalogue
+                              Open Product Catalog
                             </Text>
                           </Pressable>
                         ) : null}
@@ -2586,7 +2765,7 @@ function MetricDrilldownView({
           </View>
         ) : (
           <ReportEmptyState
-            title="No matching records"
+            title="No Matching Records"
             message="Try a different date range or branch. If you just opened, run a few sales or stock moves first."
           />
         )}
@@ -2682,18 +2861,7 @@ function OverviewReport({
       summaryValue: `${report.kpis.transactions} sales`,
       items:
         report.sales.salesReceipts && report.sales.salesReceipts.length > 0
-          ? report.sales.paymentMethods.map((m) => {
-              const children = report.sales.salesReceipts!
-                .filter((sr) => sr.paymentMethod === m.method)
-                .map(mapSalesReceiptItem);
-              return {
-                id: m.method,
-                title: m.method.replaceAll('_', ' ').toUpperCase(),
-                note: `${m.transactions} checkout payments`,
-                value: formatMoney(m.total),
-                children: children.length ? children : undefined,
-              } satisfies DetailItem;
-            })
+          ? report.sales.salesReceipts.map(mapSalesReceiptItem)
           : report.sales.paymentMethods.map((m) => ({
               id: m.method,
               title: m.method.replaceAll('_', ' ').toUpperCase(),
@@ -2740,6 +2908,7 @@ function OverviewReport({
               subValue: `Total Invoice: ${formatMoney(inv.total)} (Paid: ${formatMoney(inv.paidAmount)})`,
               statusTag: Number(inv.paidAmount) > 0 ? 'Partially Paid' : 'Unpaid Balance',
               statusTone: Number(inv.paidAmount) > 0 ? 'amber' : 'red',
+              sortDate: inv.invoiceDate || inv.dueDate,
             }))
           : report.purchasing.topSuppliers.map((s) => ({
               id: s.id,
@@ -2772,6 +2941,7 @@ function OverviewReport({
               subValue: `Counted: ${formatMoney(shift.countedCash || '0')} · Expected: ${formatMoney(shift.expectedCash || '0')}`,
               statusTag: Number(shift.variance || 0) === 0 ? 'Balanced' : 'Discrepancy',
               statusTone: Number(shift.variance || 0) === 0 ? 'green' : 'red',
+              sortDate: shift.openedAt || shift.closedAt,
             }))
           : [
               { id: '1', title: 'Cash Sales', value: formatMoney(report.cash.cashSales) },
@@ -2835,7 +3005,7 @@ function OverviewReport({
     <View className="gap-4">
       <View className="w-full flex-row flex-wrap gap-3">
           <MetricCard
-            label="Net sales"
+            label="Net Sales"
             value={formatMoney(report.kpis.netSales)}
             note={`${report.kpis.transactions} txns`}
             icon="activity"
@@ -2845,7 +3015,7 @@ function OverviewReport({
           />
           {canViewProfit ? (
             <MetricCard
-              label="Gross profit"
+              label="Gross Profit"
               value={formatMoney(report.kpis.grossProfit)}
               note={`${Number(report.kpis.grossMarginPercent).toFixed(1)}% margin`}
               icon="trending-up"
@@ -2893,7 +3063,7 @@ function OverviewReport({
             onPress={openPayables}
           />
           <MetricCard
-            label="Cash variance"
+            label="Cash Variance"
             value={formatMoney(report.cash.variance)}
             icon="briefcase"
             tone={cashNegative ? 'rose' : 'brand'}
@@ -2919,7 +3089,7 @@ function OverviewReport({
           }
         >
           <ReportCard
-            title="Sales trend"
+            title="Sales Trend"
             subtitle="Daily sales — selected period"
             onPress={openNetSales}
           >
@@ -2942,7 +3112,7 @@ function OverviewReport({
               {canViewProfit ? (
                 <View className="gap-1">
                   <View className="flex-row items-center justify-between gap-3">
-                    <Text className="text-sm text-slate-600">Gross margin</Text>
+                    <Text className="text-sm text-slate-600">Gross Margin</Text>
                     <Text className="text-sm font-semibold text-slate-900">
                       {marginPct}% · {formatMoney(report.kpis.grossProfit)}
                     </Text>
@@ -2957,9 +3127,9 @@ function OverviewReport({
               ) : null}
               <View className="gap-1">
                 <View className="flex-row items-center justify-between gap-3">
-                  <Text className="text-sm text-slate-600">Checkout success</Text>
+                  <Text className="text-sm text-slate-600">Checkout Success</Text>
                   <Text className="text-sm font-semibold text-slate-900">
-                    {successPct}% · {report.kpis.transactions} txns
+                    {successPct}% · {report.kpis.transactions} Txns
                   </Text>
                 </View>
                 <View className="h-2.5 overflow-hidden rounded-full bg-slate-100">
@@ -2972,7 +3142,7 @@ function OverviewReport({
               <View className="flex-row flex-wrap gap-2">
                 <View className="min-w-[96px] flex-1 rounded-xl bg-[#E8F5EE] px-3 py-2.5">
                   <Text className="text-[10px] font-medium uppercase tracking-wide text-brand-800">
-                    Avg ticket
+                    Avg Ticket
                   </Text>
                   <Text className="mt-1 text-[15px] font-semibold text-slate-900">
                     {formatMoney(report.kpis.averageTransaction)}
@@ -2980,7 +3150,7 @@ function OverviewReport({
                 </View>
                 <View className="min-w-[96px] flex-1 rounded-xl bg-[#F4F0E6] px-3 py-2.5">
                   <Text className="text-[10px] font-medium uppercase tracking-wide text-amber-900">
-                    Refund rate
+                    Refund Rate
                   </Text>
                   <Text className="mt-1 text-[15px] font-semibold text-slate-900">
                     {Number(report.kpis.refundRatePercent || 0).toFixed(1)}%
@@ -2988,7 +3158,7 @@ function OverviewReport({
                 </View>
                 <View className="min-w-[96px] flex-1 rounded-xl bg-[#EAF4FB] px-3 py-2.5">
                   <Text className="text-[10px] font-medium uppercase tracking-wide text-sky-900">
-                    Items sold
+                    Items Sold
                   </Text>
                   <Text className="mt-1 text-[15px] font-semibold text-slate-900">
                     {report.kpis.itemsSold}
@@ -2998,7 +3168,7 @@ function OverviewReport({
 
               <View className="gap-1.5 border-t border-slate-100 pt-2.5">
                 <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  Payment mix
+                  Payment Mix
                 </Text>
                 {report.sales.paymentMethods.length ? (
                   report.sales.paymentMethods.slice(0, 4).map((method) => {
@@ -3030,10 +3200,10 @@ function OverviewReport({
               <View className="gap-1.5 border-t border-slate-100 pt-2.5">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Stock alerts
+                    Stock Alerts
                   </Text>
                   <Text className="text-xs font-medium text-slate-500">
-                    {report.inventory.outOfStockCount} out · {report.inventory.lowStockCount} low
+                    {report.inventory.outOfStockCount} out · {report.inventory.lowStockCount} Low
                   </Text>
                 </View>
                 {stockAlerts.length ? (
@@ -3081,7 +3251,7 @@ function OverviewReport({
       </View>
 
       <ReportCard
-        title="Sales mix"
+        title="Sales Mix"
         subtitle={
           useProductMix
             ? 'Product share and top sellers by gross sales'
@@ -3138,13 +3308,13 @@ function OverviewReport({
 
           <View className="border-t border-slate-100 pt-4">
             <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-sm font-semibold text-slate-800">Top products</Text>
+              <Text className="text-sm font-semibold text-slate-800">Top Products</Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setSection('products')}
                 className="flex-row items-center"
               >
-                <Text className="text-xs font-medium text-brand-700">View all</Text>
+                <Text className="text-xs font-medium text-brand-700">View All</Text>
                 <Feather name="chevron-right" size={14} color="#1A593B" />
               </Pressable>
             </View>
@@ -3237,7 +3407,7 @@ function SalesReport({
     <View className="w-full gap-4">
       <View className="w-full flex-row flex-wrap gap-3">
         <MetricCard
-          label="Gross sales"
+          label="Gross Sales"
           value={formatMoney(report.kpis.grossSales)}
           icon="shopping-bag"
           onPress={() =>
@@ -3262,7 +3432,7 @@ function SalesReport({
           }
         />
         <MetricCard
-          label="Net sales"
+          label="Net Sales"
           value={formatMoney(report.kpis.netSales)}
           icon="activity"
           onPress={() =>
@@ -3287,7 +3457,7 @@ function SalesReport({
           }
         />
         <MetricCard
-          label="Customer refunds"
+          label="Customer Refunds"
           value={formatMoney(report.kpis.customerRefunds)}
           note={`${Number(report.kpis.refundRatePercent).toFixed(2)}% of gross sales`}
           icon="corner-up-left"
@@ -3315,7 +3485,7 @@ function SalesReport({
           }
         />
         <MetricCard
-          label="Average sale"
+          label="Average Sale"
           value={formatMoney(report.kpis.averageTransaction)}
           icon="bar-chart-2"
           tone="blue"
@@ -3338,7 +3508,7 @@ function SalesReport({
           }
         />
         <MetricCard
-          label="Items sold"
+          label="Items Sold"
           value={report.kpis.itemsSold.toLocaleString()}
           icon="box"
           onPress={() =>
@@ -3361,7 +3531,7 @@ function SalesReport({
           }
         />
         <MetricCard
-          label="Known customers"
+          label="Known Customers"
           value={String(report.kpis.uniqueCustomers)}
           icon="users"
           tone="amber"
@@ -3388,14 +3558,14 @@ function SalesReport({
       </View>
 
       <ResponsivePanel full>
-        <ReportCard title="Sales trend" subtitle="Daily sales over the selected period">
+        <ReportCard title="Sales Trend" subtitle="Daily sales over the selected period">
           <SalesLineChart trend={report.sales.trend} from={from} to={to} />
         </ReportCard>
       </ResponsivePanel>
 
       <View className="w-full flex-row flex-wrap gap-4">
         <ResponsivePanel>
-          <ReportCard title="Best-selling products" subtitle="Top products by gross sales" icon="star">
+          <ReportCard title="Best-Selling Products" subtitle="Top products by gross sales" icon="star">
             <ProductBarChart
               emptyLabel="No products sold for this period."
               rows={report.sales.topProducts.slice(0, 8).map((item) => ({
@@ -3409,7 +3579,7 @@ function SalesReport({
           </ReportCard>
         </ResponsivePanel>
         <ResponsivePanel>
-          <ReportCard title="Payment methods" subtitle="Payments less customer refunds" icon="credit-card">
+          <ReportCard title="Payment Methods" subtitle="Payments less customer refunds" icon="credit-card">
             <RankedMoneyRows
               emptyLabel="No payments for this period."
               rows={report.sales.paymentMethods.map((item) => ({
@@ -3427,7 +3597,7 @@ function SalesReport({
       <View className="w-full flex-row flex-wrap gap-4">
         <ResponsivePanel>
           <ReportCard
-            title="Sales by category"
+            title="Sales By Category"
             subtitle="Tap a category for its product sub-report"
             icon="tag"
             onPress={() =>
@@ -3461,7 +3631,7 @@ function SalesReport({
           </ReportCard>
         </ResponsivePanel>
         <ResponsivePanel>
-          <ReportCard title="Sales by branch" subtitle="Revenue by branch" icon="map-pin">
+          <ReportCard title="Sales By Branch" subtitle="Revenue by branch" icon="map-pin">
             <BarRows
               rows={report.sales.branches.map((item) => ({
                 key: item.id,
@@ -3834,7 +4004,7 @@ function ProductPerformanceReport({
         </View>
       </ReportCard>
       <ReportCard
-        title="Product unit breakdown"
+        title="Product Unit Breakdown"
         subtitle="Tap a product for unit, revenue, and cost details."
       >
         {report.rows.length === 0 ? (
@@ -4917,7 +5087,7 @@ function PurchasingReport({
     <>
       <View className="w-full flex-row flex-wrap gap-3">
         <MetricCard
-          label="Ordered value"
+          label="Ordered Value"
           value={formatMoney(report.purchasing.orderedValue)}
           icon="clipboard"
           onPress={() =>
@@ -4941,7 +5111,7 @@ function PurchasingReport({
           }
         />
         <MetricCard
-          label="Received value"
+          label="Received Value"
           value={formatMoney(report.purchasing.receivedValue)}
           icon="download"
           tone="blue"
@@ -4958,7 +5128,8 @@ function PurchasingReport({
                 const children = (report.purchasing.purchaseOrdersList ?? [])
                   .filter((po) => po.status === os.status)
                   .map(mapPurchaseOrderItem);
-                const status = os.status.replaceAll('_', ' ').toUpperCase();
+                const status =
+                  os.status === 'cancelled' ? 'CANCELED' : os.status.replaceAll('_', ' ').toUpperCase();
                 return {
                   id: os.status,
                   title: status,
@@ -4980,7 +5151,7 @@ function PurchasingReport({
           }
         />
         <MetricCard
-          label="Open orders"
+          label="Open Orders"
           value={String(report.purchasing.openOrders)}
           note={`${report.purchasing.purchaseOrders} orders created`}
           icon="truck"
@@ -5011,7 +5182,7 @@ function PurchasingReport({
           }
         />
         <MetricCard
-          label="Outstanding payables"
+          label="Outstanding Payables"
           value={formatMoney(report.purchasing.outstandingPayables)}
           note="Current unpaid supplier invoices"
           icon="credit-card"
@@ -5036,6 +5207,7 @@ function PurchasingReport({
                     subValue: `Total Invoice: ${formatMoney(inv.total)} (Paid: ${formatMoney(inv.paidAmount)})`,
                     statusTag: Number(inv.paidAmount) > 0 ? 'Partially Paid' : 'Unpaid Balance',
                     statusTone: Number(inv.paidAmount) > 0 ? 'amber' : 'red',
+                    sortDate: inv.invoiceDate || inv.dueDate,
                   }))
                 : report.purchasing.topSuppliers.map((s) => ({
                     id: s.id,
@@ -5049,7 +5221,7 @@ function PurchasingReport({
           }
         />
         <MetricCard
-          label="Supplier payments"
+          label="Supplier Payments"
           value={formatMoney(report.purchasing.supplierPayments)}
           icon="arrow-up-right"
           onPress={() =>
@@ -5069,7 +5241,7 @@ function PurchasingReport({
           }
         />
         <MetricCard
-          label="Supplier returns"
+          label="Supplier Returns"
           value={formatMoney(report.purchasing.supplierReturns)}
           note={`${formatMoney(report.purchasing.supplierRefunds)} received back`}
           icon="corner-up-left"
@@ -5097,7 +5269,7 @@ function PurchasingReport({
       </View>
       <View className="flex-row flex-wrap gap-4">
         <ResponsivePanel>
-          <ReportCard title="Purchase orders by status">
+          <ReportCard title="Purchase Orders By Status">
             <BarRows
               rows={report.purchasing.orderStatuses.map((item) => ({
                 key: item.status,
@@ -5111,8 +5283,8 @@ function PurchasingReport({
         </ResponsivePanel>
         <ResponsivePanel>
           <ReportCard
-            title="Top suppliers"
-            subtitle="Ranked by non-draft, non-cancelled order value."
+            title="Top Suppliers"
+            subtitle="Ranked by non-draft, non-canceled order value."
           >
             <BarRows
               rows={report.purchasing.topSuppliers.map((item) => ({
@@ -5131,7 +5303,7 @@ function PurchasingReport({
         className="min-h-14 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:opacity-80"
       >
         <Feather name="truck" size={17} color="#FFFFFF" />
-        <Text className="ml-2 font-medium text-white">Open purchasing workspace</Text>
+        <Text className="ml-2 font-medium text-white">Open Purchasing Workspace</Text>
       </Pressable>
     </>
   );
@@ -5152,7 +5324,7 @@ function ProfitReport({
     <>
       <View className="w-full flex-row flex-wrap gap-3">
         <MetricCard
-          label="Gross sales"
+          label="Gross Sales"
           value={formatMoney(report.profit.grossSales)}
           icon="shopping-bag"
           onPress={() =>
@@ -5198,7 +5370,7 @@ function ProfitReport({
           }
         />
         <MetricCard
-          label="Net sales"
+          label="Net Sales"
           value={formatMoney(report.profit.netSales)}
           icon="activity"
           onPress={() =>
@@ -5218,7 +5390,7 @@ function ProfitReport({
           }
         />
         <MetricCard
-          label="Net cost of goods"
+          label="Net Cost Of Goods"
           value={formatMoney(report.profit.netCost)}
           icon="package"
           tone="amber"
@@ -5240,7 +5412,7 @@ function ProfitReport({
           }
         />
         <MetricCard
-          label="Gross profit"
+          label="Gross Profit"
           value={formatMoney(report.profit.grossProfit)}
           icon="trending-up"
           onPress={() =>
@@ -5261,7 +5433,7 @@ function ProfitReport({
           }
         />
         <MetricCard
-          label="Gross margin"
+          label="Gross Margin"
           value={`${Number(report.profit.grossMarginPercent).toFixed(2)}%`}
           icon="percent"
           tone="blue"
@@ -5284,7 +5456,7 @@ function ProfitReport({
         />
       </View>
       <ReportCard
-        title="Profit trend"
+        title="Profit Trend"
         subtitle="Gross profit over time (net sales − cost of goods)"
       >
         <ProfitTrendChart trend={report.profit.trend} from={from} to={to} />
@@ -5304,7 +5476,7 @@ function CashReport({
     <>
       <View className="w-full flex-row flex-wrap gap-3">
         <MetricCard
-          label="Cash sales"
+          label="Cash Sales"
           value={formatMoney(report.cash.cashSales)}
           icon="dollar-sign"
           onPress={() =>
@@ -5325,6 +5497,7 @@ function CashReport({
                     value: formatMoney(shift.cashSales || '0'),
                     statusTag: 'Cash Register',
                     statusTone: 'green',
+                    sortDate: shift.openedAt || shift.closedAt,
                   }))
                 : [
                     { id: 'c-1', title: 'Cash Register Sales', value: formatMoney(report.cash.cashSales) },
@@ -5333,7 +5506,7 @@ function CashReport({
           }
         />
         <MetricCard
-          label="Cash refunds"
+          label="Cash Refunds"
           value={formatMoney(report.cash.cashRefunds)}
           icon="corner-up-left"
           tone="red"
@@ -5353,7 +5526,7 @@ function CashReport({
           }
         />
         <MetricCard
-          label="Cash in"
+          label="Cash In"
           value={formatMoney(report.cash.cashIn)}
           icon="log-in"
           onPress={() =>
@@ -5371,7 +5544,7 @@ function CashReport({
           }
         />
         <MetricCard
-          label="Cash out"
+          label="Cash Out"
           value={formatMoney(report.cash.cashOut)}
           icon="log-out"
           tone="amber"
@@ -5391,7 +5564,7 @@ function CashReport({
           }
         />
         <MetricCard
-          label="Counted cash"
+          label="Counted Cash"
           value={formatMoney(report.cash.countedCash)}
           icon="briefcase"
           tone="blue"
@@ -5415,6 +5588,7 @@ function CashReport({
                     subValue: `Expected: ${formatMoney(shift.expectedCash || '0')}`,
                     statusTag: 'Counted Cash',
                     statusTone: 'green',
+                    sortDate: shift.openedAt || shift.closedAt,
                   }))
                 : [
                     { id: 'ccount-1', title: 'Physical Counted Cash', value: formatMoney(report.cash.countedCash) },
@@ -5448,6 +5622,7 @@ function CashReport({
                     subValue: `Counted: ${formatMoney(shift.countedCash || '0')} · Expected: ${formatMoney(shift.expectedCash || '0')}`,
                     statusTag: Number(shift.variance || 0) === 0 ? 'Balanced' : 'Discrepancy',
                     statusTone: Number(shift.variance || 0) === 0 ? 'green' : 'red',
+                    sortDate: shift.openedAt || shift.closedAt,
                   }))
                 : [
                     { id: 'v-1', title: 'Shifts Analyzed', value: `${report.cash.shifts} shifts (${report.cash.openShifts} open)` },
@@ -5458,7 +5633,7 @@ function CashReport({
         />
       </View>
       <ReportCard
-        title="Cash accountability"
+        title="Cash Accountability"
         subtitle="Review each cashier shift, payment method, movement, expected cash, counted cash, and variance."
       >
         <Pressable
@@ -5467,7 +5642,7 @@ function CashReport({
         >
           <View className="flex-row items-center">
             <Feather name="monitor" size={18} color="#FFFFFF" />
-            <Text className="ml-3 font-medium text-white">Open detailed cash and shift report</Text>
+            <Text className="ml-3 font-medium text-white">Open Detailed Cash And Shift Report</Text>
           </View>
           <Feather name="chevron-right" size={18} color="#FFFFFF" />
         </Pressable>
@@ -5695,7 +5870,7 @@ function ReportsContent({
                 <View className="flex-row flex-wrap items-start justify-between gap-4">
                   <View className="min-w-[220px] flex-1">
                     <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                      Store reports
+                      Store Reports
                     </Text>
                     <Text className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
                       {visibleSections.find((item) => item.key === section)?.label ?? 'Reports'}
@@ -5710,7 +5885,7 @@ function ReportsContent({
                   <View className="flex-row flex-wrap items-center gap-2">
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Export reports"
+                      accessibilityLabel="Export Reports"
                       disabled={!query.data || exporting}
                       onPress={() => setExportMenuVisible(true)}
                       className={`min-h-11 flex-row items-center rounded-xl px-4 ${
@@ -5755,7 +5930,7 @@ function ReportsContent({
                   })}
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Open calendar date range"
+                    accessibilityLabel="Open Calendar Date Range"
                     onPress={() => {
                       const active =
                         period === 'custom'
@@ -5839,7 +6014,7 @@ function ReportsContent({
             <>
               {query.isLoading ? (
                 <View className="min-h-96 rounded-2xl bg-white">
-                  <LoadingState label="Building your reports…" />
+                  <LoadingState label="Building Your Reports…" />
                 </View>
               ) : query.isError ? (
                 <View className="min-h-96 rounded-2xl bg-white">
@@ -5861,7 +6036,7 @@ function ReportsContent({
                   ) : null}
                   {section === 'products' ? (
                     productPerformanceQuery.isLoading ? (
-                      <LoadingState label="Loading product performance…" />
+                      <LoadingState label="Loading Product Performance…" />
                     ) : productPerformanceQuery.isError ? (
                       <ErrorState
                         message={productPerformanceQuery.error.message}
@@ -5933,7 +6108,7 @@ function ReportsContent({
           >
             <View className="mb-4 flex-row items-start justify-between gap-3">
               <View className="min-w-0 flex-1">
-                <Text className="text-lg font-semibold text-slate-900">Export reports</Text>
+                <Text className="text-lg font-semibold text-slate-900">Export Reports</Text>
                 <Text className="mt-1 text-xs text-slate-500">
                   Download {rangeLabel} for {exportMetadata.branchName}.
                 </Text>
@@ -5957,7 +6132,7 @@ function ReportsContent({
                   <Feather name="file-text" size={16} color="#1A593B" />
                 </View>
                 <View className="ml-3 min-w-0 flex-1">
-                  <Text className="text-sm font-semibold text-slate-900">Excel workbook</Text>
+                  <Text className="text-sm font-semibold text-slate-900">Excel Workbook</Text>
                   <Text className="mt-0.5 text-xs text-slate-500">
                     Summary, Sales, Inventory, Purchasing, Profit, Cash
                   </Text>
@@ -5974,7 +6149,7 @@ function ReportsContent({
                   <Feather name="file" size={16} color="#1D6B8A" />
                 </View>
                 <View className="ml-3 min-w-0 flex-1">
-                  <Text className="text-sm font-semibold text-slate-900">PDF report</Text>
+                  <Text className="text-sm font-semibold text-slate-900">PDF Report</Text>
                   <Text className="mt-0.5 text-xs text-slate-500">
                     Printable multi-page business report
                   </Text>
@@ -6000,7 +6175,7 @@ function ReportsContent({
             <ScrollView contentContainerClassName="p-5 gap-4" keyboardShouldPersistTaps="handled">
               <View className="flex-row items-start justify-between gap-3">
                 <View className="min-w-0 flex-1">
-                  <Text className="text-lg font-semibold text-slate-950">Select date range</Text>
+                  <Text className="text-lg font-semibold text-slate-950">Select Date Range</Text>
                   <Text className="mt-1 text-xs leading-4 text-slate-500">
                     Calendar picker for every report. Tap a start date, then an end date.
                   </Text>
@@ -6016,7 +6191,7 @@ function ReportsContent({
 
               <View>
                 <Text className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Quick presets
+                  Quick Presets
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {PERIOD_PRESETS.map((p) => {
@@ -6078,7 +6253,7 @@ function ReportsContent({
                 </View>
                 <View className={phone ? '' : 'flex-1'}>
                   <Button
-                    title="Apply range"
+                    title="Apply Range"
                     onPress={() => {
                       if (!isValidDateInput(draftFrom) || !isValidDateInput(draftTo)) {
                         setDateRangeError('Select a valid start and end date on the calendar.');

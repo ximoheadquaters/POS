@@ -50,7 +50,7 @@ function cacheable(path: string, method: string): boolean {
   if (method !== 'GET') return false;
   const pathname = path.split('?')[0] ?? path;
   if (pathname.startsWith('/reports') || pathname.startsWith('/sales/')) return false;
-  // Product catalogue is mutated in-place; a stale GET here makes Enable/Disable
+  // Product catalog is mutated in-place; a stale GET here makes Enable/Disable
   // look like it reverted and hides disabled rows from the list.
   if (pathname === '/products' || pathname === '/products/summary') return false;
   return true;

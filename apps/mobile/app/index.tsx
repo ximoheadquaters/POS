@@ -27,7 +27,7 @@ export default function SplashScreen() {
     <View className="flex-1 items-center justify-center bg-brand-700">
       <BrandLogo size={80} />
       <Text className="mt-5 text-2xl font-bold text-white">Ximo POS</Text>
-      <Text className="mt-2 text-brand-100">Preparing your workspace…</Text>
+      <Text className="mt-2 text-brand-100">Preparing Your Workspace…</Text>
     </View>
   );
 }

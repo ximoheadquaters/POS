@@ -20,20 +20,21 @@ function CustomersContent() {
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const client = useQueryClient();
+  const trimmedSearch = search.trim();
   const query = useInfiniteQuery({
-    queryKey: ['customers', branch?.id, search],
+    queryKey: ['customers', branch?.id, trimmedSearch],
     enabled: Boolean(branch),
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
       api<Customer[]>(
-        `/customers?branchId=${branch!.id}&page=${pageParam}&pageSize=30&search=${encodeURIComponent(search)}`,
+        `/customers?branchId=${branch!.id}&page=${pageParam}&pageSize=30&search=${encodeURIComponent(trimmedSearch)}`,
       ),
     getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
   });
   const create = useMutation({
     mutationFn: () => api('/customers', {
       method: 'POST',
-      body: JSON.stringify({ branchId: branch!.id, name }),
+      body: JSON.stringify({ branchId: branch!.id, name: name.trim() }),
     }),
     onSuccess: async () => {
       setName('');
@@ -86,7 +87,7 @@ function CustomersContent() {
         keyExtractor={(item) => item.id}
         contentContainerClassName="p-4 gap-2"
         ListEmptyComponent={
-          <EmptyState title="No customers" message="Walk-in sales do not require a customer." />
+          <EmptyState title="No Customers" message="Walk-in sales do not require a customer." />
         }
         renderItem={({ item }) => (
           <View className="rounded-2xl bg-white p-4">

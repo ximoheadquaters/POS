@@ -106,7 +106,7 @@ function UserDetailContent() {
     return (
       <Screen>
         <Header
-          title="Employee access"
+          title="Employee Access"
           subtitle="Loading account"
           showBack
           backLabel="Users"
@@ -126,7 +126,7 @@ function UserDetailContent() {
     return (
       <Screen>
         <Header
-          title="Employee access"
+          title="Employee Access"
           subtitle="Account details"
           showBack
           backLabel="Users"
@@ -154,7 +154,7 @@ function UserDetailContent() {
   return (
     <Screen>
       <Header
-        title="Employee access"
+        title="Employee Access"
         subtitle="Role, account status, and branch assignments."
         showBack
         backLabel="Users"
@@ -172,7 +172,7 @@ function UserDetailContent() {
                 {isSelf ? (
                   <View className="ml-2 rounded-full bg-slate-100 px-2 py-1">
                     <Text className="text-[10px] font-medium uppercase text-slate-600">
-                      Your account
+                      Your Account
                     </Text>
                   </View>
                 ) : null}
@@ -228,7 +228,7 @@ function UserDetailContent() {
                   <View className="flex-1">
                     <Text className="font-medium text-slate-950">{role.name}</Text>
                     <Text className="mt-1 text-xs text-slate-500">
-                      {role.permissions.length} permissions
+                      {role.permissions.length} Permissions
                     </Text>
                   </View>
                 </Pressable>
@@ -237,7 +237,7 @@ function UserDetailContent() {
           </View>
 
           <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
-            Branch access
+            Branch Access
           </Text>
           <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
             <View className="border-b border-slate-100 p-5">
@@ -307,7 +307,7 @@ function UserDetailContent() {
           ) : null}
 
           <Text className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
-            Account status
+            Account Status
           </Text>
           <View className="mb-7 flex-row items-center rounded-3xl border border-slate-200 bg-white p-5">
             <View

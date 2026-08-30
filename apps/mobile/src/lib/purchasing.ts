@@ -145,9 +145,9 @@ export interface SupplierInvoice {
 export const PURCHASE_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   draft: 'Draft',
   ordered: 'Sent',
-  partially_received: 'Partially received',
+  partially_received: 'Partially Received',
   received: 'Received',
-  cancelled: 'Cancelled',
+  cancelled: 'Canceled',
 };
 
 export function statusColors(status: PurchaseOrderStatus): string {

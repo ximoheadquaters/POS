@@ -80,7 +80,7 @@ function ShiftReportDetailContent() {
         title={shift.registerName}
         subtitle={`${shift.cashierName} · ${shift.status}`}
         showBack
-        backLabel="Shift reports"
+        backLabel="Shift Reports"
         fallbackHref="/shift-reports"
       />
       <ScrollView contentContainerClassName="mx-auto w-full max-w-[760px] p-5 pb-12">
@@ -97,7 +97,7 @@ function ShiftReportDetailContent() {
             </View>
           ))}
         </View>
-        <Text className="mb-2 mt-7 font-semibold text-slate-900">Payment breakdown</Text>
+        <Text className="mb-2 mt-7 font-semibold text-slate-900">Payment Breakdown</Text>
         {shift.payments.map((payment) => (
           <View
             key={payment.method}
@@ -107,7 +107,7 @@ function ShiftReportDetailContent() {
             <Text className="font-medium">{formatMoney(payment.payments)}</Text>
           </View>
         ))}
-        <Text className="mb-2 mt-7 font-semibold text-slate-900">Cash movements</Text>
+        <Text className="mb-2 mt-7 font-semibold text-slate-900">Cash Movements</Text>
         {shift.movements.length ? (
           shift.movements.map((movement) => (
             <View key={movement.id} className="mb-2 rounded-xl bg-white p-4">
@@ -129,9 +129,9 @@ function ShiftReportDetailContent() {
             </View>
           ))
         ) : (
-          <Text className="text-sm text-slate-500">No cash movements</Text>
+          <Text className="text-sm text-slate-500">No Cash Movements</Text>
         )}
-        <Text className="mb-2 mt-7 font-semibold text-slate-900">Sales invoices in this shift</Text>
+        <Text className="mb-2 mt-7 font-semibold text-slate-900">Sales Invoices In This Shift</Text>
         {shift.sales?.length ? (
           shift.sales.map((sale) => (
             <Pressable
@@ -152,9 +152,9 @@ function ShiftReportDetailContent() {
             </Pressable>
           ))
         ) : (
-          <Text className="text-sm text-slate-500">No sales transactions</Text>
+          <Text className="text-sm text-slate-500">No Sales Transactions</Text>
         )}
-        <Text className="mb-2 mt-7 font-semibold text-slate-900">Refunds in this shift</Text>
+        <Text className="mb-2 mt-7 font-semibold text-slate-900">Refunds In This Shift</Text>
         {shift.refunds.length ? (
           shift.refunds.map((refund) => (
             <View key={refund.id} className="mb-2 flex-row justify-between rounded-xl bg-white p-4">
@@ -166,7 +166,7 @@ function ShiftReportDetailContent() {
             </View>
           ))
         ) : (
-          <Text className="text-sm text-slate-500">No refunds</Text>
+          <Text className="text-sm text-slate-500">No Refunds</Text>
         )}
       </ScrollView>
     </Screen>

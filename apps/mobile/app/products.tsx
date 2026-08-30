@@ -77,19 +77,19 @@ const ROLE_FILTERS: Array<{
 }> = [
   {
     id: 'sellable',
-    title: 'Products for sale',
+    title: 'For Sale',
     description: 'Shown at the POS',
     icon: 'shopping-cart',
   },
   {
     id: 'ingredient',
-    title: 'Raw inventory',
+    title: 'Raw',
     description: 'Used by recipes',
     icon: 'archive',
   },
   {
     id: 'both',
-    title: 'Dual use',
+    title: 'Dual Use',
     description: 'Sold and used in BOM',
     icon: 'repeat',
   },
@@ -515,8 +515,9 @@ function ProductsContent() {
     });
   };
 
+  const trimmedSearch = search.trim();
   const query = useInfiniteQuery({
-    queryKey: ['products', branch?.id, search, roleQuery],
+    queryKey: ['products', branch?.id, trimmedSearch, roleQuery],
     initialPageParam: 1,
     enabled: Boolean(branch),
     staleTime: 0,
@@ -528,7 +529,7 @@ function ProductsContent() {
         includeInactive: 'true',
       });
       if (roleQuery) params.set('inventoryRole', roleQuery);
-      if (search) params.set('search', search);
+      if (trimmedSearch) params.set('search', trimmedSearch);
       return api<Product[]>(`/products?${params.toString()}`);
     },
     getNextPageParam: (last, pages) =>
@@ -602,13 +603,13 @@ function ProductsContent() {
     <Screen>
       <Header
         title="Products"
-        subtitle="Manage your product catalogue"
+        subtitle="Manage Your Product Catalog"
         action={
           currentUser?.permissions.includes('products:manage') ? (
             <View className="flex-row gap-2">
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Manage catalogue"
+                accessibilityLabel="Manage Catalog"
                 className="rounded-xl bg-brand-50 px-3 py-3"
                 onPress={() => router.push('/catalogue')}
               >
@@ -617,7 +618,7 @@ function ProductsContent() {
               {currentUser.modules.includes('barcode_scanner') ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Scan new product"
+                  accessibilityLabel="Scan New Product"
                   className="rounded-xl bg-brand-50 px-3 py-3"
                   onPress={() => router.push('/product-scan')}
                 >
@@ -626,7 +627,7 @@ function ProductsContent() {
               ) : null}
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Add new product"
+                accessibilityLabel="Add New Product"
                 className="min-h-11 flex-row items-center rounded-xl bg-brand-700 px-4"
                 onPress={() => router.push('/product-form')}
               >
@@ -655,7 +656,7 @@ function ProductsContent() {
           {search ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Clear search"
+              accessibilityLabel="Clear Search"
               onPress={() => setSearch('')}
             >
               <Feather name="x" size={16} color="#81776E" />
@@ -665,7 +666,7 @@ function ProductsContent() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Filter products"
+          accessibilityLabel="Filter Products"
           onPress={() => setFilterOpen(true)}
           className="min-h-11 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
         >
@@ -710,12 +711,12 @@ function ProductsContent() {
               {search ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Clear search"
+                  accessibilityLabel="Clear Search"
                   onPress={() => setSearch('')}
                   className="mt-5 min-h-11 flex-row items-center justify-center rounded-xl bg-slate-200 px-5 active:bg-slate-300"
                 >
                   <Feather name="x" size={16} color="#334155" />
-                  <Text className="ml-2 font-semibold text-slate-800">Clear search</Text>
+                  <Text className="ml-2 font-semibold text-slate-800">Clear Search</Text>
                 </Pressable>
               ) : currentUser?.permissions.includes('products:manage') ? (
                 <Pressable
@@ -949,7 +950,7 @@ function ProductsContent() {
         <View className="flex-1 items-center justify-center p-4">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close product filters"
+            accessibilityLabel="Close Product Filters"
             onPress={() => setFilterOpen(false)}
             className="absolute inset-0 bg-black/40"
           />
@@ -972,7 +973,7 @@ function ProductsContent() {
                   <View key={filter.id}>
                     {showRoleHeading ? (
                       <Text className="mb-1 mt-3 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                        Product type
+                        Product Type
                       </Text>
                     ) : null}
                     {index === 0 ? (

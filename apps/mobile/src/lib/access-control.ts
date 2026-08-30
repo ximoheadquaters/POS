@@ -45,7 +45,7 @@ export const PERMISSION_GROUPS: Array<{
   },
   {
     title: 'Products, inventory, and transfers',
-    description: 'Catalogue maintenance, stock visibility, adjustments, and branch transfers.',
+    description: 'Catalog maintenance, stock visibility, adjustments, and branch transfers.',
     permissions: [
       'products:read',
       'products:manage',
@@ -148,7 +148,7 @@ export function roleDescription(code: RoleCode): string {
     case 'cashier':
       return 'Handles checkout, drawer shifts, and branch sales.';
     case 'inventory_staff':
-      return 'Maintains the product catalogue and stock.';
+      return 'Maintains the product catalog and stock.';
   }
 }
 

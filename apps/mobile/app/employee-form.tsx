@@ -108,7 +108,7 @@ function EmployeeFormContent() {
   return (
     <Screen>
       <Header
-        title="Add employee"
+        title="Add Employee"
         subtitle="Create a secure account and assign where they can work."
         showBack
         backLabel="Users"
@@ -121,7 +121,7 @@ function EmployeeFormContent() {
             name="displayName"
             render={({ field, fieldState }) => (
               <Field
-                label="Employee name"
+                label="Employee Name"
                 value={field.value}
                 onChangeText={field.onChange}
                 onBlur={field.onBlur}
@@ -136,7 +136,7 @@ function EmployeeFormContent() {
             name="email"
             render={({ field, fieldState }) => (
               <Field
-                label="Login email"
+                label="Login Email"
                 value={field.value}
                 onChangeText={field.onChange}
                 onBlur={field.onBlur}
@@ -153,7 +153,7 @@ function EmployeeFormContent() {
             name="temporaryPassword"
             render={({ field, fieldState }) => (
               <Field
-                label="Initial password"
+                label="Initial Password"
                 value={field.value}
                 onChangeText={field.onChange}
                 onBlur={field.onBlur}
@@ -171,7 +171,7 @@ function EmployeeFormContent() {
               name="pin"
               render={({ field, fieldState }) => (
                 <Field
-                  label="Security PIN (for Manager Authorization Overrides)"
+                  label="Security PIN (For Manager Authorization Overrides)"
                   value={field.value ?? ''}
                   onChangeText={field.onChange}
                   onBlur={field.onBlur}
@@ -184,7 +184,7 @@ function EmployeeFormContent() {
             />
           ) : null}
           <View className="mb-6 rounded-2xl bg-brand-50 p-4">
-            <Text className="font-bold text-brand-900">Share the password securely</Text>
+            <Text className="font-bold text-brand-900">Share The Password Securely</Text>
             <Text className="mt-1 text-sm leading-5 text-slate-600">
               Do not send employee passwords in a public group chat or write them on the register.
             </Text>
@@ -230,7 +230,7 @@ function EmployeeFormContent() {
             <Text className="mb-4 text-sm text-red-600">{form.formState.errors.role.message}</Text>
           ) : null}
 
-          <Text className="mb-2 mt-4 text-sm font-medium text-slate-700">Assigned branches</Text>
+          <Text className="mb-2 mt-4 text-sm font-medium text-slate-700">Assigned Branches</Text>
           <Text className="mb-3 text-sm leading-5 text-slate-500">
             Select at least one branch where this employee is allowed to work.
           </Text>
@@ -272,7 +272,7 @@ function EmployeeFormContent() {
 
           <View className="mt-5">
             <Button
-              title={mutation.isPending ? 'Creating employee…' : 'Create employee'}
+              title={mutation.isPending ? 'Creating Employee…' : 'Create Employee'}
               disabled={mutation.isPending}
               onPress={form.handleSubmit(
                 (input) => mutation.mutate(input),

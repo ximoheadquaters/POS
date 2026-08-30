@@ -62,7 +62,7 @@ const sidebarSections: SidebarSection[] = [
     groups: [
       {
         id: 'products',
-        title: 'Product Catalogue',
+        title: 'Product Catalog',
         icon: 'box',
         permission: 'products:read',
         children: [
@@ -111,19 +111,9 @@ const sidebarSections: SidebarSection[] = [
         id: 'reports',
         title: 'Income & Reports',
         icon: 'trending-up',
+        href: '/reports' as Href,
         module: 'reports',
         permission: 'reports:read',
-        children: [
-          { title: 'Overview', href: '/reports/overview', module: 'reports', permission: 'reports:read' },
-          { title: 'Sales', href: '/reports/sales', module: 'reports', permission: 'reports:read' },
-          { title: 'Products', href: '/reports/products', module: 'reports', permission: 'reports:read' },
-          { title: 'Inventory', href: '/reports/inventory' as Href, module: 'reports', permission: 'reports:read' },
-          { title: 'Purchasing', href: '/reports/purchasing' as Href, module: 'reports', permission: 'purchasing:read' },
-          { title: 'Profit', href: '/reports/profit' as Href, module: 'reports', permission: 'reports:view_profit' },
-          { title: 'Cash & shifts', href: '/reports/cash' as Href, module: 'reports', permission: 'reports:read' },
-          { title: 'Audit', href: '/reports/audit' as Href, module: 'audit', permission: 'audit:read' },
-          { title: 'Repacking', href: '/reports/repacking' as Href, module: 'reports', permission: 'reports:read' },
-        ],
       },
       {
         id: 'analytics',
@@ -298,7 +288,7 @@ function SidebarMenu({ close }: { close(): void }) {
             source={ximoIcon}
             resizeMode="cover"
             style={{ width: 40, height: 40 }}
-            accessibilityLabel="Ximo logo"
+            accessibilityLabel="Ximo Logo"
           />
         </View>
         <View className="flex-1">
@@ -502,7 +492,7 @@ function SidebarMenu({ close }: { close(): void }) {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Refresh modules and permissions"
+            accessibilityLabel="Refresh Modules And Permissions"
             disabled={refreshing}
             onPress={() => {
               setRefreshing(true);
@@ -520,7 +510,7 @@ function SidebarMenu({ close }: { close(): void }) {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Sign out of account"
+          accessibilityLabel="Sign Out Of Account"
           onPress={async () => {
             close();
             await signOut();
@@ -560,7 +550,7 @@ export function AppSidebarProvider({ children }: PropsWithChildren) {
             <SidebarMenu close={() => setOpen(false)} />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Close navigation menu"
+              accessibilityLabel="Close Navigation Menu"
               onPress={() => setOpen(false)}
               className="flex-1 bg-black/40"
             />

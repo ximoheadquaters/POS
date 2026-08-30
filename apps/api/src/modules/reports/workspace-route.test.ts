@@ -8,10 +8,13 @@ import { result, testUser } from '../../test/fakes.js';
 import { reportsRouter } from './routes.js';
 
 class ParameterCheckingDatabase implements Database {
+  readonly statements: string[] = [];
+
   async query<T extends QueryResultRow = QueryResultRow>(
     text: string,
     values: readonly unknown[] = [],
   ): Promise<QueryResult<T>> {
+    this.statements.push(text.replace(/\s+/g, ' ').trim());
     const parameterNumbers = [...text.matchAll(/\$(\d+)/g)].map((match) => Number(match[1]));
     const requiredParameters = parameterNumbers.length > 0 ? Math.max(...parameterNumbers) : 0;
     if (requiredParameters !== values.length) {
@@ -56,5 +59,35 @@ describe('Reports workspace route', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
+  });
+
+  it('groups historical sales by the product’s current category', async () => {
+    const database = new ParameterCheckingDatabase();
+    const authUser = testUser({
+      role: 'owner',
+      modules: ['dashboard', 'reports'],
+      permissions: ['reports:read', 'reports:view_all_branches'],
+    });
+    const app = express();
+    app.use((request_, _response, next) => {
+      request_.authUser = authUser;
+      next();
+    });
+    app.use('/reports', reportsRouter(database));
+    app.use(errorHandler);
+
+    const response = await request(app).get(
+      `/reports/workspace?from=2026-07-15&to=2026-08-13&branchId=${authUser.branches[0]!.id}`,
+    );
+
+    expect(response.status).toBe(200);
+    const categorySalesQuery = database.statements.find(
+      (statement) =>
+        statement.includes("coalesce(c.name,'Uncategorized') as name") &&
+        statement.includes('from sale_items si'),
+    );
+    expect(categorySalesQuery).toContain('join products p on p.id=si.product_id');
+    expect(categorySalesQuery).toContain('left join categories c on c.id=p.category_id');
+    expect(categorySalesQuery).toContain('group by c.id,c.name');
   });
 });

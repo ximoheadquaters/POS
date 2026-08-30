@@ -24,7 +24,10 @@ export default function LoginScreen() {
 
   async function submit(input: LoginInput) {
     setServerError('');
-    const { data, error } = await supabase.auth.signInWithPassword(input);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      ...input,
+      email: input.email.trim(),
+    });
     if (error || !data.session) {
       setServerError('Email or password is incorrect.');
       return;
@@ -58,7 +61,7 @@ export default function LoginScreen() {
           </Text>
         </View>
         <View className="rounded-3xl border border-slate-100 bg-white p-5">
-          <Text className="mb-5 text-xl font-black text-brand-900">Welcome back</Text>
+          <Text className="mb-5 text-xl font-black text-brand-900">Welcome Back</Text>
           <Controller
             control={control}
             name="email"
@@ -97,7 +100,7 @@ export default function LoginScreen() {
             </View>
           ) : null}
           <Button
-            title={isSubmitting ? 'Signing in…' : 'Sign in'}
+            title={isSubmitting ? 'Signing In…' : 'Sign In'}
             disabled={isSubmitting}
             onPress={handleSubmit(submit)}
           />

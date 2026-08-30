@@ -83,6 +83,7 @@ export interface ReportsWorkspace {
       sku: string;
       unit: string;
       category?: string;
+      brand?: string;
       quantity: number;
       sales: string;
       cost: string | null;

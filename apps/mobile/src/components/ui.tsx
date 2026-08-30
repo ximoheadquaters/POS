@@ -42,7 +42,7 @@ export function Header({
       {sidebar?.compact ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open navigation menu"
+          accessibilityLabel="Open Navigation Menu"
           hitSlop={8}
           onPress={sidebar.openMenu}
           className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100 active:bg-slate-200"
@@ -110,15 +110,22 @@ export function Button({
 export function Field({
   label,
   error,
+  className,
+  textAlignVertical,
   ...props
 }: TextInputProps & { label: string; error?: string }) {
+  const isParagraph = Boolean(props.multiline);
+
   return (
     <View className="mb-3">
       {label ? <Text className="mb-1.5 text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</Text> : null}
       <TextInput
-        className="min-h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 focus:border-brand-600 focus:bg-white"
+        className={`min-h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 focus:border-brand-600 focus:bg-white ${
+          isParagraph ? 'pt-4 pb-3' : ''
+        } ${className ?? ''}`}
         placeholderTextColor="#94A3B8"
         selectionColor="#1A593B"
+        textAlignVertical={textAlignVertical ?? (isParagraph ? 'top' : undefined)}
         {...props}
       />
       {error ? <Text className="mt-1 text-xs font-medium text-red-600">{error}</Text> : null}
@@ -154,7 +161,7 @@ export function ErrorState({ message, retry }: { message: string; retry(): void 
         <Feather name="alert-circle" size={24} color="#DC2626" />
       </View>
       <Text className="mb-4 text-center text-sm font-medium text-red-700 max-w-xs">{message}</Text>
-      <Button title="Try again" variant="secondary" onPress={retry} />
+      <Button title="Try Again" variant="secondary" onPress={retry} />
     </View>
   );
 }

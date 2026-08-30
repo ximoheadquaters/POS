@@ -34,7 +34,7 @@ function UsersContent() {
   return (
     <Screen>
       <Header
-        title="Users, roles & permissions"
+        title="Users, Roles & Permissions"
         subtitle="Employee accounts, branch access, and what each role can do."
         showBack
         backLabel="More"
@@ -43,12 +43,12 @@ function UsersContent() {
           canManage ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Add employee"
+              accessibilityLabel="Add Employee"
               onPress={() => router.push('/employee-form' as Href)}
               className="min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:opacity-80"
             >
               <Feather name="user-plus" size={16} color="#FFFFFF" />
-              <Text className="ml-2 font-medium text-white">Add employee</Text>
+              <Text className="ml-2 font-medium text-white">Add Employee</Text>
             </Pressable>
           ) : null
         }
@@ -113,7 +113,7 @@ function UsersContent() {
           {tab === 'employees' ? (
             usersQuery.isLoading ? (
               <View className="min-h-64 rounded-3xl border border-slate-200 bg-white">
-                <LoadingState label="Loading employees…" />
+                <LoadingState label="Loading Employees…" />
               </View>
             ) : usersQuery.isError ? (
               <View className="min-h-64 rounded-3xl border border-slate-200 bg-white">
@@ -181,7 +181,7 @@ function UsersContent() {
               </View>
             ) : (
               <EmptyState
-                title="No employees"
+                title="No Employees"
                 message={
                   canManage ? 'Add the first employee to get started.' : 'No employees were found.'
                 }
@@ -189,7 +189,7 @@ function UsersContent() {
             )
           ) : accessQuery.isLoading ? (
             <View className="min-h-64 rounded-3xl border border-slate-200 bg-white">
-              <LoadingState label="Loading roles…" />
+              <LoadingState label="Loading Roles…" />
             </View>
           ) : accessQuery.isError ? (
             <View className="min-h-64 rounded-3xl border border-slate-200 bg-white">
@@ -235,7 +235,7 @@ function UsersContent() {
                     </Text>
                     <Text className="mt-2 text-xs text-slate-500">
                       {role.userCount} {role.userCount === 1 ? 'user' : 'users'} ·{' '}
-                      {role.permissions.length} permissions
+                      {role.permissions.length} Permissions
                     </Text>
                   </View>
                   <Feather name="chevron-right" size={20} color="#64748B" />

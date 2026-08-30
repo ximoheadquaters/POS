@@ -110,7 +110,7 @@ function CatalogueContent() {
   const save = useMutation({
     mutationFn: async () => {
       if (!branch || !currentUser?.branches.some((item) => item.id === branch.id)) {
-        throw new Error('Select an assigned branch before saving this catalogue item.');
+        throw new Error('Select an assigned branch before saving this catalog item.');
       }
       const body = {
         branchId: branch.id,
@@ -161,7 +161,7 @@ function CatalogueContent() {
   return (
     <Screen>
       <Header
-        title="Product Catalogue"
+        title="Product Catalog"
         subtitle="Categories and brands"
         showBack
         backLabel="Products"
@@ -341,7 +341,7 @@ function CatalogueContent() {
               <Text className="mt-1 max-w-sm text-center text-xs leading-5 text-slate-500">
                 {search
                   ? 'Try another search term.'
-                  : `Create your first ${selected.singular.toLowerCase()} to keep the product catalogue organized.`}
+                  : `Create your first ${selected.singular.toLowerCase()} to keep the product catalog organized.`}
               </Text>
               {!search && editable ? (
                 <View className="mt-4 min-w-40">
@@ -359,17 +359,14 @@ function CatalogueContent() {
         animationType="fade"
         onRequestClose={closeForm}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close form"
-          onPress={closeForm}
-          className="flex-1 items-center justify-end bg-black/45 p-0 sm:justify-center sm:p-6"
-        >
+        <View className="flex-1 items-center justify-end bg-black/45 p-0 sm:justify-center sm:p-6">
           <Pressable
-            accessibilityRole="none"
-            onPress={(event) => event.stopPropagation()}
-            className="max-h-[92%] w-full max-w-lg overflow-hidden rounded-t-3xl bg-white sm:rounded-3xl"
-          >
+            accessibilityRole="button"
+            accessibilityLabel="Close Form"
+            onPress={closeForm}
+            className="absolute inset-0"
+          />
+          <View className="max-h-[92%] w-full max-w-lg overflow-hidden rounded-t-3xl bg-white sm:rounded-3xl">
             <View className="flex-row items-center border-b border-slate-100 p-5">
               <View className="h-11 w-11 items-center justify-center rounded-xl bg-brand-50">
                 <Feather name={selected.icon} size={19} color="#1A593B" />
@@ -379,7 +376,7 @@ function CatalogueContent() {
                   {editing ? `Edit ${selected.singular}` : `New ${selected.singular}`}
                 </Text>
                 <Text className="mt-0.5 text-xs text-slate-500">
-                  {editing ? 'Update the details used across your catalogue.' : `Add a ${selected.singular.toLowerCase()} for product setup.`}
+                  {editing ? 'Update the details used across your catalog.' : `Add a ${selected.singular.toLowerCase()} for product setup.`}
                 </Text>
               </View>
               <Pressable
@@ -395,7 +392,7 @@ function CatalogueContent() {
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="p-5">
               {section === 'units' ? (
                 <Field
-                  label="Unit code"
+                  label="Unit Code"
                   value={code}
                   editable={!editing?.isSystem}
                   onChangeText={setCode}
@@ -415,7 +412,7 @@ function CatalogueContent() {
               {section === 'units' ? (
                 <>
                   <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-600">
-                    Quantity behavior
+                    Quantity Behavior
                   </Text>
                   <View className="mb-3 flex-row rounded-xl bg-slate-100 p-1">
                     {(['discrete', 'decimal'] as const).map((value) => {
@@ -441,7 +438,7 @@ function CatalogueContent() {
                     Discrete units use whole quantities, while decimal units support values such as 0.25 kg or 125 ml.
                   </Text>
                   <Field
-                    label="Default quantity step"
+                    label="Default Quantity Step"
                     value={step}
                     onChangeText={setStep}
                     keyboardType="decimal-pad"
@@ -451,7 +448,7 @@ function CatalogueContent() {
                 </>
               ) : (
                 <Field
-                  label="Description (optional)"
+                  label="Description (Optional)"
                   value={description}
                   onChangeText={setDescription}
                   placeholder={`Describe when this ${selected.singular.toLowerCase()} should be used`}
@@ -466,15 +463,15 @@ function CatalogueContent() {
                 </View>
                 <View className="flex-[2]">
                   <Button
-                    title={save.isPending ? 'Saving…' : editing ? 'Save changes' : `Create ${selected.singular.toLowerCase()}`}
+                    title={save.isPending ? 'Saving…' : editing ? 'Save Changes' : `Create ${selected.singular.toLowerCase()}`}
                     disabled={save.isPending || !canSave}
                     onPress={() => save.mutate()}
                   />
                 </View>
               </View>
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </Screen>
   );

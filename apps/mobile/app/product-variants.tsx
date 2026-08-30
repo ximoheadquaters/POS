@@ -130,11 +130,9 @@ function ProductChooserModal({
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable className="flex-1 justify-center bg-black/40 p-4" onPress={onClose}>
-        <Pressable
-          className="mx-auto w-full max-w-[560px] rounded-3xl bg-white p-5 shadow-2xl"
-          onPress={(e) => e.stopPropagation()}
-        >
+      <View className="flex-1 justify-center bg-black/40 p-4">
+        <Pressable className="absolute inset-0" onPress={onClose} />
+        <View className="mx-auto w-full max-w-[560px] rounded-3xl bg-white p-5 shadow-2xl">
           <View className="mb-3 flex-row items-center justify-between">
             <View>
               <Text className="text-lg font-bold text-slate-900">Select Target Product</Text>
@@ -144,7 +142,7 @@ function ProductChooserModal({
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Close modal"
+              accessibilityLabel="Close Modal"
               onPress={onClose}
               className="h-9 w-9 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
             >
@@ -180,7 +178,7 @@ function ProductChooserModal({
           <ScrollView className="max-h-[360px] gap-1" keyboardShouldPersistTaps="handled">
             {filtered.length === 0 ? (
               <View className="items-center py-8">
-                <Text className="text-sm text-slate-400">No products found matching "{search}"</Text>
+                <Text className="text-sm text-slate-400">No Products Found Matching "{search}"</Text>
               </View>
             ) : (
               filtered.map((prod) => {
@@ -222,8 +220,8 @@ function ProductChooserModal({
               })
             )}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -390,7 +388,7 @@ function ProductVariantsContent() {
       const body = {
         name: name.trim(),
         sku: sku.trim(),
-        unit,
+        unit: unit.trim(),
         unitsPerBase: numFactor,
         cost: cost.trim() || undefined,
         sellingPrice: price.trim() || undefined,
@@ -506,10 +504,10 @@ function ProductVariantsContent() {
           </View>
           <View className="min-w-0 flex-1">
             <View className="flex-row flex-wrap items-center gap-2">
-              <Text className="text-xs font-semibold text-brand-800">Target product</Text>
+              <Text className="text-xs font-semibold text-brand-800">Target Product</Text>
               <View className="flex-row items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5">
                 <View className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                <Text className="text-[10px] font-medium text-emerald-800">Scanner ready</Text>
+                <Text className="text-[10px] font-medium text-emerald-800">Scanner Ready</Text>
               </View>
             </View>
             <Text className="text-base font-bold text-slate-900" numberOfLines={2}>
@@ -520,13 +518,13 @@ function ProductVariantsContent() {
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Change product"
+          accessibilityLabel="Change Product"
           onPress={() => setPickerModalOpen(true)}
           className={`min-h-11 items-center justify-center rounded-xl border border-brand-300 bg-white px-4 active:bg-brand-50 ${
             isTablet ? '' : 'w-full'
           }`}
         >
-          <Text className="text-sm font-semibold text-brand-800">Change product</Text>
+          <Text className="text-sm font-semibold text-brand-800">Change Product</Text>
         </Pressable>
       </View>
 
@@ -631,7 +629,7 @@ function ProductVariantsContent() {
             style={{ outline: 'none' } as object}
           />
         </FormField>
-        <FormField label="Selling price" focused={focusedField === 'price'} className="flex-1">
+        <FormField label="Selling Price" focused={focusedField === 'price'} className="flex-1">
           <TextInput
             value={price}
             onChangeText={setPrice}
@@ -644,7 +642,7 @@ function ProductVariantsContent() {
             style={{ outline: 'none' } as object}
           />
         </FormField>
-        <FormField label="Cost (optional)" focused={focusedField === 'cost'} className="flex-1">
+        <FormField label="Cost (Optional)" focused={focusedField === 'cost'} className="flex-1">
           <TextInput
             value={cost}
             onChangeText={setCost}
@@ -659,7 +657,7 @@ function ProductVariantsContent() {
         </FormField>
       </View>
 
-      <FormField label="Barcode (optional)" focused={focusedField === 'barcode'}>
+      <FormField label="Barcode (Optional)" focused={focusedField === 'barcode'}>
         <TextInput
           value={barcode}
           onChangeText={setBarcode}
@@ -701,7 +699,7 @@ function ProductVariantsContent() {
         ) : null}
         <View className="flex-1">
           <Button
-            title={save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add variant'}
+            title={save.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Add Variant'}
             disabled={
               save.isPending ||
               !activeProductId ||
@@ -720,9 +718,9 @@ function ProductVariantsContent() {
   const listHeader = (
     <View className="mb-3 flex-row items-center justify-between">
       <View>
-        <Text className="text-base font-semibold text-slate-900">Configured variants</Text>
+        <Text className="text-base font-semibold text-slate-900">Configured Variants</Text>
         <Text className="mt-0.5 text-xs text-slate-500">
-          {(variants.data ?? []).length} variant{(variants.data ?? []).length === 1 ? '' : 's'} for{' '}
+          {(variants.data ?? []).length} Variant{(variants.data ?? []).length === 1 ? '' : 's'} For{' '}
           {activeProductName}
         </Text>
       </View>
@@ -763,7 +761,7 @@ function ProductVariantsContent() {
             {item.barcodes[0] ? (
               <Text className="text-xs text-slate-500">Barcode {item.barcodes[0]}</Text>
             ) : (
-              <Text className="text-xs text-slate-400">No barcode</Text>
+              <Text className="text-xs text-slate-400">No Barcode</Text>
             )}
           </View>
         </View>
@@ -787,7 +785,7 @@ function ProductVariantsContent() {
 
   const variantsList =
     variants.isLoading ? (
-      <LoadingState label="Loading variants…" />
+      <LoadingState label="Loading Variants…" />
     ) : variants.isError ? (
       <ErrorState message={variants.error.message} retry={() => void variants.refetch()} />
     ) : (
@@ -800,7 +798,7 @@ function ProductVariantsContent() {
         ListEmptyComponent={
           <View className="items-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10">
             <Feather name="layers" size={28} color="#94A3B8" />
-            <Text className="mt-3 text-sm font-medium text-slate-700">No variants yet</Text>
+            <Text className="mt-3 text-sm font-medium text-slate-700">No Variants Yet</Text>
             <Text className="mt-1 max-w-sm text-center text-xs text-slate-500">
               Add a box, pack, or other sellable unit for {activeProductName}.
             </Text>
@@ -860,7 +858,7 @@ function ProductVariantsContent() {
           }
           ListEmptyComponent={
             variants.isLoading ? (
-              <LoadingState label="Loading variants…" />
+              <LoadingState label="Loading Variants…" />
             ) : variants.isError ? (
               <ErrorState
                 message={variants.error.message}
@@ -869,7 +867,7 @@ function ProductVariantsContent() {
             ) : (
               <View className="items-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10">
                 <Feather name="layers" size={28} color="#94A3B8" />
-                <Text className="mt-3 text-sm font-medium text-slate-700">No variants yet</Text>
+                <Text className="mt-3 text-sm font-medium text-slate-700">No Variants Yet</Text>
                 <Text className="mt-1 max-w-sm text-center text-xs text-slate-500">
                   Add a box, pack, or other sellable unit for {activeProductName}.
                 </Text>

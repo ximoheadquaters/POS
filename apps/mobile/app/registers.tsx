@@ -248,7 +248,7 @@ function RegistersContent() {
             The Registers & Shifts module is disabled for your organization. Contact your administrator or store owner to enable register management.
           </Text>
           <View className="mt-6 w-full max-w-xs">
-            <Button title="Return to POS" onPress={() => router.push('/(tabs)/pos')} />
+            <Button title="Return To POS" onPress={() => router.push('/(tabs)/pos')} />
           </View>
         </View>
       </Screen>
@@ -278,20 +278,20 @@ function RegistersContent() {
       return (
         <Screen>
           <Header
-            title="Registers & shifts"
+            title="Registers & Shifts"
             subtitle="Loading…"
             showBack
             backLabel="More"
             fallbackHref="/(tabs)/more"
           />
-          <LoadingState label="Setting up your branch…" />
+          <LoadingState label="Setting Up Your Branch…" />
         </Screen>
       );
     }
     return (
       <Screen>
         <Header
-          title="Registers & shifts"
+          title="Registers & Shifts"
           subtitle="Branch required"
           showBack
           backLabel="More"
@@ -299,7 +299,7 @@ function RegistersContent() {
         />
         <View className="flex-1 p-4">
           <EmptyState
-            title="No branches available"
+            title="No Branches Available"
             message="Ask an administrator to assign you to a branch."
           />
         </View>
@@ -310,7 +310,7 @@ function RegistersContent() {
   return (
     <Screen>
       <Header
-        title="Registers & shifts"
+        title="Registers & Shifts"
         subtitle={branch.name}
         showBack
         backLabel="More"
@@ -324,7 +324,7 @@ function RegistersContent() {
         <View className="w-full max-w-3xl self-center">
           {shift ? (
             <>
-              <SectionLabel>Active shift</SectionLabel>
+              <SectionLabel>Active Shift</SectionLabel>
               <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
                 <View className="flex-row items-start justify-between p-5">
                   <View className="mr-4 flex-1 flex-row items-center">
@@ -354,21 +354,21 @@ function RegistersContent() {
                     </Text>
                     <View className="flex-row flex-wrap gap-2">
                       <View className="w-[48%] rounded-2xl border border-slate-200/60 bg-white p-3">
-                        <Text className="text-xs text-slate-500">Starting cash</Text>
+                        <Text className="text-xs text-slate-500">Starting Cash</Text>
                         <Text className="mt-1 text-base font-semibold text-slate-900">
                           {formatMoney(shiftDetail.startingCash)}
                         </Text>
                       </View>
                       <View className="w-[48%] rounded-2xl border border-slate-200/60 bg-white p-3">
                         <Text className="text-xs text-slate-500">
-                          Cash sales ({shiftDetail.transactions})
+                          Cash Sales ({shiftDetail.transactions})
                         </Text>
                         <Text className="mt-1 text-base font-semibold text-emerald-700">
                           +{formatMoney(shiftDetail.cashSales)}
                         </Text>
                       </View>
                       <View className="w-[48%] rounded-2xl border border-slate-200/60 bg-white p-3">
-                        <Text className="text-xs text-slate-500">Net cash moved</Text>
+                        <Text className="text-xs text-slate-500">Net Cash Moved</Text>
                         <Text className="mt-1 text-base font-semibold text-slate-900">
                           {formatMoney(
                             minorToMoney(
@@ -393,7 +393,7 @@ function RegistersContent() {
                   <View className="mb-3 flex-row items-center">
                     <Feather name="repeat" size={15} color="#64748B" />
                     <Text className="ml-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      Cash movement
+                      Cash Movement
                     </Text>
                   </View>
                   <Text className="mb-4 text-sm leading-5 text-slate-500">
@@ -472,14 +472,14 @@ function RegistersContent() {
                 </View>
               </View>
 
-              <SectionLabel>Close shift</SectionLabel>
+              <SectionLabel>Close Shift</SectionLabel>
               <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
                 <View className="mb-4 flex-row items-start">
                   <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
                     <Feather name="archive" size={18} color="#64748B" />
                   </View>
                   <View className="flex-1">
-                    <Text className="font-medium text-slate-900">Count the physical drawer</Text>
+                    <Text className="font-medium text-slate-900">Count The Physical Drawer</Text>
                     <Text className="mt-1 text-sm leading-5 text-slate-500">
                       Enter the cash you can physically count—not the expected amount. Enter 0 if
                       the drawer is empty.
@@ -487,7 +487,7 @@ function RegistersContent() {
                   </View>
                 </View>
                 <Field
-                  label="Counted cash in drawer"
+                  label="Counted Cash In Drawer"
                   value={actualCash}
                   onChangeText={setActualCash}
                   keyboardType="decimal-pad"
@@ -508,7 +508,7 @@ function RegistersContent() {
                   </View>
                 ) : null}
                 <Button
-                  title={close.isPending ? 'Closing shift…' : 'Review and close shift'}
+                  title={close.isPending ? 'Closing Shift…' : 'Review And Close Shift'}
                   variant="danger"
                   disabled={closeDisabled}
                   onPress={() => setCloseReviewOpen(true)}
@@ -522,21 +522,21 @@ function RegistersContent() {
             </>
           ) : (
             <>
-              <SectionLabel>Step 1 · Starting cash</SectionLabel>
+              <SectionLabel>Step 1 · Starting Cash</SectionLabel>
               <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
                 <View className="mb-4 flex-row items-start">
                   <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
                     <Feather name="inbox" size={18} color="#1A593B" />
                   </View>
                   <View className="flex-1">
-                    <Text className="font-medium text-slate-900">Count the opening drawer</Text>
+                    <Text className="font-medium text-slate-900">Count The Opening Drawer</Text>
                     <Text className="mt-1 text-sm leading-5 text-slate-500">
                       Enter the cash already inside before accepting your first sale.
                     </Text>
                   </View>
                 </View>
                 <Field
-                  label="Starting cash in drawer"
+                  label="Starting Cash In Drawer"
                   value={startingCash}
                   onChangeText={setStartingCash}
                   keyboardType="decimal-pad"
@@ -558,7 +558,7 @@ function RegistersContent() {
             {canManageRegisters ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Add cashier counter"
+                accessibilityLabel="Add Cashier Counter"
                 onPress={() => {
                   const nextNum = (query.data?.length ?? 0) + 1;
                   setCounterName(`Counter ${nextNum}`);
@@ -574,7 +574,7 @@ function RegistersContent() {
           </View>
           {query.isLoading ? (
             <View className="min-h-40 rounded-3xl border border-slate-200 bg-white">
-              <LoadingState label="Loading registers…" />
+              <LoadingState label="Loading Registers…" />
             </View>
           ) : query.isError ? (
             <View className="min-h-40 rounded-3xl border border-slate-200 bg-white">
@@ -642,7 +642,7 @@ function RegistersContent() {
             </View>
           ) : (
             <EmptyState
-              title="No registers"
+              title="No Registers"
               message="Ask an administrator to create a register for this branch."
             />
           )}
@@ -674,7 +674,7 @@ function RegistersContent() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Cancel closing shift"
+                accessibilityLabel="Cancel Closing Shift"
                 disabled={close.isPending}
                 onPress={() => setCloseReviewOpen(false)}
                 className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
@@ -688,7 +688,7 @@ function RegistersContent() {
                 {shift?.registerName ?? 'Active register'}
               </Text>
               <View className="my-3 h-px bg-slate-200" />
-              <Text className="text-xs uppercase tracking-wider text-slate-500">Counted cash</Text>
+              <Text className="text-xs uppercase tracking-wider text-slate-500">Counted Cash</Text>
               <Text className="mt-1 text-xl font-semibold text-slate-950">
                 {formatMoney(actualCash || '0')}
               </Text>
@@ -738,7 +738,7 @@ function RegistersContent() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close modal"
+                accessibilityLabel="Close Modal"
                 disabled={createRegister.isPending}
                 onPress={() => setAddCounterOpen(false)}
                 className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"

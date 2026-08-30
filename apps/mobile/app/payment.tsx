@@ -329,7 +329,7 @@ export default function PaymentScreen() {
       >
         <View className="mx-auto w-full max-w-md gap-4">
           <View className="rounded-2xl bg-brand-700 px-5 py-5">
-            <Text className="text-sm font-medium text-brand-100">Amount due</Text>
+            <Text className="text-sm font-medium text-brand-100">Amount Due</Text>
             <Text className="mt-1 text-4xl font-black text-white">{formatMoney(total)}</Text>
             {discount !== '0.00' && discount.trim() ? (
               <Text className="mt-2 text-xs text-brand-100">
@@ -337,7 +337,7 @@ export default function PaymentScreen() {
               </Text>
             ) : (
               <Text className="mt-2 text-xs text-brand-100">
-                {items.length} item{items.length === 1 ? '' : 's'} · Cash only
+                {items.length} Item{items.length === 1 ? '' : 's'} · Cash Only
               </Text>
             )}
           </View>
@@ -468,11 +468,11 @@ export default function PaymentScreen() {
           <View className="rounded-2xl border border-slate-200 bg-white p-4">
             <View className="mb-1 flex-row items-center justify-between">
               <Text className="text-xs font-semibold uppercase tracking-wider text-slate-600">
-                Cash received
+                Cash Received
               </Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Use exact amount"
+                accessibilityLabel="Use Exact Amount"
                 onPress={() => setCashReceived(total)}
                 className="rounded-lg bg-brand-50 px-2.5 py-1 active:bg-brand-100"
               >
@@ -536,7 +536,7 @@ export default function PaymentScreen() {
 
           <Button
             title={
-              checkout.isPending ? 'Completing sale…' : `Complete · ${formatMoney(total)}`
+              checkout.isPending ? 'Completing Sale…' : `Complete · ${formatMoney(total)}`
             }
             disabled={checkout.isPending || !canComplete}
             onPress={() => void completeSale()}

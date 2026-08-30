@@ -152,7 +152,7 @@ export function ReceiptPrinterSetup({
             onChange={(next) => update('includeFooter', next)}
           />
           <ToggleCard
-            label="Auto-Print on Checkout"
+            label="Auto-Print On Checkout"
             detail="Open print dialog automatically after payment"
             value={value.autoPrintAfterSale}
             onChange={(next) => update('autoPrintAfterSale', next)}
@@ -180,7 +180,7 @@ export function ReceiptPrinterSetup({
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Save printer settings"
+          accessibilityLabel="Save Printer Settings"
           accessibilityState={{ disabled: saveDisabled }}
           disabled={saveDisabled}
           onPress={() => {

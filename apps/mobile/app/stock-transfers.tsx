@@ -61,27 +61,29 @@ function StockTransfersContent() {
   const [notes, setNotes] = useState('');
   const [selectedItems, setSelectedItems] = useState<SelectedTransferItem[]>([]);
   const [productSearch, setProductSearch] = useState('');
+  const trimmedSearch = search.trim();
+  const trimmedProductSearch = productSearch.trim();
 
   // Check SaaS module enablement
   const hasModule = currentUser?.modules.includes('stock_transfers') ?? false;
 
   const query = useInfiniteQuery({
-    queryKey: ['stock-transfers', branch?.id, statusFilter, search],
+    queryKey: ['stock-transfers', branch?.id, statusFilter, trimmedSearch],
     enabled: hasModule,
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
       api<StockTransferItemSummary[]>(
         `/stock-transfers?page=${pageParam}&pageSize=30&branchId=${branch?.id || ''}&status=${
           statusFilter === 'all' ? '' : statusFilter
-        }&search=${encodeURIComponent(search)}`,
+        }&search=${encodeURIComponent(trimmedSearch)}`,
       ),
     getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
   });
 
   const productsQuery = useQuery({
-    queryKey: ['products-lookup', branch.id, productSearch],
+    queryKey: ['products-lookup', branch.id, trimmedProductSearch],
     enabled: modalVisible && hasModule,
-    queryFn: () => api<ProductItem[]>(`/products?branchId=${branch.id}&pageSize=20&search=${encodeURIComponent(productSearch)}`),
+    queryFn: () => api<ProductItem[]>(`/products?branchId=${branch.id}&pageSize=20&search=${encodeURIComponent(trimmedProductSearch)}`),
   });
 
   const createMutation = useMutation({
@@ -91,7 +93,7 @@ function StockTransfersContent() {
         body: JSON.stringify({
           fromBranchId: branch.id,
           toBranchId,
-          notes,
+          notes: notes.trim(),
           items: selectedItems.map((item) => ({
             productId: item.productId,
             quantity: Number(item.quantity.replace(',', '.')),
@@ -126,7 +128,7 @@ function StockTransfersContent() {
     mutationFn: (transferId: string) =>
       api(`/stock-transfers/${transferId}/cancel`, { method: 'POST' }),
     onSuccess: async () => {
-      appAlert('Transfer cancelled', 'Stock has been returned to sender branch.');
+      appAlert('Transfer Canceled', 'Stock has been returned to sender branch.');
       await client.invalidateQueries({ queryKey: ['stock-transfers'] });
       await client.invalidateQueries({ queryKey: ['inventory'] });
     },
@@ -185,7 +187,7 @@ function StockTransfersContent() {
             administrator to upgrade your plan tier or enable this feature.
           </Text>
           <View className="mt-6">
-            <Button title="Back to More" variant="secondary" onPress={() => router.back()} />
+            <Button title="Back To More" variant="secondary" onPress={() => router.back()} />
           </View>
         </View>
       </Screen>
@@ -235,7 +237,7 @@ function StockTransfersContent() {
                   statusFilter === st ? 'text-white' : 'text-slate-700'
                 }`}
               >
-                {st.replace('_', ' ')}
+                {st === 'cancelled' ? 'canceled' : st.replace('_', ' ')}
               </Text>
             </Pressable>
           ))}
@@ -248,10 +250,10 @@ function StockTransfersContent() {
         contentContainerClassName="p-4 gap-3"
         ListEmptyComponent={
           query.isLoading ? (
-            <LoadingState label="Loading transfers…" />
+            <LoadingState label="Loading Transfers…" />
           ) : (
             <EmptyState
-              title="No stock transfers"
+              title="No Stock Transfers"
               message="Create a stock transfer to move inventory between branches."
             />
           )
@@ -392,7 +394,7 @@ function StockTransfersContent() {
               </View>
 
               <View>
-                <Text className="mb-1 text-xs font-semibold text-slate-700">Add Products to Transfer</Text>
+                <Text className="mb-1 text-xs font-semibold text-slate-700">Add Products To Transfer</Text>
                 <TextInput
                   value={productSearch}
                   onChangeText={setProductSearch}

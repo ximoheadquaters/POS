@@ -35,15 +35,16 @@ interface SupplierReturn {
 function PurchasingContent() {
   const [section, setSection] = useState<Section>('orders');
   const [search, setSearch] = useState('');
+  const trimmedSearch = search.trim();
   const branch = useBranchStore((state) => state.activeBranch);
   const { currentUser } = useSession();
   const orders = useQuery({
-    queryKey: ['purchase-orders', branch?.id, search],
+    queryKey: ['purchase-orders', branch?.id, trimmedSearch],
     enabled: Boolean(branch),
     queryFn: () =>
       api<PurchaseOrderSummary[]>(
         `/purchase-orders?branchId=${branch!.id}&page=1&pageSize=100${
-          search ? `&search=${encodeURIComponent(search)}` : ''
+          trimmedSearch ? `&search=${encodeURIComponent(trimmedSearch)}` : ''
         }`,
       ),
   });
@@ -94,7 +95,7 @@ function PurchasingContent() {
               className="min-h-11 flex-row items-center rounded-xl bg-brand-700 px-4"
             >
               <Feather name="plus" size={17} color="#fff" />
-              <Text className="ml-2 font-medium text-white">New order</Text>
+              <Text className="ml-2 font-medium text-white">New Order</Text>
             </Pressable>
           ) : section === 'suppliers' && currentUser?.permissions.includes('suppliers:manage') ? (
             <Pressable
@@ -102,7 +103,7 @@ function PurchasingContent() {
               className="min-h-11 flex-row items-center rounded-xl bg-brand-700 px-4"
             >
               <Feather name="plus" size={17} color="#fff" />
-              <Text className="ml-2 font-medium text-white">New supplier</Text>
+              <Text className="ml-2 font-medium text-white">New Supplier</Text>
             </Pressable>
           ) : null
         }
@@ -180,7 +181,7 @@ function PurchasingContent() {
                       </View>
                       <Text className="mt-1 text-sm text-slate-600">{item.supplierName}</Text>
                       <Text className="mt-1 text-xs text-slate-400">
-                        Received {item.receivedQuantity} of {item.orderedQuantity} ordered units
+                        Received {item.receivedQuantity} of {item.orderedQuantity} Ordered Units
                       </Text>
                     </View>
                     <View className="items-end">
@@ -202,7 +203,7 @@ function PurchasingContent() {
                 ))
               ) : (
                 <EmptyState
-                  title="No purchase orders yet"
+                  title="No Purchase Orders Yet"
                   message="Create an order when you need to request stock from a supplier."
                 />
               )
@@ -249,7 +250,7 @@ function PurchasingContent() {
                     </View>
                     <View className="items-end">
                       <Text className="text-sm font-medium text-slate-700">
-                        {item.orderCount ?? 0} orders
+                        {item.orderCount ?? 0} Orders
                       </Text>
                       <Text className="mt-1 text-xs text-slate-400">
                         {formatMoney(item.orderedTotal ?? '0')}
@@ -259,7 +260,7 @@ function PurchasingContent() {
                 ))
               ) : (
                 <EmptyState
-                  title="No suppliers yet"
+                  title="No Suppliers Yet"
                   message="Add a supplier before creating your first purchase order."
                 />
               )
@@ -273,7 +274,7 @@ function PurchasingContent() {
                       </View>
                       <View className="flex-1">
                         <Text className="font-semibold text-slate-900">
-                          Start a supplier return
+                          Start A Supplier Return
                         </Text>
                         <Text className="mt-1 text-sm leading-5 text-slate-500">
                           Choose a received order. Only quantities still available to return can be
@@ -283,7 +284,7 @@ function PurchasingContent() {
                     </View>
                     {returnable.isLoading ? (
                       <Text className="rounded-xl bg-white p-4 text-sm text-slate-500">
-                        Loading received orders…
+                        Loading Received Orders…
                       </Text>
                     ) : returnable.isError ? (
                       <Pressable
@@ -312,10 +313,10 @@ function PurchasingContent() {
                                 {order.orderNumber}
                               </Text>
                               <Text className="mt-1 text-xs text-slate-500">
-                                {order.supplierName} · {order.returnableQuantity} units available
+                                {order.supplierName} · {order.returnableQuantity} Units Available
                               </Text>
                             </View>
-                            <Text className="text-sm font-medium text-brand-700">Return items</Text>
+                            <Text className="text-sm font-medium text-brand-700">Return Items</Text>
                             <Feather
                               name="chevron-right"
                               size={16}
@@ -335,7 +336,7 @@ function PurchasingContent() {
 
                 <View className="gap-3">
                   <Text className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-                    Return history
+                    Return History
                   </Text>
                   {returns.data?.length ? (
                     returns.data.map((item) => (
@@ -384,7 +385,7 @@ function PurchasingContent() {
                     ))
                   ) : (
                     <EmptyState
-                      title="No supplier returns"
+                      title="No Supplier Returns"
                       message="Recorded returns to suppliers will appear here."
                     />
                   )}

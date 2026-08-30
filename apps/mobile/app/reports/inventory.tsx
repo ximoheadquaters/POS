@@ -1,5 +1,5 @@
-import { InventoryReportScreen } from '@/screens/inventory-report';
+import { ReportsTableWorkspaceScreen } from '@/screens/reports-table-workspace';
 
 export default function ReportsInventoryRoute() {
-  return <InventoryReportScreen />;
+  return <ReportsTableWorkspaceScreen initialSection="inventory" />;
 }

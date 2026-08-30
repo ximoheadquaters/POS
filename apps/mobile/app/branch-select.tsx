@@ -25,7 +25,7 @@ export default function BranchSelectionScreen() {
   return (
     <Screen>
       <Header
-        title="Choose branch"
+        title="Choose Branch"
         subtitle={`${currentUser?.displayName ?? 'Signed-in user'} · Select where you are working today`}
       />
       <FlatList
@@ -34,7 +34,7 @@ export default function BranchSelectionScreen() {
         contentContainerClassName="p-5 gap-3"
         ListEmptyComponent={
           <EmptyState
-            title="No assigned branches"
+            title="No Assigned Branches"
             message="Ask an administrator to assign your account."
           />
         }

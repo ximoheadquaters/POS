@@ -175,7 +175,7 @@ export default function AcceptInvitationScreen() {
   if (page.kind === 'loading') {
     return (
       <Screen>
-        <LoadingState label="Verifying your secure invitation…" />
+        <LoadingState label="Verifying Your Secure Invitation…" />
       </Screen>
     );
   }
@@ -195,7 +195,7 @@ export default function AcceptInvitationScreen() {
               <View className="mb-5">
                 <BrandLogo size={56} />
               </View>
-              <Text className="text-3xl font-black text-white">Set up your POS access</Text>
+              <Text className="text-3xl font-black text-white">Set Up Your POS Access</Text>
               <Text className="mt-2 text-base leading-6 text-brand-100">
                 Create your owner password to securely manage your branches and team.
               </Text>
@@ -204,7 +204,7 @@ export default function AcceptInvitationScreen() {
             <View className="rounded-3xl border border-slate-100 bg-white p-5">
               {page.kind === 'success' ? (
                 <View accessibilityRole="alert">
-                  <Text className="text-2xl font-black text-brand-900">Password created</Text>
+                  <Text className="text-2xl font-black text-brand-900">Password Created</Text>
                   <Text className="mt-3 leading-6 text-slate-600">
                     {page.message ??
                       (page.goToLogin
@@ -213,7 +213,7 @@ export default function AcceptInvitationScreen() {
                   </Text>
                   <View className="mt-5">
                     <Button
-                      title={page.goToLogin ? 'Continue to sign in' : 'Continue to POS'}
+                      title={page.goToLogin ? 'Continue To Sign In' : 'Continue To POS'}
                       onPress={() =>
                         router.replace(page.goToLogin ? '/(auth)/login' : '/branch-select')
                       }
@@ -222,15 +222,15 @@ export default function AcceptInvitationScreen() {
                 </View>
               ) : page.kind === 'error' ? (
                 <View accessibilityRole="alert">
-                  <Text className="text-2xl font-black text-brand-900">Invitation unavailable</Text>
+                  <Text className="text-2xl font-black text-brand-900">Invitation Unavailable</Text>
                   <Text className="mt-3 leading-6 text-red-700">{page.message}</Text>
                   <View className="mt-5">
-                    <Button title="Back to sign in" variant="secondary" onPress={returnToLogin} />
+                    <Button title="Back To Sign In" variant="secondary" onPress={returnToLogin} />
                   </View>
                 </View>
               ) : (
                 <>
-                  <Text className="text-2xl font-black text-brand-900">Create your password</Text>
+                  <Text className="text-2xl font-black text-brand-900">Create Your Password</Text>
                   <Text className="mb-5 mt-2 leading-6 text-slate-500">
                     Use at least 10 characters with uppercase, lowercase, and a number.
                   </Text>
@@ -245,8 +245,8 @@ export default function AcceptInvitationScreen() {
                     error={issues.password}
                   />
                   <Field
-                    label="Confirm password"
-                    accessibilityLabel="Confirm password"
+                    label="Confirm Password"
+                    accessibilityLabel="Confirm Password"
                     autoCapitalize="none"
                     autoComplete="new-password"
                     secureTextEntry
@@ -261,18 +261,18 @@ export default function AcceptInvitationScreen() {
                     </View>
                   ) : null}
                   <Button
-                    title={submitting ? 'Saving password…' : 'Create password'}
-                    accessibilityLabel="Create password"
+                    title={submitting ? 'Saving Password…' : 'Create Password'}
+                    accessibilityLabel="Create Password"
                     disabled={submitting}
                     onPress={submit}
                   />
                   <Pressable
                     accessibilityRole="link"
-                    accessibilityLabel="Back to POS sign in"
+                    accessibilityLabel="Back To POS Sign In"
                     className="mt-5 min-h-11 items-center justify-center"
                     onPress={returnToLogin}
                   >
-                    <Text className="font-bold text-brand-700">Back to POS sign in</Text>
+                    <Text className="font-bold text-brand-700">Back To POS Sign In</Text>
                   </Pressable>
                 </>
               )}

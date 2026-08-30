@@ -694,7 +694,7 @@ export function stockTransfersRouter(database: Database): Router {
               item.stock_pool === 'opened' ? item.quantity : 0,
               restoredInventory.rows[0]!.sealedQuantity,
               restoredInventory.rows[0]!.openedQuantity,
-              `Cancelled stock transfer ${transfer.transfer_number}`,
+              `Canceled stock transfer ${transfer.transfer_number}`,
               id,
               userId,
             ],
@@ -702,7 +702,7 @@ export function stockTransfersRouter(database: Database): Router {
         }
       }
 
-      // Mark cancelled
+      // Mark canceled
       await tx.query(
         `update stock_transfers set status = 'cancelled', cancelled_by = $3, cancelled_at = now(), updated_at = now()
          where id = $1 and organization_id = $2`,
@@ -710,7 +710,7 @@ export function stockTransfersRouter(database: Database): Router {
       );
     });
 
-    sendData(response, { message: 'Stock transfer cancelled' });
+    sendData(response, { message: 'Stock transfer canceled' });
   });
 
   return router;

@@ -118,7 +118,7 @@ describe('Step 4 — Multi-Unit & Weighted UX Integration Tests', () => {
     expect(baseUnitWarning).toContain('can affect selling-unit conversions');
   });
 
-  it('17. Cancelling an edit preserves values and dirty state', () => {
+  it('17. Canceling an edit preserves values and dirty state', () => {
     let isEditingActive = true;
     const formState = { dirty: true, baseUnit: 'piece', unitsPerBase: 12 };
 

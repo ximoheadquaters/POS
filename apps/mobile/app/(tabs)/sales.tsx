@@ -270,7 +270,7 @@ export default function SalesHistoryScreen() {
             contentContainerClassName="p-4 gap-3"
             onEndReached={() => query.hasNextPage && void query.fetchNextPage()}
             ListEmptyComponent={
-              <EmptyState title="No sales yet" message="Completed sales will appear here." />
+              <EmptyState title="No Sales Yet" message="Completed sales will appear here." />
             }
             renderItem={({ item }) => (
               <Pressable
@@ -292,7 +292,7 @@ export default function SalesHistoryScreen() {
                   <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     {completedSaleMeta(item)}
                   </Text>
-                  <Text className="text-xs font-bold text-brand-700">View receipt ›</Text>
+                  <Text className="text-xs font-bold text-brand-700">View Receipt ›</Text>
                 </View>
               </Pressable>
             )}
@@ -301,12 +301,12 @@ export default function SalesHistoryScreen() {
       ) : activeTab === 'held' ? (
         /* Held Sales (Parked Carts) Feed */
         heldQuery.isLoading ? (
-          <LoadingState label="Loading held sales…" />
+          <LoadingState label="Loading Held Sales…" />
         ) : heldQuery.isError ? (
           <ErrorState message={heldQuery.error.message} retry={() => void heldQuery.refetch()} />
         ) : heldSales.length === 0 ? (
           <EmptyState
-            title="No held sales"
+            title="No Held Sales"
             message="Parked orders will appear here when a cashier holds a sale at POS checkout."
           />
         ) : (
@@ -335,7 +335,7 @@ export default function SalesHistoryScreen() {
                     ) : null}
 
                     <Text className="mt-1.5 text-xs font-medium text-slate-500">
-                      {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} · Parked by{' '}
+                      {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} · Parked By{' '}
                       {item.cashierName}
                       {item.customerName ? ` for ${item.customerName}` : ''}
                     </Text>
@@ -386,7 +386,7 @@ export default function SalesHistoryScreen() {
           />
         )
       ) : voidedQuery.isLoading ? (
-        <LoadingState label="Loading voided history…" />
+        <LoadingState label="Loading Voided History…" />
       ) : voidedQuery.isError ? (
         <ErrorState message={voidedQuery.error.message} retry={() => void voidedQuery.refetch()} />
       ) : (
@@ -397,7 +397,7 @@ export default function SalesHistoryScreen() {
           onEndReached={() => voidedQuery.hasNextPage && void voidedQuery.fetchNextPage()}
           ListEmptyComponent={
             <EmptyState
-              title="No voided held sales"
+              title="No Voided Held Sales"
               message="Discarded and resumed parked orders will appear here for reference."
             />
           }
@@ -436,7 +436,7 @@ export default function SalesHistoryScreen() {
                     ) : null}
 
                     <Text className="mt-2 text-xs font-medium text-slate-500">
-                      {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} · Parked by{' '}
+                      {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} · Parked By{' '}
                       {item.cashierName}
                       {item.customerName ? ` for ${item.customerName}` : ''}
                     </Text>
@@ -454,7 +454,7 @@ export default function SalesHistoryScreen() {
                     <Text className="text-lg font-black text-slate-700">
                       {formatMoney(item.total)}
                     </Text>
-                    <Text className="mt-3 text-xs font-bold text-brand-700">View details ›</Text>
+                    <Text className="mt-3 text-xs font-bold text-brand-700">View Details ›</Text>
                   </View>
                 </View>
               </Pressable>

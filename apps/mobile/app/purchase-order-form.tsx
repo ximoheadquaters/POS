@@ -129,8 +129,8 @@ function PurchaseOrderFormContent() {
           branchId: branch!.id,
           supplierId,
           expectedAt,
-          supplierReference,
-          notes,
+          supplierReference: supplierReference.trim(),
+          notes: notes.trim(),
           items: lines.map((line) => ({
             productId: line.productId,
             variantId: line.variantId ?? null,
@@ -150,7 +150,7 @@ function PurchaseOrderFormContent() {
   return (
     <Screen>
       <Header
-        title="New purchase order"
+        title="New Purchase Order"
         subtitle={`${branch?.name ?? ''} · Build the request before sending it`}
         showBack
         backLabel="Purchasing"
@@ -172,7 +172,7 @@ function PurchaseOrderFormContent() {
             <View className="rounded-2xl border border-slate-200 bg-white p-5">
               <View className="mb-4 flex-row items-center">
                 <Feather name="truck" size={18} color="#1A593B" />
-                <Text className="ml-2 font-semibold text-slate-900">1. Choose supplier</Text>
+                <Text className="ml-2 font-semibold text-slate-900">1. Choose Supplier</Text>
               </View>
               <View className="flex-row flex-wrap gap-2">
                 {suppliers.data
@@ -202,7 +202,7 @@ function PurchaseOrderFormContent() {
                     className="min-h-11 flex-row items-center px-2"
                   >
                     <Feather name="plus" size={16} color="#1A593B" />
-                    <Text className="ml-1 font-medium text-brand-700">Add a supplier first</Text>
+                    <Text className="ml-1 font-medium text-brand-700">Add A Supplier First</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -212,7 +212,7 @@ function PurchaseOrderFormContent() {
               <View className="mb-4 flex-row items-center">
                 <Feather name="package" size={18} color="#1A593B" />
                 <View className="ml-2 flex-1">
-                  <Text className="font-semibold text-slate-900">2. Add products</Text>
+                  <Text className="font-semibold text-slate-900">2. Add Products</Text>
                   <Text className="mt-1 text-xs text-slate-500">
                     Packs and boxes automatically convert to the product&apos;s base stock unit.
                   </Text>
@@ -226,7 +226,7 @@ function PurchaseOrderFormContent() {
                   >
                     <Feather name="plus" size={15} color="#1A593B" />
                     <Text className="ml-1 text-sm font-medium text-brand-700">
-                      Register new product
+                      Register New Product
                     </Text>
                   </Pressable>
                 ) : null}
@@ -287,7 +287,7 @@ function PurchaseOrderFormContent() {
               <View className="mb-4 flex-row items-center">
                 <Feather name="list" size={18} color="#1A593B" />
                 <Text className="ml-2 font-semibold text-slate-900">
-                  3. Order quantities ({lines.length})
+                  3. Order Quantities ({lines.length})
                 </Text>
               </View>
               {lines.length ? (
@@ -299,7 +299,7 @@ function PurchaseOrderFormContent() {
                     >
                       <View className="min-w-52 flex-1">
                         <Text className="font-medium text-slate-900">{line.label}</Text>
-                        <Text className="mt-1 text-xs text-slate-400">Ordered by {line.unit}</Text>
+                        <Text className="mt-1 text-xs text-slate-400">Ordered By {line.unit}</Text>
                       </View>
                       <View>
                         <Text className="mb-1 text-xs text-slate-500">Quantity</Text>
@@ -332,7 +332,7 @@ function PurchaseOrderFormContent() {
                         />
                       </View>
                       <View className="w-28 items-end">
-                        <Text className="text-xs text-slate-500">Line total</Text>
+                        <Text className="text-xs text-slate-500">Line Total</Text>
                         <Text className="mt-1 font-semibold text-slate-900">
                           {formatMoney(
                             String((Number(line.quantity) || 0) * (Number(line.unitCost) || 0)),
@@ -378,11 +378,11 @@ function PurchaseOrderFormContent() {
             </View>
 
             <View className="rounded-2xl border border-slate-200 bg-white p-5">
-              <Text className="mb-4 font-semibold text-slate-900">4. Delivery details</Text>
+              <Text className="mb-4 font-semibold text-slate-900">4. Delivery Details</Text>
               <View className="flex-row flex-wrap gap-x-4">
                 <View className="min-w-56 flex-1">
                   <Field
-                    label="Expected date (YYYY-MM-DD)"
+                    label="Expected Date (YYYY-MM-DD)"
                     value={expectedDate}
                     onChangeText={setExpectedDate}
                     placeholder="2026-08-05"
@@ -390,7 +390,7 @@ function PurchaseOrderFormContent() {
                 </View>
                 <View className="min-w-56 flex-1">
                   <Field
-                    label="Supplier quotation / reference"
+                    label="Supplier Quotation / Reference"
                     value={supplierReference}
                     onChangeText={setSupplierReference}
                   />
@@ -402,7 +402,7 @@ function PurchaseOrderFormContent() {
             <View className="rounded-2xl bg-brand-50 p-5">
               <View className="flex-row items-center justify-between">
                 <View>
-                  <Text className="text-sm text-slate-500">Order total</Text>
+                  <Text className="text-sm text-slate-500">Order Total</Text>
                   <Text className="mt-1 text-2xl font-semibold text-brand-900">
                     {formatMoney(String(subtotal))}
                   </Text>
@@ -433,7 +433,7 @@ function PurchaseOrderFormContent() {
               </View>
               <View className="min-w-56">
                 <Button
-                  title={create.isPending ? 'Creating…' : 'Create draft order'}
+                  title={create.isPending ? 'Creating…' : 'Create Draft Order'}
                   disabled={
                     create.isPending ||
                     !branch ||
@@ -472,7 +472,7 @@ function PurchaseOrderFormContent() {
                 <Feather name="check" size={30} color="#1A593B" />
               </View>
               <Text className="mt-4 text-center text-xl font-semibold text-slate-950">
-                Draft created successfully
+                Draft Created Successfully
               </Text>
               <Text className="mt-2 text-center text-sm leading-5 text-slate-500">
                 {createdOrder?.orderNumber} has been saved. Inventory will change only after the
@@ -486,7 +486,7 @@ function PurchaseOrderFormContent() {
               </View>
               <View className="my-3 h-px bg-slate-200" />
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm text-slate-500">Order total</Text>
+                <Text className="text-sm text-slate-500">Order Total</Text>
                 <Text className="font-semibold text-slate-950">
                   {formatMoney(createdOrder?.subtotal ?? '0')}
                 </Text>
@@ -494,7 +494,7 @@ function PurchaseOrderFormContent() {
             </View>
             <View className="gap-3">
               <Button
-                title="View draft order"
+                title="View Draft Order"
                 onPress={() => {
                   if (!createdOrder) return;
                   const orderId = createdOrder.id;
@@ -506,7 +506,7 @@ function PurchaseOrderFormContent() {
                 }}
               />
               <Button
-                title="Back to purchasing"
+                title="Back To Purchasing"
                 variant="secondary"
                 onPress={() => {
                   setCreatedOrder(null);

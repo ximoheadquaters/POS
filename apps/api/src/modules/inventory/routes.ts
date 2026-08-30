@@ -50,7 +50,7 @@ export function inventoryRouter(database: Database): Router {
             ? 'bi.quantity desc nulls last, lower(p.name) asc'
             : 'lower(p.name) asc';
       const result = await database.query(
-        `select bi.id,p.id as "productId",p.name,p.sku,p.unit,
+        `select bi.id,p.id as "productId",p.name,p.sku,p.unit,p.status,
           p.inventory_role as "inventoryRole",
           bi.quantity::float8 as quantity,bi.low_stock_level::float8 as "lowStockLevel",
           bi.average_cost::text as "averageCost",

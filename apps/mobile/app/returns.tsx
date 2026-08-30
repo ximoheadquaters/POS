@@ -46,7 +46,7 @@ function ReturnsContent() {
         <Text className="mb-5 text-center text-slate-600">
           Find the receipt in sales history, open its details, then choose Return items.
         </Text>
-        <Button title="Find a sale" onPress={() => router.push('/(tabs)/sales')} />
+        <Button title="Find A Sale" onPress={() => router.push('/(tabs)/sales')} />
       </View>
     </Screen>
   );

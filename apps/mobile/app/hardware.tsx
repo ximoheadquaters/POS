@@ -112,14 +112,14 @@ function HardwareContent() {
   return (
     <Screen>
       <Header
-        title="Hardware devices"
+        title="Hardware Devices"
         subtitle="Optional capabilities for this organization and device"
         showBack
         backLabel="More"
         fallbackHref="/(tabs)/more"
       />
       {query.isLoading ? (
-        <LoadingState label="Checking hardware…" />
+        <LoadingState label="Checking Hardware…" />
       ) : (
         <ScrollView contentContainerClassName="p-4 md:p-6 pb-12">
           <View className="w-full max-w-3xl self-center gap-5">
@@ -227,7 +227,7 @@ function HardwareContent() {
             {/* Bottom Refresh */}
             <View className="mt-2 flex-row justify-end">
               <Button
-                title={refresh.isPending ? 'Refreshing access…' : 'Refresh enabled modules'}
+                title={refresh.isPending ? 'Refreshing Access…' : 'Refresh Enabled Modules'}
                 variant="secondary"
                 disabled={refresh.isPending}
                 onPress={() => refresh.mutate()}

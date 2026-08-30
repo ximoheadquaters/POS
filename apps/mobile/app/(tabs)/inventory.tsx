@@ -114,18 +114,19 @@ export default function InventoryScreen() {
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
   const inventoryEnabled = currentUser?.modules.includes('inventory') ?? false;
+  const trimmedSearch = search.trim();
   const activeFilter =
     INVENTORY_FILTERS.find((filter) => filter.id === inventoryFilter) ?? INVENTORY_FILTERS[0];
   const activeSort = INVENTORY_SORTS.find((option) => option.id === sort) ?? INVENTORY_SORTS[0];
   const query = useInfiniteQuery({
-    queryKey: ['inventory', branch?.id, inventoryFilter, search, sort],
+    queryKey: ['inventory', branch?.id, inventoryFilter, trimmedSearch, sort],
     initialPageParam: 1,
     enabled: Boolean(branch) && inventoryEnabled,
     queryFn: ({ pageParam }) =>
       api<Inventory[]>(
         `/inventory?branchId=${branch!.id}&page=${pageParam}&pageSize=30&sort=${sort}${
           inventoryFilter === 'all' ? '' : `&inventoryRole=${inventoryFilter}`
-        }${search ? `&search=${encodeURIComponent(search)}` : ''}`,
+        }${trimmedSearch ? `&search=${encodeURIComponent(trimmedSearch)}` : ''}`,
       ),
     getNextPageParam: (lastPage, pages) => (lastPage.length === 30 ? pages.length + 1 : undefined),
     ...liveDataQueryOptions,
@@ -170,7 +171,7 @@ export default function InventoryScreen() {
       <View className="border-b border-slate-100 bg-white px-4 py-3 gap-3">
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open repack and production"
+          accessibilityLabel="Open Repack And Production"
           onPress={() => router.push('/production')}
           className="w-full flex-row items-center rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5 active:bg-brand-100"
         >
@@ -198,7 +199,7 @@ export default function InventoryScreen() {
             className="ml-2 flex-1 min-h-11 bg-transparent text-sm text-slate-900"
           />
           {search ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearch('')}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Clear Search" onPress={() => setSearch('')}>
               <Feather name="x" size={16} color="#81776E" />
             </Pressable>
           ) : null}
@@ -207,7 +208,7 @@ export default function InventoryScreen() {
         <View className="flex-row items-center gap-2">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Filter stock type"
+            accessibilityLabel="Filter Stock Type"
             onPress={() => setFilterOpen(true)}
             className="min-h-11 flex-1 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
           >
@@ -222,7 +223,7 @@ export default function InventoryScreen() {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Sort inventory"
+            accessibilityLabel="Sort Inventory"
             onPress={() => setSortOpen(true)}
             className="min-h-11 flex-1 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
           >
@@ -238,11 +239,11 @@ export default function InventoryScreen() {
 
         <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
           <Text className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            Qty color
+            Qty Color
           </Text>
           <View className="flex-row items-center gap-1.5">
             <View className="h-2.5 w-2.5 rounded-full bg-brand-600" />
-            <Text className="text-xs font-medium text-slate-600">In stock</Text>
+            <Text className="text-xs font-medium text-slate-600">In Stock</Text>
           </View>
           <View className="flex-row items-center gap-1.5">
             <View className="h-2.5 w-2.5 rounded-full bg-amber-500" />
@@ -250,7 +251,7 @@ export default function InventoryScreen() {
           </View>
           <View className="flex-row items-center gap-1.5">
             <View className="h-2.5 w-2.5 rounded-full bg-red-500" />
-            <Text className="text-xs font-medium text-slate-600">Low stock</Text>
+            <Text className="text-xs font-medium text-slate-600">Low Stock</Text>
           </View>
         </View>
       </View>
@@ -289,11 +290,11 @@ export default function InventoryScreen() {
               {search ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Clear search"
+                  accessibilityLabel="Clear Search"
                   onPress={() => setSearch('')}
                   className="mt-5 min-h-11 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-5 active:bg-slate-50"
                 >
-                  <Text className="font-semibold text-slate-800">Clear search</Text>
+                  <Text className="font-semibold text-slate-800">Clear Search</Text>
                 </Pressable>
               ) : (
                 <Pressable
@@ -365,13 +366,13 @@ export default function InventoryScreen() {
         <View className="flex-1 items-center justify-center p-4">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close stock type filter"
+            accessibilityLabel="Close Stock Type Filter"
             onPress={() => setFilterOpen(false)}
             className="absolute inset-0 bg-black/40"
           />
           <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
             <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
-              <Text className="text-base font-bold text-slate-900">Stock type</Text>
+              <Text className="text-base font-bold text-slate-900">Stock Type</Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setFilterOpen(false)}>
                 <Feather name="x" size={20} color="#64748B" />
               </Pressable>
@@ -421,13 +422,13 @@ export default function InventoryScreen() {
         <View className="flex-1 items-center justify-center p-4">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close sort options"
+            accessibilityLabel="Close Sort Options"
             onPress={() => setSortOpen(false)}
             className="absolute inset-0 bg-black/40"
           />
           <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
             <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
-              <Text className="text-base font-bold text-slate-900">Sort by</Text>
+              <Text className="text-base font-bold text-slate-900">Sort By</Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setSortOpen(false)}>
                 <Feather name="x" size={20} color="#64748B" />
               </Pressable>

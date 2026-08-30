@@ -172,11 +172,16 @@ export function reportsRouter(database: Queryable): Router {
   });
 
   router.get('/transactions/:id', async (request, response) => {
-    const scope = resolveReportScope(request.authUser!, {
+    const branchId =
+      typeof request.query.branchId === 'string' && request.query.branchId
+        ? request.query.branchId
+        : undefined;
+    const scopeInput: { from: string; to: string; branchId?: string } = {
       from: '2000-01-01',
       to: '2099-12-31',
-      branchId: String(request.query.branchId),
-    });
+    };
+    if (branchId) scopeInput.branchId = branchId;
+    const scope = resolveReportScope(request.authUser!, scopeInput);
     const saleId = uuidSchema.parse(request.params.id);
     const result = await transactionDetailService.getTransactionDetail(scope, saleId);
     sendData(response, result);
@@ -365,6 +370,7 @@ export function reportsRouter(database: Queryable): Router {
       database.query(
         `select si.product_name as name,si.sku,p.unit,
           coalesce(c.name,'Uncategorized') as category,
+          coalesce(br.name,'Unbranded') as brand,
           coalesce(sum(si.quantity),0)::float8 as quantity,
           coalesce(sum(si.unit_price*si.quantity),0)::text as sales,
           coalesce(sum(si.quantity*si.unit_cost),0)::text as cost,
@@ -375,10 +381,11 @@ export function reportsRouter(database: Queryable): Router {
          join sales s on s.id=si.sale_id
          join products p on p.id=si.product_id
          left join categories c on c.id=p.category_id
+         left join brands br on br.id=p.brand_id
          where si.organization_id=$1 and s.completed_at >= $2 and s.completed_at < $3
            and s.status in ('completed','partially_refunded','refunded')
            and ${branchScope('s')}
-         group by si.product_name,si.sku,p.unit,c.name order by sales desc limit 100`,
+         group by si.product_name,si.sku,p.unit,c.name,br.name order by sales desc limit 100`,
         values,
       ),
       database.query(

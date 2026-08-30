@@ -19,6 +19,10 @@ export interface ReportTableDefinition {
   description?: string;
   columns: string[];
   rows: ReportCell[][];
+  rowMeta?: Array<{
+    transactionId?: string;
+    sortValue?: string;
+  }>;
   emptyMessage: string;
 }
 
@@ -116,7 +120,7 @@ function sectionMetrics(
         ['Total Discounts', money(report.kpis.discounts, currency), 'All promotion, manual, statutory, and employee discounts'],
         ['Refund Amount', money(report.kpis.customerRefunds, currency), 'All completed customer refunds'],
         ['Net Sales', money(report.kpis.netSales, currency), 'Gross Sales − Discounts − Refunds'],
-        ['Completed Transactions', quantity(report.kpis.transactions), 'Voids and cancelled sales excluded'],
+        ['Completed Transactions', quantity(report.kpis.transactions), 'Voids and canceled sales excluded'],
         ['Average Transaction Value', money(report.kpis.averageTransaction, currency), 'Net Sales ÷ Completed Transactions'],
         ['Average Items per Transaction', quantity(report.kpis.averageItemsPerTransaction), 'Quantity Sold ÷ Completed Transactions'],
       ];
@@ -134,7 +138,7 @@ function sectionMetrics(
       ];
     case 'purchasing':
       return [
-        ['Purchase Value', money(report.purchasing.orderedValue, currency), 'Total non-draft, non-cancelled purchase orders'],
+        ['Purchase Value', money(report.purchasing.orderedValue, currency), 'Total non-draft, non-canceled purchase orders'],
         ['Receiving Accuracy', percentage(report.purchasing.receivingAccuracy), 'Received Quantity ÷ Ordered Quantity'],
         ['Supplier Fulfillment', percentage(report.purchasing.supplierFulfillmentRate), 'Fully Delivered POs ÷ Total POs'],
         ['Outstanding Payables', money(report.purchasing.outstandingPayables, currency), 'Supplier invoices less recorded payments'],
@@ -220,6 +224,10 @@ export function buildReportDocument(
           money(row.total, currency),
           row.status,
         ]),
+        rowMeta: (report.sales.salesReceipts ?? []).map((row) => ({
+          transactionId: row.id,
+          sortValue: row.completedAt,
+        })),
         emptyMessage: 'No completed transactions were recorded for this period.',
       },
       {
@@ -234,11 +242,12 @@ export function buildReportDocument(
     tables.push({
       id: 'product-performance',
       title: 'Product performance',
-      columns: ['Product', 'SKU', 'Category', 'Unit', 'Quantity sold', 'Gross sales', 'COGS', 'Gross profit'],
+      columns: ['Product', 'SKU', 'Category', 'Brand', 'Unit', 'Quantity sold', 'Gross sales', 'COGS', 'Gross profit'],
       rows: report.sales.topProducts.map((row) => [
         row.name,
         row.sku,
         row.category ?? 'Uncategorized',
+        row.brand ?? 'Unbranded',
         row.unit,
         quantity(row.quantity),
         money(row.sales, currency),

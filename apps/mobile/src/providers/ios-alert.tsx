@@ -39,7 +39,7 @@ function inferAlertType(title: string, message?: string): AlertType {
     return 'error';
   }
   if (
-    /success|saved|updated|opened|received|dispatched|refreshed|created|recorded|cancelled|parked|printed|complete/.test(
+    /success|saved|updated|opened|received|dispatched|refreshed|created|recorded|canceled|cancelled|parked|printed|complete/.test(
       text,
     )
   ) {

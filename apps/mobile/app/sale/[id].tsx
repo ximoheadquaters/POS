@@ -49,7 +49,7 @@ function SaleDetailsContent() {
     return (
       <Screen>
         <Header
-          title="Receipt details"
+          title="Receipt Details"
           showBack
           backLabel="Sales"
           fallbackHref="/(tabs)/sales"
@@ -61,7 +61,7 @@ function SaleDetailsContent() {
     return (
       <Screen>
         <Header
-          title="Receipt details"
+          title="Receipt Details"
           showBack
           backLabel="Sales"
           fallbackHref="/(tabs)/sales"
@@ -73,7 +73,7 @@ function SaleDetailsContent() {
   return (
     <Screen>
       <Header
-        title="Receipt details"
+        title="Receipt Details"
         subtitle={sale.receiptNumber}
         showBack
         backLabel="Sales"
@@ -110,7 +110,7 @@ function SaleDetailsContent() {
           currentUser?.modules.includes('returns') &&
           ['completed', 'partially_refunded'].includes(sale.status) ? (
             <Button
-              title="Return items"
+              title="Return Items"
               variant="danger"
               onPress={() => {
                 if (Platform.OS === 'web' || typeof window !== 'undefined') {
@@ -124,7 +124,7 @@ function SaleDetailsContent() {
               }}
             />
           ) : null}
-          <Button title="Back to sales" variant="secondary" onPress={() => router.back()} />
+          <Button title="Back To Sales" variant="secondary" onPress={() => router.back()} />
         </View>
       </ScrollView>
     </Screen>

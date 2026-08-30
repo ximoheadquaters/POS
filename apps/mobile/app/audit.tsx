@@ -266,7 +266,7 @@ function AuditContent() {
             The Audit Logs module is disabled for your organization.
           </Text>
           <View className="mt-6 w-full max-w-xs">
-            <Button title="Return to POS" onPress={() => router.push('/(tabs)/pos')} />
+            <Button title="Return To POS" onPress={() => router.push('/(tabs)/pos')} />
           </View>
         </View>
       </Screen>
@@ -324,7 +324,7 @@ function AuditContent() {
           {search ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Clear search"
+              accessibilityLabel="Clear Search"
               onPress={() => {
                 setSearch('');
                 setPage(1);
@@ -366,7 +366,7 @@ function AuditContent() {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Refresh audit logs"
+            accessibilityLabel="Refresh Audit Logs"
             onPress={() => void query.refetch()}
             className="h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white active:bg-slate-50"
           >
@@ -385,7 +385,7 @@ function AuditContent() {
             }}
             className="self-start"
           >
-            <Text className="text-xs font-semibold text-brand-800">Clear filters</Text>
+            <Text className="text-xs font-semibold text-brand-800">Clear Filters</Text>
           </Pressable>
         ) : null}
       </View>
@@ -393,12 +393,12 @@ function AuditContent() {
       <ScrollView className="flex-1 bg-[#F8F9FA]" contentContainerClassName="grow px-3 py-3 sm:px-4 sm:py-4">
         <View className="mx-auto w-full max-w-6xl">
           {query.isLoading ? (
-            <LoadingState label="Loading activity…" />
+            <LoadingState label="Loading Activity…" />
           ) : query.isError ? (
             <ErrorState message={query.error.message} retry={() => void query.refetch()} />
           ) : logs.length === 0 ? (
             <EmptyState
-              title="No activity found"
+              title="No Activity Found"
               message={
                 hasFilters
                   ? 'Nothing matches your filters. Try clearing them.'
@@ -486,7 +486,7 @@ function AuditContent() {
                         </View>
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel="View log details"
+                          accessibilityLabel="View Log Details"
                           onPress={() => setSelectedLog(log)}
                           className="min-h-9 w-[88px] flex-row items-center justify-center gap-1 rounded-lg border border-brand-300 bg-white px-2 active:bg-brand-50"
                         >
@@ -499,7 +499,7 @@ function AuditContent() {
 
                   <View className="flex-row items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
                     <Text className="text-xs font-medium text-slate-500">
-                      Page {page} · {logs.length} shown
+                      Page {page} · {logs.length} Shown
                     </Text>
                     <View className="flex-row gap-2">
                       <Button
@@ -582,7 +582,7 @@ function AuditContent() {
 
               <View className="flex-row items-center justify-between border-t border-slate-200 bg-slate-50 px-3.5 py-3">
                 <Text className="text-xs font-medium text-slate-500">
-                  Page {page} · {logs.length} shown
+                  Page {page} · {logs.length} Shown
                 </Text>
                 <View className="flex-row gap-2">
                   <Button
@@ -613,7 +613,7 @@ function AuditContent() {
         <View className="flex-1 items-center justify-end bg-black/40 sm:justify-center sm:p-6">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close details"
+            accessibilityLabel="Close Details"
             onPress={() => setSelectedLog(null)}
             className="absolute inset-0"
           />
@@ -727,7 +727,7 @@ function AuditContent() {
           />
           <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
             <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
-              <Text className="text-base font-bold text-slate-900">Staff role</Text>
+              <Text className="text-base font-bold text-slate-900">Staff Role</Text>
               <Pressable onPress={() => setRoleDropdownOpen(false)}>
                 <Feather name="x" size={20} color="#64748B" />
               </Pressable>

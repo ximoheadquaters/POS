@@ -36,7 +36,7 @@ const PAYMENT_SOURCES: Array<{
   { value: 'owner_cash', label: 'Owner cash', description: 'Cash outside the register' },
   { value: 'bank_transfer', label: 'Bank transfer', description: 'Does not affect the drawer' },
   { value: 'ewallet', label: 'E-wallet', description: 'Does not affect the drawer' },
-  { value: 'cheque', label: 'Cheque', description: 'Does not affect the drawer' },
+  { value: 'cheque', label: 'Check', description: 'Does not affect the drawer' },
 ];
 
 function localDateInput(date = new Date()): string {
@@ -193,8 +193,8 @@ function PurchaseOrderContent() {
       api(`/purchase-orders/${id}/receipts`, {
         method: 'POST',
         body: JSON.stringify({
-          supplierInvoiceNumber: deliveryInvoiceNumber,
-          notes,
+          supplierInvoiceNumber: deliveryInvoiceNumber.trim(),
+          notes: notes.trim(),
           items: Object.entries(quantities)
             .filter(([, quantity]) => Number(quantity) > 0)
             .map(([purchaseOrderItemId, quantity]) => ({
@@ -223,10 +223,10 @@ function PurchaseOrderContent() {
       return api(`/purchase-orders/${id}/returns`, {
         method: 'POST',
         body: JSON.stringify({
-          reason,
+          reason: reason.trim(),
           resolution,
-          supplierReference: supplierReturnReference,
-          notes,
+          supplierReference: supplierReturnReference.trim(),
+          notes: notes.trim(),
           items: returnedLines,
         }),
       });
@@ -256,11 +256,11 @@ function PurchaseOrderContent() {
         method: 'POST',
         body: JSON.stringify({
           stockReceiptId: matchingReceipt?.id ?? null,
-          invoiceNumber,
-          invoiceDate,
+          invoiceNumber: invoiceNumber.trim(),
+          invoiceDate: invoiceDate.trim(),
           dueDate: invoiceDueDate.trim() || null,
           total: Number(invoiceTotal).toFixed(2),
-          notes: invoiceNotes,
+          notes: invoiceNotes.trim(),
         }),
       });
     },
@@ -291,8 +291,8 @@ function PurchaseOrderContent() {
           source: paymentSource,
           registerId: paymentSource === 'cashier_drawer' ? activeShift?.registerId : null,
           shiftId: paymentSource === 'cashier_drawer' ? activeShift?.id : null,
-          reference: paymentReference,
-          notes: paymentNotes,
+          reference: paymentReference.trim(),
+          notes: paymentNotes.trim(),
         }),
       });
     },
@@ -326,8 +326,8 @@ function PurchaseOrderContent() {
           amount: Number(refundAmount).toFixed(2),
           registerId: drawerRefund ? activeShift?.registerId : null,
           shiftId: drawerRefund ? activeShift?.id : null,
-          reference: refundReference,
-          notes: refundNotes,
+          reference: refundReference.trim(),
+          notes: refundNotes.trim(),
         }),
       });
     },
@@ -416,7 +416,7 @@ function PurchaseOrderContent() {
   if (query.isLoading) {
     return (
       <Screen>
-        <Header title="Purchase order" showBack backLabel="Purchasing" fallbackHref="/purchasing" />
+        <Header title="Purchase Order" showBack backLabel="Purchasing" fallbackHref="/purchasing" />
         <LoadingState />
       </Screen>
     );
@@ -424,7 +424,7 @@ function PurchaseOrderContent() {
   if (query.isError || !order) {
     return (
       <Screen>
-        <Header title="Purchase order" showBack backLabel="Purchasing" fallbackHref="/purchasing" />
+        <Header title="Purchase Order" showBack backLabel="Purchasing" fallbackHref="/purchasing" />
         <ErrorState
           message={query.error?.message ?? 'Purchase order was not found'}
           retry={() => void query.refetch()}
@@ -473,7 +473,7 @@ function PurchaseOrderContent() {
                 ) : null}
               </View>
               <View className="items-end">
-                <Text className="text-sm text-slate-500">Order total</Text>
+                <Text className="text-sm text-slate-500">Order Total</Text>
                 <Text className="mt-1 text-2xl font-semibold text-brand-900">
                   {formatMoney(order.subtotal)}
                 </Text>
@@ -495,17 +495,17 @@ function PurchaseOrderContent() {
               {order.status === 'draft' &&
               currentUser?.permissions.includes('purchasing:manage') ? (
                 <Button
-                  title={transition.isPending ? 'Sending…' : 'Send to supplier'}
+                  title={transition.isPending ? 'Sending…' : 'Send To Supplier'}
                   disabled={transition.isPending}
                   onPress={() => transition.mutate('send')}
                 />
               ) : null}
               {canReceive ? (
-                <Button title="Receive stock" onPress={() => setMode('receive')} />
+                <Button title="Receive Stock" onPress={() => setMode('receive')} />
               ) : null}
               {canReturn ? (
                 <Button
-                  title="Return to supplier"
+                  title="Return To Supplier"
                   variant="secondary"
                   onPress={() => setMode('return')}
                 />
@@ -513,7 +513,7 @@ function PurchaseOrderContent() {
               {['draft', 'ordered'].includes(order.status) &&
               currentUser?.permissions.includes('purchasing:manage') ? (
                 <Button
-                  title="Cancel order"
+                  title="Cancel Order"
                   variant="danger"
                   disabled={transition.isPending}
                   onPress={() => transition.mutate('cancel')}
@@ -591,11 +591,11 @@ function PurchaseOrderContent() {
               {mode === 'receive' ? (
                 <View className="mt-5">
                   <Field
-                    label="Supplier invoice / delivery receipt number"
+                    label="Supplier Invoice / Delivery Receipt Number"
                     value={deliveryInvoiceNumber}
                     onChangeText={setDeliveryInvoiceNumber}
                   />
-                  <Field label="Receiving notes" value={notes} onChangeText={setNotes} multiline />
+                  <Field label="Receiving Notes" value={notes} onChangeText={setNotes} multiline />
                 </View>
               ) : (
                 <View className="mt-5">
@@ -606,7 +606,7 @@ function PurchaseOrderContent() {
                     placeholder="Damaged, spoiled, wrong item, excess stock…"
                   />
                   <Text className="mb-2 text-sm font-medium text-slate-700">
-                    Expected resolution
+                    Expected Resolution
                   </Text>
                   <View className="mb-4 flex-row flex-wrap gap-2">
                     {(
@@ -634,12 +634,12 @@ function PurchaseOrderContent() {
                     ))}
                   </View>
                   <Field
-                    label="Supplier return / RMA reference"
+                    label="Supplier Return / RMA Reference"
                     value={supplierReturnReference}
                     onChangeText={setSupplierReturnReference}
                     placeholder="Optional supplier reference"
                   />
-                  <Field label="Return notes" value={notes} onChangeText={setNotes} multiline />
+                  <Field label="Return Notes" value={notes} onChangeText={setNotes} multiline />
                 </View>
               )}
               {mode === 'return' && createReturn.isError ? (
@@ -662,8 +662,8 @@ function PurchaseOrderContent() {
                     receive.isPending || createReturn.isPending
                       ? 'Recording…'
                       : mode === 'receive'
-                        ? 'Confirm received stock'
-                        : 'Confirm supplier return'
+                        ? 'Confirm Received Stock'
+                        : 'Confirm Supplier Return'
                   }
                   disabled={
                     !selectedCount ||
@@ -694,7 +694,7 @@ function PurchaseOrderContent() {
 
           <View className="rounded-2xl border border-slate-200 bg-white">
             <View className="border-b border-slate-100 px-5 py-4">
-              <Text className="font-semibold text-slate-900">Ordered items</Text>
+              <Text className="font-semibold text-slate-900">Ordered Items</Text>
             </View>
             {order.items.map((item, index) => (
               <View
@@ -739,7 +739,7 @@ function PurchaseOrderContent() {
           <View className="rounded-2xl border border-slate-200 bg-white p-5">
             <View className="mb-4 flex-row flex-wrap items-start justify-between gap-3">
               <View className="flex-1">
-                <Text className="font-semibold text-slate-900">Supplier invoices and payments</Text>
+                <Text className="font-semibold text-slate-900">Supplier Invoices And Payments</Text>
                 <Text className="mt-1 text-sm leading-5 text-slate-500">
                   Receiving stock updates inventory. Recording an invoice creates the amount owed to
                   the supplier.
@@ -752,7 +752,7 @@ function PurchaseOrderContent() {
                   className="min-h-11 flex-row items-center rounded-xl bg-brand-700 px-4 active:opacity-80"
                 >
                   <Feather name="file-plus" size={16} color="#FFFFFF" />
-                  <Text className="ml-2 text-sm font-medium text-white">Record invoice</Text>
+                  <Text className="ml-2 text-sm font-medium text-white">Record Invoice</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -821,7 +821,7 @@ function PurchaseOrderContent() {
                         onPress={() => openPaymentModal(invoice)}
                         className="mt-4 min-h-11 items-center justify-center rounded-xl border border-brand-200 bg-white active:bg-brand-50"
                       >
-                        <Text className="text-sm font-medium text-brand-700">Record payment</Text>
+                        <Text className="text-sm font-medium text-brand-700">Record Payment</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -839,7 +839,7 @@ function PurchaseOrderContent() {
 
           {order.receipts.length ? (
             <View className="rounded-2xl border border-slate-200 bg-white p-5">
-              <Text className="mb-4 font-semibold text-slate-900">Receiving history</Text>
+              <Text className="mb-4 font-semibold text-slate-900">Receiving History</Text>
               <View className="gap-2">
                 {order.receipts.map((receipt) => (
                   <View
@@ -857,7 +857,7 @@ function PurchaseOrderContent() {
                       </Text>
                     </View>
                     <Text className="text-sm font-medium text-brand-700">
-                      {receipt.quantity} units
+                      {receipt.quantity} Units
                     </Text>
                   </View>
                 ))}
@@ -866,7 +866,7 @@ function PurchaseOrderContent() {
           ) : null}
           {order.returns.length ? (
             <View className="rounded-2xl border border-slate-200 bg-white p-5">
-              <Text className="mb-4 font-semibold text-slate-900">Supplier return history</Text>
+              <Text className="mb-4 font-semibold text-slate-900">Supplier Return History</Text>
               <View className="gap-2">
                 {order.returns.map((item) => (
                   <View key={item.id} className="rounded-xl bg-red-50 p-4">
@@ -891,11 +891,11 @@ function PurchaseOrderContent() {
                           </Text>
                           {Number(item.remainingRefund) > 0 ? (
                             <Text className="text-xs font-medium text-amber-700">
-                              {formatMoney(item.remainingRefund)} pending
+                              {formatMoney(item.remainingRefund)} Pending
                             </Text>
                           ) : (
                             <Text className="text-xs font-medium text-brand-700">
-                              Fully refunded
+                              Fully Refunded
                             </Text>
                           )}
                         </View>
@@ -921,7 +921,7 @@ function PurchaseOrderContent() {
                             className="mt-3 min-h-11 items-center justify-center rounded-xl border border-red-200 bg-white active:bg-red-100"
                           >
                             <Text className="text-sm font-medium text-red-700">
-                              Record money received back
+                              Record Money Received Back
                             </Text>
                           </Pressable>
                         ) : null}
@@ -948,7 +948,7 @@ function PurchaseOrderContent() {
               </View>
               <View className="flex-1">
                 <Text className="text-xl font-semibold text-slate-950">
-                  Record supplier invoice
+                  Record Supplier Invoice
                 </Text>
                 <Text className="mt-1 text-sm leading-5 text-slate-500">
                   This records what is owed. It does not remove money from any cashier drawer.
@@ -956,7 +956,7 @@ function PurchaseOrderContent() {
               </View>
             </View>
             <Field
-              label="Supplier invoice number *"
+              label="Supplier Invoice Number *"
               value={invoiceNumber}
               onChangeText={setInvoiceNumber}
               placeholder="Example: INV-1001"
@@ -964,7 +964,7 @@ function PurchaseOrderContent() {
             <View className="flex-row gap-3">
               <View className="flex-1">
                 <Field
-                  label="Invoice date *"
+                  label="Invoice Date *"
                   value={invoiceDate}
                   onChangeText={setInvoiceDate}
                   placeholder="YYYY-MM-DD"
@@ -972,7 +972,7 @@ function PurchaseOrderContent() {
               </View>
               <View className="flex-1">
                 <Field
-                  label="Due date"
+                  label="Due Date"
                   value={invoiceDueDate}
                   onChangeText={setInvoiceDueDate}
                   placeholder="YYYY-MM-DD"
@@ -980,27 +980,27 @@ function PurchaseOrderContent() {
               </View>
             </View>
             <Field
-              label="Invoice total *"
+              label="Invoice Total *"
               value={invoiceTotal}
               onChangeText={setInvoiceTotal}
               keyboardType="decimal-pad"
               placeholder="₱0.00"
             />
             <Field
-              label="Invoice notes"
+              label="Invoice Notes"
               value={invoiceNotes}
               onChangeText={setInvoiceNotes}
               multiline
             />
             {createInvoice.isError ? (
               <View className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4">
-                <Text className="font-medium text-red-800">Invoice was not recorded</Text>
+                <Text className="font-medium text-red-800">Invoice Was Not Recorded</Text>
                 <Text className="mt-1 text-sm text-red-700">{createInvoice.error.message}</Text>
               </View>
             ) : null}
             <View className="gap-3">
               <Button
-                title={createInvoice.isPending ? 'Recording…' : 'Record supplier invoice'}
+                title={createInvoice.isPending ? 'Recording…' : 'Record Supplier Invoice'}
                 disabled={
                   createInvoice.isPending ||
                   !invoiceNumber.trim() ||
@@ -1037,7 +1037,7 @@ function PurchaseOrderContent() {
               </View>
               <View className="flex-1">
                 <Text className="text-xl font-semibold text-slate-950">
-                  Record supplier payment
+                  Record Supplier Payment
                 </Text>
                 <Text className="mt-1 text-sm text-slate-500">
                   {paymentInvoice?.invoiceNumber} · Balance{' '}
@@ -1052,7 +1052,7 @@ function PurchaseOrderContent() {
               keyboardType="decimal-pad"
               placeholder="₱0.00"
             />
-            <Text className="mb-2 text-sm font-medium text-slate-700">Money source *</Text>
+            <Text className="mb-2 text-sm font-medium text-slate-700">Money Source *</Text>
             <View className="mb-4 gap-2">
               {PAYMENT_SOURCES.map((source) => {
                 const selected = paymentSource === source.value;
@@ -1104,26 +1104,26 @@ function PurchaseOrderContent() {
               </View>
             )}
             <Field
-              label="Payment reference"
+              label="Payment Reference"
               value={paymentReference}
               onChangeText={setPaymentReference}
-              placeholder="Transfer, e-wallet, cheque, or acknowledgment number"
+              placeholder="Transfer, e-wallet, check, or acknowledgment number"
             />
             <Field
-              label="Payment notes"
+              label="Payment Notes"
               value={paymentNotes}
               onChangeText={setPaymentNotes}
               multiline
             />
             {payInvoice.isError ? (
               <View className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4">
-                <Text className="font-medium text-red-800">Payment was not recorded</Text>
+                <Text className="font-medium text-red-800">Payment Was Not Recorded</Text>
                 <Text className="mt-1 text-sm text-red-700">{payInvoice.error.message}</Text>
               </View>
             ) : null}
             <View className="gap-3">
               <Button
-                title={payInvoice.isPending ? 'Recording payment…' : 'Record payment'}
+                title={payInvoice.isPending ? 'Recording Payment…' : 'Record Payment'}
                 disabled={
                   payInvoice.isPending ||
                   !(Number(paymentAmount) > 0) ||
@@ -1158,16 +1158,16 @@ function PurchaseOrderContent() {
                 <Feather name="corner-down-left" size={21} color="#1A593B" />
               </View>
               <View className="flex-1">
-                <Text className="text-xl font-semibold text-slate-950">Record supplier refund</Text>
+                <Text className="text-xl font-semibold text-slate-950">Record Supplier Refund</Text>
                 <Text className="mt-1 text-sm leading-5 text-slate-500">
-                  {refundReturn?.returnNumber} · Up to{' '}
+                  {refundReturn?.returnNumber} · Up To{' '}
                   {formatMoney(refundReturn?.remainingRefund ?? '0')} is still expected back.
                 </Text>
               </View>
             </View>
 
             <Text className="mb-2 text-sm font-medium text-slate-700">
-              Original supplier payment *
+              Original Supplier Payment *
             </Text>
             {refundablePayments.length ? (
               <View className="mb-4 gap-2">
@@ -1199,7 +1199,7 @@ function PurchaseOrderContent() {
                         </Text>
                         <Text className="mt-1 text-xs text-slate-500">
                           Invoice {payment.invoiceNumber} · {formatMoney(payment.refundableAmount)}{' '}
-                          refundable
+                          Refundable
                         </Text>
                       </View>
                       {selected ? <Feather name="check" size={17} color="#1A593B" /> : null}
@@ -1209,7 +1209,7 @@ function PurchaseOrderContent() {
               </View>
             ) : (
               <View className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <Text className="font-medium text-amber-800">No refundable payment yet</Text>
+                <Text className="font-medium text-amber-800">No Refundable Payment Yet</Text>
                 <Text className="mt-1 text-sm leading-5 text-amber-700">
                   Record the supplier invoice and its payment first. A refund cannot exceed money
                   that was actually paid.
@@ -1218,7 +1218,7 @@ function PurchaseOrderContent() {
             )}
 
             <Field
-              label="Amount actually received *"
+              label="Amount Actually Received *"
               value={refundAmount}
               onChangeText={setRefundAmount}
               keyboardType="decimal-pad"
@@ -1251,20 +1251,20 @@ function PurchaseOrderContent() {
               </View>
             ) : null}
             <Field
-              label="Supplier refund reference"
+              label="Supplier Refund Reference"
               value={refundReference}
               onChangeText={setRefundReference}
               placeholder="Refund receipt, transfer, or acknowledgment number"
             />
             <Field
-              label="Refund notes"
+              label="Refund Notes"
               value={refundNotes}
               onChangeText={setRefundNotes}
               multiline
             />
             {recordSupplierRefund.isError ? (
               <View className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4">
-                <Text className="font-medium text-red-800">Refund was not recorded</Text>
+                <Text className="font-medium text-red-800">Refund Was Not Recorded</Text>
                 <Text className="mt-1 text-sm text-red-700">
                   {recordSupplierRefund.error.message}
                 </Text>
@@ -1273,7 +1273,7 @@ function PurchaseOrderContent() {
             <View className="gap-3">
               <Button
                 title={
-                  recordSupplierRefund.isPending ? 'Recording refund…' : 'Record money received'
+                  recordSupplierRefund.isPending ? 'Recording Refund…' : 'Record Money Received'
                 }
                 disabled={
                   recordSupplierRefund.isPending ||
@@ -1309,8 +1309,8 @@ function PurchaseOrderContent() {
             </View>
             <Text className="text-xl font-semibold text-slate-950">Record supplier return?</Text>
             <Text className="mt-2 text-sm leading-5 text-slate-500">
-              {selectedReturnQuantity} unit{selectedReturnQuantity === 1 ? '' : 's'} across{' '}
-              {selectedCount} product line{selectedCount === 1 ? '' : 's'} will be removed from
+              {selectedReturnQuantity} Unit{selectedReturnQuantity === 1 ? '' : 's'} Across{' '}
+              {selectedCount} Product Line{selectedCount === 1 ? '' : 's'} will be removed from
               branch inventory.
             </Text>
             <View className="mt-4 rounded-xl bg-amber-50 p-4">
@@ -1320,13 +1320,13 @@ function PurchaseOrderContent() {
             </View>
             <View className="mt-6 gap-3">
               <Button
-                title={createReturn.isPending ? 'Recording…' : 'Record supplier return'}
+                title={createReturn.isPending ? 'Recording…' : 'Record Supplier Return'}
                 disabled={createReturn.isPending}
                 variant="danger"
                 onPress={() => createReturn.mutate()}
               />
               <Button
-                title="Go back"
+                title="Go Back"
                 disabled={createReturn.isPending}
                 variant="secondary"
                 onPress={() => setReturnConfirmationVisible(false)}

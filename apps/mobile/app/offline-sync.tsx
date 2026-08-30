@@ -54,7 +54,7 @@ function OfflineSyncContent() {
   return (
     <Screen>
       <Header
-        title="Offline synchronization"
+        title="Offline Synchronization"
         subtitle={isOnline ? 'Connected' : 'Offline'}
         showBack
         backLabel="More"
@@ -69,14 +69,14 @@ function OfflineSyncContent() {
                 {isOnline ? 'Online and ready to sync' : 'Working from saved branch data'}
               </Text>
               <Text className="mt-1 text-xs text-slate-600">
-                Branch snapshot:{' '}
+                Branch Snapshot:{' '}
                 {snapshotAt ? new Date(snapshotAt).toLocaleString() : 'not downloaded yet'}
               </Text>
             </View>
           </View>
           <View className="mt-4">
             <Button
-              title={syncing ? 'Synchronizing…' : 'Sync now'}
+              title={syncing ? 'Synchronizing…' : 'Sync Now'}
               disabled={!isOnline || syncing || !queue.some((sale) => sale.status !== 'failed')}
               onPress={() => void sync()}
             />
@@ -90,7 +90,7 @@ function OfflineSyncContent() {
         ListEmptyComponent={
           <View className="items-center py-16">
             <Feather name="check-circle" size={38} color="#1A593B" />
-            <Text className="mt-3 font-medium text-slate-800">Everything is synchronized</Text>
+            <Text className="mt-3 font-medium text-slate-800">Everything Is Synchronized</Text>
             <Text className="mt-1 text-sm text-slate-500">There are no offline sales waiting.</Text>
           </View>
         }
@@ -106,7 +106,7 @@ function OfflineSyncContent() {
                   {item.status === 'failed' ? 'Needs attention' : 'Waiting to sync'}
                 </Text>
                 <Text className="mt-1 text-xs text-slate-500">
-                  {new Date(item.createdAt).toLocaleString()} · {item.attempts ?? 0} attempts
+                  {new Date(item.createdAt).toLocaleString()} · {item.attempts ?? 0} Attempts
                 </Text>
               </View>
               <Text className="font-semibold text-brand-700">{formatMoney(item.total)}</Text>

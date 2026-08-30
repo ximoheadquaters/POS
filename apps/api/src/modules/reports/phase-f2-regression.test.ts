@@ -434,7 +434,7 @@ describe('Phase F2 Regression — Financial Formulas', () => {
     expect(allSql).toContain('si.unit_cost');
   });
 
-  it('12 & 13. Void and cancelled sales are excluded from scoped sales status filter', async () => {
+  it('12 & 13. Void and canceled sales are excluded from scoped sales status filter', async () => {
     const db = new RecordingReportDatabase();
     await new OverviewReportService(db).generate(
       resolveReportScope(mockOwner, { from: '2026-08-01', to: '2026-08-06' }),

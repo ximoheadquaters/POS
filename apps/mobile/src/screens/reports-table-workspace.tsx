@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -31,6 +32,44 @@ import { useBranchStore } from '@/store/branch';
 
 type Period = 'today' | 'yesterday' | '7d' | '30d' | 'custom';
 type Comparison = 'none' | 'previous_period' | 'previous_month' | 'previous_year';
+type ReportRowEntry = {
+  row: ReportCell[];
+  rowIndex: number;
+  key: string;
+};
+
+interface SaleTransactionDetail {
+  id: string;
+  receiptNumber: string;
+  completedAt: string;
+  status: string;
+  branchName: string;
+  registerName: string;
+  cashierName: string;
+  customerName: string | null;
+  subtotal: string;
+  discountTotal: string;
+  taxTotal: string;
+  total: string;
+  refundTotal: string;
+  netTotal: string;
+  payments: Array<{ method: string; amount: string; reference?: string | null }>;
+  items: Array<{
+    id: string;
+    productName: string;
+    sku: string;
+    sellingUnit: string;
+    quantity: number;
+    baseQuantity: number;
+    baseUnit: string;
+    unitPrice: string;
+    unitCost: string | null;
+    discountTotal: string;
+    taxTotal: string;
+    lineTotal: string;
+    lineProfit: string | null;
+  }>;
+}
 
 const REPORTS: Array<{
   id: ReportSectionId;
@@ -117,15 +156,83 @@ function cellText(cell: ReportCell): string {
   return String(cell);
 }
 
+function normalizedCellText(cell: ReportCell): string {
+  return cellText(cell).toLowerCase().trim();
+}
+
 const NUMERIC_COLUMN_PATTERN =
-  /amount|total|sales|cost|profit|value|quantity|transactions|orders|products|events|available|level|paid|balance|variance|cash|yield|loss|margin|records|counted|expected|cogs|stock|output|input/i;
+  /\b(amount|available|balance|cash|cogs|cost|counted|current period|comparison period|change|events|expected|input|level|loss|margin|orders|output|paid|produced|products|profit|quantity|records|sales|stock|total|transactions|value|variance|yield)\b/i;
+const DATE_COLUMN_PATTERN = /\b(completed|date|due date|opened|closed|order date|recorded)\b/i;
 
 function isNumericColumn(column: string): boolean {
   return NUMERIC_COLUMN_PATTERN.test(column);
 }
 
+function isDateColumn(column: string): boolean {
+  return DATE_COLUMN_PATTERN.test(column);
+}
+
 function isStatusColumn(column: string): boolean {
   return /status/i.test(column);
+}
+
+function isCategoryColumn(column: string): boolean {
+  return /^category$/i.test(column.trim());
+}
+
+function isBrandColumn(column: string): boolean {
+  return /^brand$/i.test(column.trim());
+}
+
+function parseSortableNumber(value: ReportCell): number | null {
+  const normalized = cellText(value).replace(/[^0-9.-]/g, '');
+  if (!normalized || normalized === '-' || normalized === '.') return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseSortableDate(value: ReportCell): number | null {
+  const text = cellText(value);
+  if (text === '—') return null;
+  const parsed = new Date(text).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function compareReportCells(a: ReportCell, b: ReportCell, column: string): number {
+  if (isDateColumn(column)) {
+    const left = parseSortableDate(a);
+    const right = parseSortableDate(b);
+    if (left !== null && right !== null) return left - right;
+  }
+  if (isNumericColumn(column)) {
+    const left = parseSortableNumber(a);
+    const right = parseSortableNumber(b);
+    if (left !== null && right !== null) return left - right;
+  }
+  return cellText(a).localeCompare(cellText(b), 'en-PH', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
+function defaultSortColumnForTable(table: ReportTableDefinition): number {
+  const dateColumn = table.columns.findIndex(isDateColumn);
+  return dateColumn >= 0 ? dateColumn : 0;
+}
+
+function defaultSortDirectionForColumn(column: string): 'asc' | 'desc' {
+  return isDateColumn(column) ? 'desc' : 'asc';
+}
+
+function transactionIdForRow(table: ReportTableDefinition, rowIndex: number): string | undefined {
+  return table.rowMeta?.[rowIndex]?.transactionId;
+}
+
+function rowSortValue(table: ReportTableDefinition, entry: ReportRowEntry, columnIndex: number): ReportCell {
+  if (isDateColumn(table.columns[columnIndex] ?? '')) {
+    return table.rowMeta?.[entry.rowIndex]?.sortValue ?? entry.row[columnIndex];
+  }
+  return entry.row[columnIndex];
 }
 
 function statusTone(value: ReportCell): {
@@ -212,45 +319,309 @@ function ReportCellValue({
   );
 }
 
-function CompactReportTable({ table }: { table: ReportTableDefinition }) {
+function TransactionAtomicDetails({ saleId }: { saleId: string }) {
+  const branch = useBranchStore((state) => state.activeBranch);
+  const detailQuery = useQuery({
+    queryKey: ['report-table-transaction-detail', saleId, branch?.id],
+    enabled: Boolean(saleId),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (branch?.id) params.set('branchId', branch.id);
+      const query = params.toString();
+      return api<SaleTransactionDetail>(`/reports/transactions/${saleId}${query ? `?${query}` : ''}`);
+    },
+  });
+
+  if (detailQuery.isLoading) {
+    return (
+      <View className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+        <Text className="text-xs font-medium text-slate-500">Loading Atomic Values...</Text>
+      </View>
+    );
+  }
+
+  if (detailQuery.isError) {
+    return (
+      <View className="border-t border-red-100 bg-red-50 px-4 py-3">
+        <Text className="text-xs font-semibold text-red-700">Could Not Load Atomic Values</Text>
+        <Text className="mt-1 text-xs text-red-600">
+          {detailQuery.error instanceof Error
+            ? detailQuery.error.message
+            : 'Transaction details could not be loaded.'}
+        </Text>
+      </View>
+    );
+  }
+
+  const detail = detailQuery.data;
+  if (!detail) return null;
+
+  return (
+    <View className="gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3">
+      <View className="flex-row flex-wrap gap-x-5 gap-y-1">
+        <Text className="text-xs text-slate-600">
+          Cashier: <Text className="font-semibold text-slate-800">{detail.cashierName}</Text>
+        </Text>
+        <Text className="text-xs text-slate-600">
+          Register: <Text className="font-semibold text-slate-800">{detail.registerName}</Text>
+        </Text>
+        {detail.customerName ? (
+          <Text className="text-xs text-slate-600">
+            Customer: <Text className="font-semibold text-slate-800">{detail.customerName}</Text>
+          </Text>
+        ) : null}
+      </View>
+
+      <View className="gap-2">
+        <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Items
+        </Text>
+        {detail.items.map((line) => (
+          <View key={line.id} className="rounded-xl border border-slate-100 bg-white px-3 py-2">
+            <View className="flex-row items-start justify-between gap-3">
+              <View className="min-w-0 flex-1">
+                <Text className="text-xs font-semibold text-slate-900" numberOfLines={2}>
+                  {line.productName}
+                </Text>
+                <Text className="mt-0.5 text-[11px] text-slate-500">
+                  {line.sku || 'No SKU'} · {line.quantity} {line.sellingUnit}
+                  {line.baseUnit && line.baseUnit !== line.sellingUnit
+                    ? ` · ${line.baseQuantity} ${line.baseUnit}`
+                    : ''}
+                </Text>
+              </View>
+              <Text className="text-xs font-bold text-brand-800">{line.lineTotal}</Text>
+            </View>
+            <Text className="mt-1 text-[11px] leading-4 text-slate-500">
+              Unit Price: {line.unitPrice} · Tax: {line.taxTotal} · Discount: {line.discountTotal}
+              {line.unitCost ? ` · Unit Cost: ${line.unitCost}` : ''}
+              {line.lineProfit ? ` · Profit: ${line.lineProfit}` : ''}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {detail.payments.length ? (
+        <View className="gap-2">
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Payments
+          </Text>
+          {detail.payments.map((payment, index) => (
+            <View
+              key={`${payment.method}-${index}`}
+              className="flex-row justify-between rounded-xl bg-brand-50 px-3 py-2"
+            >
+              <Text className="text-xs font-medium text-brand-900">
+                {payment.method.replaceAll('_', ' ').toUpperCase()}
+                {payment.reference ? ` · ${payment.reference}` : ''}
+              </Text>
+              <Text className="text-xs font-bold text-brand-900">{payment.amount}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function CompactReportTable({
+  table,
+  entries,
+  expandedRowKey,
+  onToggleRow,
+}: {
+  table: ReportTableDefinition;
+  entries: ReportRowEntry[];
+  expandedRowKey: string | null;
+  onToggleRow: (entry: ReportRowEntry) => void;
+}) {
   return (
     <View className="gap-2 px-3 pb-3">
-      {table.rows.map((row, rowIndex) => (
+      {entries.map((entry, rowIndex) => {
+        const row = entry.row;
+        const transactionId = transactionIdForRow(table, entry.rowIndex);
+        const expanded = expandedRowKey === entry.key;
+        const body = (
+          <>
+            <View className="border-b border-slate-100 bg-slate-50 px-3 py-3">
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="min-w-0 flex-1">
+                  <Text className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    {table.columns[0]}
+                  </Text>
+                  <ReportCellValue value={row[0]} column={table.columns[0] ?? ''} primary />
+                </View>
+                {transactionId ? (
+                  <Feather
+                    name={expanded ? 'chevron-up' : 'chevron-down'}
+                    size={15}
+                    color="#64748B"
+                  />
+                ) : null}
+              </View>
+            </View>
+            {table.columns.slice(1).map((column, columnOffset) => {
+              const columnIndex = columnOffset + 1;
+              return (
+                <View
+                  key={`${table.id}-compact-${entry.key}-${column}`}
+                  className="flex-row items-start justify-between gap-4 border-t border-slate-100 px-3 py-3"
+                >
+                  <Text className="max-w-[44%] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    {column}
+                  </Text>
+                  <View className="max-w-[56%] items-end">
+                    <ReportCellValue value={row[columnIndex]} column={column} />
+                  </View>
+                </View>
+              );
+            })}
+          </>
+        );
+        return (
         <View
-          key={`${table.id}-compact-${rowIndex}`}
+          key={`${table.id}-compact-${entry.key}`}
           className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
         >
-          <View className="border-b border-slate-100 bg-slate-50 px-3 py-3">
-            <Text className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              {table.columns[0]}
-            </Text>
-            <ReportCellValue value={row[0]} column={table.columns[0] ?? ''} primary />
-          </View>
-          {table.columns.slice(1).map((column, columnOffset) => {
-            const columnIndex = columnOffset + 1;
-            return (
-              <View
-                key={`${table.id}-compact-${rowIndex}-${column}`}
-                className="flex-row items-start justify-between gap-4 border-t border-slate-100 px-3 py-3"
-              >
-                <Text className="max-w-[44%] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  {column}
-                </Text>
-                <View className="max-w-[56%] items-end">
-                  <ReportCellValue value={row[columnIndex]} column={column} />
-                </View>
-              </View>
-            );
-          })}
+          {transactionId ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`View Atomic Values For ${cellText(row[0])}`}
+              onPress={() => onToggleRow(entry)}
+              className="active:bg-slate-50"
+            >
+              {body}
+            </Pressable>
+          ) : (
+            body
+          )}
+          {transactionId && expanded ? <TransactionAtomicDetails saleId={transactionId} /> : null}
         </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
 
 function ReportTable({ table, compact }: { table: ReportTableDefinition; compact: boolean }) {
-  const minWidth = Math.max(760, table.columns.length * 156);
-  const recordLabel = `${table.rows.length.toLocaleString('en-PH')} ${table.rows.length === 1 ? 'record' : 'records'}`;
+  const initialSortColumn = defaultSortColumnForTable(table);
+  const [sortColumn, setSortColumn] = useState(initialSortColumn);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(
+    defaultSortDirectionForColumn(table.columns[initialSortColumn] ?? ''),
+  );
+  const [columnFilters, setColumnFilters] = useState<Record<number, string>>({});
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
+  const [brandFilters, setBrandFilters] = useState<string[]>([]);
+  const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+  const categoryColumnIndex = table.columns.findIndex(isCategoryColumn);
+  const brandColumnIndex = table.columns.findIndex(isBrandColumn);
+  const categoryOptions = useMemo(() => {
+    if (categoryColumnIndex < 0) return [];
+    return Array.from(
+      new Set(table.rows.map((row) => cellText(row[categoryColumnIndex])).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b, 'en-PH', { sensitivity: 'base' }));
+  }, [categoryColumnIndex, table.rows]);
+  const brandOptions = useMemo(() => {
+    if (brandColumnIndex < 0) return [];
+    return Array.from(
+      new Set(table.rows.map((row) => cellText(row[brandColumnIndex])).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b, 'en-PH', { sensitivity: 'base' }));
+  }, [brandColumnIndex, table.rows]);
+  const filteredEntries = useMemo(() => {
+    const filters = Object.entries(columnFilters)
+      .map(([key, value]) => [Number(key), value.trim().toLowerCase()] as const)
+      .filter(([, value]) => value.length > 0);
+    const entries = table.rows.map((row, rowIndex) => ({
+      row,
+      rowIndex,
+      key: table.rowMeta?.[rowIndex]?.transactionId ?? `${rowIndex}-${row.map(cellText).join('|')}`,
+    }));
+    const visible = entries.filter((entry) => {
+      const { row } = entry;
+      if (
+        categoryColumnIndex >= 0 &&
+        categoryFilters.length > 0 &&
+        !categoryFilters.includes(cellText(row[categoryColumnIndex]))
+      ) {
+        return false;
+      }
+      if (
+        brandColumnIndex >= 0 &&
+        brandFilters.length > 0 &&
+        !brandFilters.includes(cellText(row[brandColumnIndex]))
+      ) {
+        return false;
+      }
+      return filters.every(([columnIndex, value]) =>
+        normalizedCellText(row[columnIndex]).includes(value),
+      );
+    });
+    const column = table.columns[sortColumn] ?? table.columns[0] ?? '';
+    return [...visible].sort((a, b) => {
+      const result = compareReportCells(
+        rowSortValue(table, a, sortColumn),
+        rowSortValue(table, b, sortColumn),
+        column,
+      );
+      return sortDirection === 'asc' ? result : -result;
+    });
+  }, [
+    brandColumnIndex,
+    brandFilters,
+    categoryColumnIndex,
+    categoryFilters,
+    columnFilters,
+    sortColumn,
+    sortDirection,
+    table.columns,
+    table.rowMeta,
+    table.rows,
+  ]);
+  const filteredRows = filteredEntries.map((entry) => entry.row);
+  const activeFilterCount =
+    Object.values(columnFilters).filter((value) => value.trim()).length +
+    brandFilters.length +
+    categoryFilters.length;
+  const recordLabel = `${filteredRows.length.toLocaleString('en-PH')} ${
+    filteredRows.length === 1 ? 'Record' : 'Records'
+  }`;
+  const totalRecordLabel =
+    filteredRows.length === table.rows.length
+      ? recordLabel
+      : `${recordLabel} Of ${table.rows.length.toLocaleString('en-PH')}`;
+  const setColumnFilter = (columnIndex: number, value: string) => {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      const trimmed = value.trimStart();
+      if (trimmed) next[columnIndex] = trimmed;
+      else delete next[columnIndex];
+      return next;
+    });
+  };
+  const toggleSort = (columnIndex: number) => {
+    if (sortColumn === columnIndex) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortColumn(columnIndex);
+    setSortDirection(defaultSortDirectionForColumn(table.columns[columnIndex] ?? ''));
+  };
+  const toggleRow = (entry: ReportRowEntry) => {
+    if (!transactionIdForRow(table, entry.rowIndex)) return;
+    setExpandedRowKey((current) => (current === entry.key ? null : entry.key));
+  };
+  const toggleMultiFilter = (
+    value: string,
+    setValues: (updater: (current: string[]) => string[]) => void,
+  ) => {
+    if (value === 'all') {
+      setValues(() => []);
+      return;
+    }
+    setValues((current) =>
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
+    );
+  };
   return (
     <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <View className="flex-row items-start justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
@@ -261,7 +632,7 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
           ) : null}
         </View>
         <View className="rounded-full bg-slate-100 px-2.5 py-1">
-          <Text className="text-[10px] font-medium text-slate-500">{recordLabel}</Text>
+          <Text className="text-[10px] font-medium text-slate-500">{totalRecordLabel}</Text>
         </View>
       </View>
       {table.rows.length === 0 ? (
@@ -273,54 +644,320 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
             {table.emptyMessage}
           </Text>
         </View>
+      ) : filteredRows.length === 0 ? (
+        <View>
+          <View className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+            <View className="flex-row flex-wrap items-center justify-between gap-2">
+              <Text className="text-xs font-medium text-slate-500">
+                {activeFilterCount} Active {activeFilterCount === 1 ? 'Filter' : 'Filters'}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setColumnFilters({});
+                  setBrandFilters([]);
+                  setCategoryFilters([]);
+                }}
+                className="min-h-8 flex-row items-center rounded-lg bg-white px-2.5"
+              >
+                <Feather name="x" size={13} color="#64748B" />
+                <Text className="ml-1.5 text-xs font-medium text-slate-600">Clear Filters</Text>
+              </Pressable>
+            </View>
+          </View>
+          <View className="items-center px-4 py-10">
+            <View className="mb-3 h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+              <Feather name="filter" size={17} color="#94A3B8" />
+            </View>
+            <Text className="max-w-[360px] text-center text-sm leading-5 text-slate-500">
+              No records match the current column filters.
+            </Text>
+          </View>
+        </View>
       ) : compact ? (
-        <CompactReportTable table={table} />
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          contentContainerStyle={{ flexGrow: 1 }}
-        >
-          <View style={{ minWidth, width: '100%' }}>
-            <View className="flex-row items-center border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-              {table.columns.map((column, columnIndex) => (
-                <View
-                  key={column}
-                  className={`min-w-[140px] ${columnIndex === 0 ? 'flex-[1.35]' : 'flex-1'} ${isNumericColumn(column) ? 'items-end' : ''}`}
+        <View>
+          {categoryOptions.length > 1 ? (
+            <View className="border-b border-slate-100 bg-white px-3 py-3">
+              <Text className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Category
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-2 pr-2">
+                  {['all', ...categoryOptions].map((category) => {
+                    const selected =
+                      category === 'all'
+                        ? categoryFilters.length === 0
+                        : categoryFilters.includes(category);
+                    return (
+                      <Pressable
+                        key={category}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        onPress={() => toggleMultiFilter(category, setCategoryFilters)}
+                        className={`min-h-9 justify-center rounded-lg border px-3 ${
+                          selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
+                        }`}
+                      >
+                        <Text
+                          className={`text-xs font-medium ${
+                            selected ? 'text-white' : 'text-slate-600'
+                          }`}
+                        >
+                          {category === 'all' ? 'All Categories' : category}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+          ) : null}
+          {brandOptions.length > 1 ? (
+            <View className="border-b border-slate-100 bg-white px-3 py-3">
+              <Text className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Brand
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-2 pr-2">
+                  {['all', ...brandOptions].map((brand) => {
+                    const selected =
+                      brand === 'all' ? brandFilters.length === 0 : brandFilters.includes(brand);
+                    return (
+                      <Pressable
+                        key={brand}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        onPress={() => toggleMultiFilter(brand, setBrandFilters)}
+                        className={`min-h-9 justify-center rounded-lg border px-3 ${
+                          selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
+                        }`}
+                      >
+                        <Text
+                          className={`text-xs font-medium ${
+                            selected ? 'text-white' : 'text-slate-600'
+                          }`}
+                        >
+                          {brand === 'all' ? 'All Brands' : brand}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+          ) : null}
+          <View className="gap-2 border-b border-slate-100 bg-slate-50 px-3 py-3">
+            {table.columns.map((column, columnIndex) => (
+              <View key={`${table.id}-compact-filter-${column}`} className="gap-1">
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => toggleSort(columnIndex)}
+                  className="flex-row items-center"
                 >
-                  <Text
-                    className={`text-[11px] font-semibold uppercase tracking-wide text-slate-400 ${isNumericColumn(column) ? 'text-right' : ''}`}
-                  >
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     {column}
                   </Text>
-                </View>
-              ))}
-            </View>
-            {table.rows.map((row, rowIndex) => (
-              <View
-                key={`${table.id}-${rowIndex}`}
-                className={`flex-row items-center px-4 py-3.5 ${
-                  rowIndex > 0 ? 'border-t border-slate-100' : ''
-                }`}
-              >
-                {table.columns.map((column, columnIndex) => (
-                  <View
-                    key={`${table.id}-${rowIndex}-${columnIndex}`}
-                    className={`min-w-[140px] justify-center ${columnIndex === 0 ? 'flex-[1.35] pr-3' : 'flex-1 pr-3'} ${isNumericColumn(column) ? 'items-end' : ''}`}
-                  >
-                    <View className={isNumericColumn(column) ? 'items-end' : ''}>
-                      <ReportCellValue
-                        value={row[columnIndex]}
-                        column={column}
-                        primary={columnIndex === 0}
-                      />
-                    </View>
-                  </View>
-                ))}
+                  <Feather
+                    name={
+                      sortColumn === columnIndex
+                        ? sortDirection === 'asc'
+                          ? 'arrow-up'
+                          : 'arrow-down'
+                        : 'chevrons-down'
+                    }
+                    size={12}
+                    color="#64748B"
+                    style={{ marginLeft: 4 }}
+                  />
+                </Pressable>
+                <TextInput
+                  value={columnFilters[columnIndex] ?? ''}
+                  onChangeText={(value) => setColumnFilter(columnIndex, value)}
+                  placeholder={`Search ${column}`}
+                  placeholderTextColor="#94A3B8"
+                  className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
               </View>
             ))}
           </View>
-        </ScrollView>
+          <CompactReportTable
+            table={table}
+            entries={filteredEntries}
+            expandedRowKey={expandedRowKey}
+            onToggleRow={toggleRow}
+          />
+        </View>
+      ) : (
+        <View className="w-full">
+          {categoryOptions.length > 1 ? (
+            <View className="border-b border-slate-100 bg-white px-3 py-3">
+              <View className="flex-row flex-wrap items-center gap-2">
+                <Text className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Category
+                </Text>
+                {['all', ...categoryOptions].map((category) => {
+                  const selected =
+                    category === 'all'
+                      ? categoryFilters.length === 0
+                      : categoryFilters.includes(category);
+                  return (
+                    <Pressable
+                      key={category}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => toggleMultiFilter(category, setCategoryFilters)}
+                      className={`min-h-8 justify-center rounded-lg border px-2.5 ${
+                        selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <Text
+                        className={`text-[11px] font-medium ${
+                          selected ? 'text-white' : 'text-slate-600'
+                        }`}
+                      >
+                        {category === 'all' ? 'All Categories' : category}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+          {brandOptions.length > 1 ? (
+            <View className="border-b border-slate-100 bg-white px-3 py-3">
+              <View className="flex-row flex-wrap items-center gap-2">
+                <Text className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Brand
+                </Text>
+                {['all', ...brandOptions].map((brand) => {
+                  const selected =
+                    brand === 'all' ? brandFilters.length === 0 : brandFilters.includes(brand);
+                  return (
+                    <Pressable
+                      key={brand}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => toggleMultiFilter(brand, setBrandFilters)}
+                      className={`min-h-8 justify-center rounded-lg border px-2.5 ${
+                        selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <Text
+                        className={`text-[11px] font-medium ${
+                          selected ? 'text-white' : 'text-slate-600'
+                        }`}
+                      >
+                        {brand === 'all' ? 'All Brands' : brand}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+          <View className="flex-row border-b border-slate-100 bg-slate-50 px-3 py-2.5">
+            {table.columns.map((column, columnIndex) => {
+              const numeric = isNumericColumn(column);
+              return (
+                <View
+                  key={column}
+                  className={`${columnIndex === 0 ? 'flex-[1.35]' : 'flex-1'} min-w-0 px-1.5 ${numeric ? 'items-end' : ''}`}
+                >
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => toggleSort(columnIndex)}
+                    className={`min-h-7 flex-row items-center ${numeric ? 'justify-end' : ''}`}
+                  >
+                    <Text
+                      numberOfLines={2}
+                      className={`min-w-0 shrink text-[10px] font-semibold uppercase tracking-wide text-slate-500 ${numeric ? 'text-right' : ''}`}
+                    >
+                      {column}
+                    </Text>
+                    <Feather
+                      name={
+                        sortColumn === columnIndex
+                          ? sortDirection === 'asc'
+                            ? 'arrow-up'
+                            : 'arrow-down'
+                          : 'chevrons-down'
+                      }
+                      size={11}
+                      color={sortColumn === columnIndex ? '#1A593B' : '#94A3B8'}
+                      style={{ marginLeft: 4 }}
+                    />
+                  </Pressable>
+                  <TextInput
+                    value={columnFilters[columnIndex] ?? ''}
+                    onChangeText={(value) => setColumnFilter(columnIndex, value)}
+                    placeholder="Search"
+                    placeholderTextColor="#94A3B8"
+                    className={`mt-1 min-h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-900 ${numeric ? 'text-right' : ''}`}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              );
+            })}
+          </View>
+          {filteredEntries.map((entry, rowIndex) => {
+            const row = entry.row;
+            const transactionId = transactionIdForRow(table, entry.rowIndex);
+            const expanded = expandedRowKey === entry.key;
+            const rowBody = (
+              <View
+                className={`flex-row items-stretch px-3 py-3 ${
+                  rowIndex > 0 ? 'border-t border-slate-100' : ''
+                } ${transactionId ? 'active:bg-slate-50' : ''}`}
+              >
+                {table.columns.map((column, columnIndex) => {
+                  const numeric = isNumericColumn(column);
+                  return (
+                    <View
+                      key={`${table.id}-${entry.key}-${columnIndex}`}
+                      className={`${columnIndex === 0 ? 'flex-[1.35]' : 'flex-1'} min-w-0 justify-center px-1.5 ${numeric ? 'items-end' : ''}`}
+                    >
+                      <View className={numeric ? 'items-end' : ''}>
+                        <ReportCellValue
+                          value={row[columnIndex]}
+                          column={column}
+                          primary={columnIndex === 0}
+                        />
+                      </View>
+                    </View>
+                  );
+                })}
+                {transactionId ? (
+                  <View className="w-7 items-end justify-center px-1">
+                    <Feather
+                      name={expanded ? 'chevron-up' : 'chevron-down'}
+                      size={15}
+                      color="#64748B"
+                    />
+                  </View>
+                ) : null}
+              </View>
+            );
+            return (
+              <View key={`${table.id}-${entry.key}`}>
+                {transactionId ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`View Atomic Values For ${cellText(row[0])}`}
+                    onPress={() => toggleRow(entry)}
+                  >
+                    {rowBody}
+                  </Pressable>
+                ) : (
+                  rowBody
+                )}
+                {transactionId && expanded ? <TransactionAtomicDetails saleId={transactionId} /> : null}
+              </View>
+            );
+          })}
+        </View>
       )}
     </View>
   );
@@ -594,7 +1231,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
                 Status: {query.isFetching ? 'Refreshing' : (query.data.metadata?.status ?? 'Ready')}
               </Text>
               <Text className="text-[11px] text-slate-500">
-                Last updated:{' '}
+                Last Updated:{' '}
                 {new Date(query.data.metadata?.generatedAt ?? query.dataUpdatedAt).toLocaleString(
                   'en-PH',
                 )}
@@ -621,7 +1258,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
             </View>
           ) : query.isLoading ? (
             <View className="min-h-72 rounded-2xl bg-white">
-              <LoadingState label="Preparing report…" />
+              <LoadingState label="Preparing Report…" />
             </View>
           ) : query.isError ? (
             <View className="min-h-72 rounded-2xl bg-white">
@@ -652,14 +1289,14 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
             >
               <View className="flex-row items-start justify-between gap-3">
                 <View className="min-w-0 flex-1">
-                  <Text className="text-lg font-semibold text-slate-900">Select date range</Text>
+                  <Text className="text-lg font-semibold text-slate-900">Select Date Range</Text>
                   <Text className="mt-1 text-xs leading-5 text-slate-500">
                     Tap a start date, then tap an end date. The range uses the store timezone.
                   </Text>
                 </View>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Close calendar"
+                  accessibilityLabel="Close Calendar"
                   onPress={() => setCustomVisible(false)}
                   className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
                 >
@@ -686,7 +1323,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
                 </View>
                 <View className="flex-1">
                   <Button
-                    title="Apply range"
+                    title="Apply Range"
                     onPress={() => {
                       if (
                         !/^\d{4}-\d{2}-\d{2}$/.test(draftRange.from) ||
@@ -721,9 +1358,9 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
         <View className="flex-1 items-center justify-center bg-black/40 p-4">
           <Pressable className="absolute inset-0" onPress={() => setExportVisible(false)} />
           <View className="w-full max-w-[400px] rounded-2xl bg-white p-5">
-            <Text className="text-lg font-semibold text-slate-900">Export this report</Text>
+            <Text className="text-lg font-semibold text-slate-900">Export This Report</Text>
             <Text className="mt-1 text-xs leading-5 text-slate-500">
-              Only {document?.title ?? 'the current report'} will be exported for{' '}
+              Only {document?.title ?? 'the current report'} Will Be Exported For{' '}
               {displayRange(dateRange)}.
             </Text>
             <View className="mt-4 gap-2">

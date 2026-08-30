@@ -1099,6 +1099,11 @@ function ProductFormContent() {
         mutation.mutate({
           ...value,
           name: nameVal,
+          sku: value.sku.trim(),
+          barcode: value.barcode?.trim() || undefined,
+          unit: value.unit.trim(),
+          description: value.description?.trim() || undefined,
+          imagePath: value.imagePath?.trim() || undefined,
           cost: cleanCost,
           sellingPrice: cleanPrice,
           taxRate: cleanTax,
@@ -1150,7 +1155,7 @@ function ProductFormContent() {
             placeholderTextColor="#A8A099"
             selectionColor="#1A593B"
             className={`rounded-xl border bg-white px-4 text-base text-slate-900 focus:border-brand-700 ${
-              options.multiline ? 'min-h-24 py-3' : 'min-h-12'
+              options.multiline ? 'min-h-24 pb-3 pt-4' : 'min-h-12'
             } ${fieldState.error ? 'border-red-400' : 'border-slate-200'}`}
           />
           {fieldState.error?.message ? (
@@ -1205,12 +1210,12 @@ function ProductFormContent() {
       <Header
         title={
           isEditing
-            ? 'Edit product'
+            ? 'Edit Product'
             : incoming
-              ? 'Register incoming product'
+              ? 'Register Incoming Product'
               : scannedBarcode
-                ? 'Add scanned product'
-                : 'New product'
+                ? 'Add Scanned Product'
+                : 'New Product'
         }
         subtitle={
           isEditing
@@ -1223,7 +1228,7 @@ function ProductFormContent() {
         }
         showBack
         backLabel={
-          isEditing ? 'Products' : incoming ? 'Purchase order' : addToCart ? 'POS' : 'Products'
+          isEditing ? 'Products' : incoming ? 'Purchase Order' : addToCart ? 'POS' : 'Products'
         }
         fallbackHref={incoming ? '/purchase-order-form' : addToCart ? '/(tabs)/pos' : '/products'}
       />
@@ -1246,7 +1251,7 @@ function ProductFormContent() {
               <View className="mb-6 flex-row items-start rounded-2xl border border-brand-100 bg-brand-50 p-4">
                 <Feather name="check-circle" size={19} color="#1A593B" />
                 <View className="ml-3 flex-1">
-                  <Text className="font-medium text-brand-900">Barcode captured</Text>
+                  <Text className="font-medium text-brand-900">Barcode Captured</Text>
                   <Text className="mt-1 text-sm leading-5 text-slate-600">
                     It has been copied into the barcode and SKU fields. You can change the SKU
                     without changing the barcode.
@@ -1260,7 +1265,7 @@ function ProductFormContent() {
                   <Feather name="trending-up" size={18} color="#B45309" />
                 </View>
                 <View className="flex-1 pr-4">
-                  <Text className="font-medium text-amber-900">Suggested selling price</Text>
+                  <Text className="font-medium text-amber-900">Suggested Selling Price</Text>
                   <Text className="mt-1 text-sm leading-5 text-amber-800">
                     {formatMoney(suggestedPrice)}
                     {targetMargin ? ` targets a ${targetMargin}% gross margin.` : '.'} Review it
@@ -1321,7 +1326,7 @@ function ProductFormContent() {
 
             {currentStep === 1 ? (
               <View>
-                <SectionLabel>Product setup</SectionLabel>
+                <SectionLabel>Product Setup</SectionLabel>
                 <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
                   <Text className="font-semibold text-slate-950">What are you adding?</Text>
                   <Text className="mb-4 mt-1 text-sm leading-5 text-slate-500">
@@ -1408,11 +1413,11 @@ function ProductFormContent() {
                   </Text>
                 </View>
 
-                <SectionLabel>Basic information</SectionLabel>
+                <SectionLabel>Basic Information</SectionLabel>
                 <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
                   <CardHeader
                     icon="tag"
-                    title="Product details"
+                    title="Product Details"
                     description="Use a clear product name and unique codes that are easy to search."
                   />
                   <View className="gap-5 p-5">
@@ -1453,7 +1458,7 @@ function ProductFormContent() {
                                 />
                                 <Pressable
                                   accessibilityRole="button"
-                                  accessibilityLabel="Scan product barcode with camera"
+                                  accessibilityLabel="Scan Product Barcode With Camera"
                                   onPress={() => void openScanner('barcode')}
                                   className={`h-12 w-12 items-center justify-center rounded-xl ${
                                     scannerEnabled
@@ -1600,7 +1605,7 @@ function ProductFormContent() {
                 >
                   <CardHeader
                     icon="credit-card"
-                    title="Price and tax"
+                    title="Price And Tax"
                     description="Set the purchase cost, selling price, and tax treatment."
                   />
                   {recipeEnabled ? (
@@ -1625,7 +1630,7 @@ function ProductFormContent() {
                         }
                         className="mt-3 min-h-10 items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 sm:ml-4 sm:mt-0"
                       >
-                        <Text className="text-xs font-semibold text-emerald-800">Use BOM cost</Text>
+                        <Text className="text-xs font-semibold text-emerald-800">Use BOM Cost</Text>
                       </Pressable>
                     </View>
                   ) : null}
@@ -1649,7 +1654,7 @@ function ProductFormContent() {
                             {stockSaleMode !== 'whole_and_portions' ? (
                               <View className="flex-1">
                                 <Text className="mb-2 text-sm font-medium text-slate-700">
-                                  Quantity purchased ({portionCostUnit})
+                                  Quantity Purchased ({portionCostUnit})
                                 </Text>
                                 <TextInput
                                   value={loosePurchaseQuantity}
@@ -1707,7 +1712,7 @@ function ProductFormContent() {
                           {bulkCostSuggestion ? (
                             <View className="mt-4 rounded-2xl border border-brand-200 bg-white p-4">
                               <Text className="text-xs font-semibold uppercase tracking-wider text-brand-700">
-                                Suggested inventory cost
+                                Suggested Inventory Cost
                               </Text>
                               <View className="mt-3 gap-3 sm:flex-row">
                                 <View className="flex-1 rounded-xl bg-slate-50 p-3">
@@ -1836,7 +1841,7 @@ function ProductFormContent() {
               <View>
                 {!recipeEnabled ? (
                   <View>
-                    <SectionLabel>Inventory and units</SectionLabel>
+                    <SectionLabel>Inventory And Units</SectionLabel>
                     <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
                       <CardHeader
                         icon="box"
@@ -2023,7 +2028,7 @@ function ProductFormContent() {
                                 <Feather name="layers" size={17} color="#64748B" />
                               </View>
                               <View className="flex-1 pr-3">
-                                <Text className="font-medium text-slate-900">Track inventory</Text>
+                                <Text className="font-medium text-slate-900">Track Inventory</Text>
                                 <Text className="mt-1 text-xs leading-4 text-slate-500">
                                   Turn off for cooked-to-order items or services without fixed
                                   stock.
@@ -2076,7 +2081,7 @@ function ProductFormContent() {
                             >
                               <Feather name="layers" size={15} color="#1A593B" />
                               <Text className="ml-2 text-sm font-medium text-brand-700">
-                                Adjust stock
+                                Adjust Stock
                               </Text>
                             </Pressable>
                           </View>
@@ -2087,7 +2092,7 @@ function ProductFormContent() {
                             </Text>
                             {portioningEnabled ? (
                               <Text className="mb-2 text-xs font-medium text-slate-600">
-                                Already opened / loose stock ({packageMeasureUnit})
+                                Already Opened / Loose Stock ({packageMeasureUnit})
                               </Text>
                             ) : null}
                             <TextInput
@@ -2189,7 +2194,7 @@ function ProductFormContent() {
                               >
                                 <Feather name="settings" size={15} color="#1A593B" />
                                 <Text className="ml-2 text-sm font-medium text-brand-700">
-                                  Manage variants
+                                  Manage Variants
                                 </Text>
                               </Pressable>
                             ) : null}
@@ -2197,7 +2202,7 @@ function ProductFormContent() {
                           {!isEditing && stockSaleMode === 'whole_and_portions' ? (
                             <View className="border-t border-slate-100 p-5">
                               <Text className="mb-2 text-sm font-medium text-slate-700">
-                                Package type
+                                Package Type
                               </Text>
                               <View className="mb-5 flex-row flex-wrap gap-2">
                                 {activeUnits
@@ -2234,7 +2239,7 @@ function ProductFormContent() {
                               <View className="gap-5 md:flex-row">
                                 <View className="flex-1">
                                   <Text className="mb-2 text-sm font-medium text-slate-700">
-                                    Package size
+                                    Package Size
                                   </Text>
                                   <View className="gap-2 sm:flex-row">
                                     <TextInput
@@ -2262,7 +2267,7 @@ function ProductFormContent() {
                                 {inventoryRole !== 'ingredient' ? (
                                   <View className="flex-1">
                                     <Text className="mb-2 text-sm font-medium text-slate-700">
-                                      Whole {alternateUnit} price
+                                      Whole {alternateUnit} Price
                                     </Text>
                                     <TextInput
                                       value={alternatePrice}
@@ -2292,7 +2297,7 @@ function ProductFormContent() {
                                   </View>
                                   <View className="flex-1">
                                     <Text className="mb-2 text-sm font-medium text-slate-700">
-                                      {alternateUnit} barcode
+                                      {alternateUnit} Barcode
                                     </Text>
                                     <View className="flex-row gap-2">
                                       <TextInput
@@ -2357,7 +2362,7 @@ function ProductFormContent() {
                                   </View>
                                   <View className="flex-1">
                                     <Text className="mb-2 text-xs font-medium text-slate-700">
-                                      Already opened ({packageMeasureUnit})
+                                      Already Opened ({packageMeasureUnit})
                                     </Text>
                                     <TextInput
                                       value={openingQuantity}
@@ -2421,7 +2426,7 @@ function ProductFormContent() {
                       <CardHeader
                         icon={isRepackedProduct ? 'layers' : 'coffee'}
                         title={
-                          isRepackedProduct ? 'Production / repacking BOM' : 'Prepared food recipe'
+                          isRepackedProduct ? 'Production / Repacking BOM' : 'Prepared Food Recipe'
                         }
                         description={
                           isRepackedProduct
@@ -2472,7 +2477,7 @@ function ProductFormContent() {
                               </Text>
                               {rawIngredientSources.length > 5 ? (
                                 <Text className="text-[11px] font-medium text-slate-400">
-                                  {filteredRawIngredientSources.length} item(s) found
+                                  {filteredRawIngredientSources.length} Item(S) Found
                                 </Text>
                               ) : null}
                             </View>
@@ -2668,7 +2673,7 @@ function ProductFormContent() {
                         </Text>
                         <View className="mb-3">
                           <Text className="mb-1 text-xs font-medium text-slate-700">
-                            Deduct source stock in
+                            Deduct Source Stock In
                           </Text>
                           {!selectedRecipeIngredient ? (
                             <Text className="mb-2 text-xs text-slate-500">
@@ -2849,7 +2854,7 @@ function ProductFormContent() {
 
             {currentStep === 4 ? (
               <View>
-                <SectionLabel>Summary and review</SectionLabel>
+                <SectionLabel>Summary And Review</SectionLabel>
                 <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 gap-3">
                   <Text className="text-base font-bold text-slate-900">Product Summary</Text>
 
@@ -2896,11 +2901,11 @@ function ProductFormContent() {
                   </View>
                 </View>
 
-                <SectionLabel>Other settings</SectionLabel>
+                <SectionLabel>Other Settings</SectionLabel>
                 <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
                   <CardHeader
                     icon="settings"
-                    title="Media and availability"
+                    title="Media And Availability"
                     description="Add an optional image and control whether the product appears in POS."
                   />
                   <View className="p-5">
@@ -2915,7 +2920,7 @@ function ProductFormContent() {
                         <Feather name="clock" size={17} color="#B45309" />
                       </View>
                       <View className="flex-1 pr-3">
-                        <Text className="font-medium text-amber-900">Hidden until received</Text>
+                        <Text className="font-medium text-amber-900">Hidden Until Received</Text>
                         <Text className="mt-1 text-xs leading-4 text-amber-800">
                           The product will automatically become available after its first stock
                           receipt.
@@ -2937,7 +2942,7 @@ function ProductFormContent() {
                               <Feather name="eye" size={17} color="#64748B" />
                             </View>
                             <View className="flex-1 pr-3">
-                              <Text className="font-medium text-slate-900">Available for sale</Text>
+                              <Text className="font-medium text-slate-900">Available For Sale</Text>
                               <Text className="mt-1 text-xs leading-4 text-slate-500">
                                 Turn off to hide the product from POS without deleting its history.
                               </Text>
@@ -3041,7 +3046,7 @@ function ProductFormContent() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close barcode scanner"
+                accessibilityLabel="Close Barcode Scanner"
                 onPress={closeScanner}
                 className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
               >
@@ -3053,7 +3058,7 @@ function ProductFormContent() {
                 <View className="flex-1 items-center justify-center p-6">
                   <Feather name="camera-off" size={28} color="#CBD5E1" />
                   <Text className="mt-3 text-center font-semibold text-white">
-                    Camera could not start
+                    Camera Could Not Start
                   </Text>
                   <Text className="mt-1 text-center text-sm leading-5 text-slate-300">
                     {scannerCameraError}
@@ -3069,7 +3074,7 @@ function ProductFormContent() {
                     }}
                     className="mt-4 min-h-11 items-center justify-center rounded-xl bg-brand-700 px-5"
                   >
-                    <Text className="text-sm font-semibold text-white">Try camera again</Text>
+                    <Text className="text-sm font-semibold text-white">Try Camera Again</Text>
                   </Pressable>
                 </View>
               ) : cameraPermission?.granted && scannerTarget ? (
@@ -3103,7 +3108,7 @@ function ProductFormContent() {
                 </CameraView>
                   {!scannerCameraReady ? (
                     <View className="absolute inset-0 items-center justify-center bg-black">
-                      <LoadingState label="Starting camera…" />
+                      <LoadingState label="Starting Camera…" />
                     </View>
                   ) : null}
                 </View>

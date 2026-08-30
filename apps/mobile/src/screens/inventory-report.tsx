@@ -232,14 +232,14 @@ function InventoryReportTables({
   return (
     <View className="gap-4">
       <ReportCard
-        title="Current stock"
+        title="Current Stock"
         subtitle={`${filteredStock.length} of ${report.stock.length} tracked products shown.`}
         action={
           <Pressable
             onPress={() => router.push('/(tabs)/inventory')}
             className="min-h-10 flex-row items-center rounded-xl bg-brand-50 px-3"
           >
-            <Text className="text-xs font-medium text-brand-700">Open inventory</Text>
+            <Text className="text-xs font-medium text-brand-700">Open Inventory</Text>
             <Feather name="chevron-right" size={14} color="#1A593B" />
           </Pressable>
         }
@@ -343,7 +343,7 @@ function InventoryReportTables({
       </ReportCard>
 
       <ReportCard
-        title="Unit conversions"
+        title="Unit Conversions"
         subtitle="Selling and pack rules relative to each product’s base unit."
       >
         {report.conversions.length === 0 ? (
@@ -356,7 +356,7 @@ function InventoryReportTables({
                   Product
                 </Text>
                 <Text className="min-w-0 flex-[1.2] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  Conversion rule
+                  Conversion Rule
                 </Text>
                 <Text className="w-[110px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Portioning
@@ -389,7 +389,7 @@ function InventoryReportTables({
       </ReportCard>
 
       <ReportCard
-        title="Inventory movements"
+        title="Inventory Movements"
         subtitle={
           performedBy === 'all'
             ? report.movementsTotal > report.movements.length
@@ -401,7 +401,7 @@ function InventoryReportTables({
         }
       >
         <ReportFilterChips
-          label="Performed by"
+          label="Performed By"
           value={performedBy}
           options={performerOptions}
           onChange={onPerformedByChange}
@@ -443,7 +443,7 @@ function InventoryReportTables({
                   Reason
                 </Text>
                 <Text className="w-[116px] text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  Performed by
+                  Performed By
                 </Text>
               </View>
               {report.movements.map((item, index) => (
@@ -585,7 +585,7 @@ function InventoryReportContent() {
         <View className="w-full max-w-6xl gap-4">
           <View className="flex-row flex-wrap items-end justify-between gap-3">
             <View className="min-w-[220px] flex-1">
-              <Text className="text-2xl font-semibold text-slate-900">Inventory report</Text>
+              <Text className="text-2xl font-semibold text-slate-900">Inventory Report</Text>
               <Text className="mt-1 text-sm text-slate-500">
                 Current stock, unit conversions, and movements for {rangeLabel}
                 {branch?.name ? ` · ${branch.name}` : ''}.
@@ -616,7 +616,7 @@ function InventoryReportContent() {
               })}
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Open calendar date range"
+                accessibilityLabel="Open Calendar Date Range"
                 onPress={() => {
                   const active =
                     period === 'custom'
@@ -651,7 +651,7 @@ function InventoryReportContent() {
 
           {query.isLoading ? (
             <View className="min-h-96 rounded-2xl bg-white">
-              <LoadingState label="Loading inventory report…" />
+              <LoadingState label="Loading Inventory Report…" />
             </View>
           ) : query.isError ? (
             <View className="min-h-96 rounded-2xl bg-white">
@@ -681,7 +681,7 @@ function InventoryReportContent() {
             className="w-full max-w-md rounded-2xl bg-white p-5"
             onPress={(event) => event.stopPropagation()}
           >
-            <Text className="text-lg font-semibold text-slate-900">Custom date range</Text>
+            <Text className="text-lg font-semibold text-slate-900">Custom Date Range</Text>
             <Text className="mt-1 text-sm text-slate-500">
               Choose the period for inventory movements.
             </Text>

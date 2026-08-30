@@ -249,7 +249,7 @@ function StockAdjustmentContent() {
   return (
     <Screen>
       <Header
-        title="Stock adjustment"
+        title="Stock Adjustment"
         subtitle={selectedProduct ? `${selectedProduct.name} · ${branch?.name ?? ''}` : branch?.name}
         showBack
         backLabel="Inventory"
@@ -264,7 +264,7 @@ function StockAdjustmentContent() {
                 <Feather name="package" size={18} color="#1A593B" />
               </View>
               <View className="ml-3 flex-1">
-                <Text className="text-sm font-semibold text-slate-900">Product to adjust</Text>
+                <Text className="text-sm font-semibold text-slate-900">Product To Adjust</Text>
                 <Text className="mt-0.5 text-xs text-slate-500">
                   Select the exact product from {branch?.name ?? 'this branch'}.
                 </Text>
@@ -302,7 +302,7 @@ function StockAdjustmentContent() {
                 </View>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Change product"
+                  accessibilityLabel="Change Product"
                   onPress={() => {
                     setSearch('');
                     setIsChoosingProduct(true);
@@ -315,7 +315,7 @@ function StockAdjustmentContent() {
             ) : (
               <View className="p-4">
                 <Field
-                  label="Search product"
+                  label="Search Product"
                   placeholder="Search by product name or SKU"
                   value={search}
                   onChangeText={setSearch}
@@ -325,7 +325,7 @@ function StockAdjustmentContent() {
 
                 {productsQuery.isLoading ? (
                   <View className="h-32">
-                    <LoadingState label="Loading branch inventory…" />
+                    <LoadingState label="Loading Branch Inventory…" />
                   </View>
                 ) : productsQuery.isError ? (
                   <View className="min-h-36">
@@ -367,7 +367,7 @@ function StockAdjustmentContent() {
                   </ScrollView>
                 ) : (
                   <View className="items-center rounded-xl bg-slate-50 p-6">
-                    <Text className="text-sm font-medium text-slate-700">No inventory product found</Text>
+                    <Text className="text-sm font-medium text-slate-700">No Inventory Product Found</Text>
                     <Text className="mt-1 text-center text-xs text-slate-500">
                       Try another name or SKU. Only inventory-tracked products appear here.
                     </Text>
@@ -404,7 +404,7 @@ function StockAdjustmentContent() {
                 </View>
                 <View className="mb-3 sm:min-w-48">
                   <Button
-                    title={openContainers.isPending ? 'Opening…' : 'Open for portioning'}
+                    title={openContainers.isPending ? 'Opening…' : 'Open For Portioning'}
                     disabled={
                       openContainers.isPending ||
                       !Number.isInteger(Number(containersToOpen)) ||
@@ -433,7 +433,7 @@ function StockAdjustmentContent() {
               {selectedProduct?.portioningEnabled ? (
                 <>
                   <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
-                    Stock pool to adjust
+                    Stock Pool To Adjust
                   </Text>
                   <View className="mb-4 flex-row rounded-xl bg-slate-100 p-1">
                     {(['sealed', 'opened'] as const).map((item) => {
@@ -461,7 +461,7 @@ function StockAdjustmentContent() {
                 </>
               ) : null}
               <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
-                Adjustment type
+                Adjustment Type
               </Text>
               <View className="flex-row rounded-xl bg-slate-100 p-1">
                 {(['add', 'deduct'] as const).map((item) => {
@@ -507,7 +507,7 @@ function StockAdjustmentContent() {
               {projectedQuantity !== null ? (
                 <View className={`mb-4 flex-row items-center justify-between rounded-xl p-3 ${projectedQuantity < 0 ? 'bg-red-50' : 'bg-brand-50'}`}>
                   <Text className={`text-xs font-medium ${projectedQuantity < 0 ? 'text-red-700' : 'text-brand-700'}`}>
-                    Stock after adjustment
+                    Stock After Adjustment
                   </Text>
                   <Text className={`text-sm font-semibold ${projectedQuantity < 0 ? 'text-red-700' : 'text-brand-800'}`}>
                     {formatQuantity(projectedQuantity)} {displayUnit}
@@ -547,7 +547,7 @@ function StockAdjustmentContent() {
               </View>
 
               <Button
-                title={mutation.isPending ? 'Saving…' : 'Save adjustment'}
+                title={mutation.isPending ? 'Saving…' : 'Save Adjustment'}
                 disabled={
                   mutation.isPending ||
                   !selectedProduct ||
