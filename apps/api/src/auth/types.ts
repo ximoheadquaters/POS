@@ -22,6 +22,7 @@ export interface AuthActions {
   inviteUser(input: { email: string; displayName: string }): Promise<VerifiedAuthUser>;
   resendOwnerInvitation(email: string): Promise<void>;
   changePassword?(userId: string, password: string): Promise<void>;
+  findUserByEmail?(email: string): Promise<AuthUserDetails | null>;
   getUser(userId: string): Promise<AuthUserDetails | null>;
   deleteUser(userId: string): Promise<void>;
 }

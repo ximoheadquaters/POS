@@ -26,6 +26,7 @@ interface ContextRow {
   timezone: string;
   business_profile: BusinessProfile;
   subscription_status: string;
+  current_period_ends_at?: string | Date | null;
   role: RoleCode;
   permissions: Permission[] | null;
   branches: Array<{ id: string; name: string; code: string }> | null;
@@ -38,6 +39,7 @@ select p.id, p.email, p.display_name, p.organization_id,
   o.name as organization_name, o.currency, o.timezone,
   coalesce(o.business_profile, 'retail') as business_profile,
   coalesce(current_sub.status::text, 'cancelled') as subscription_status, r.code as role,
+  current_sub.current_period_ends_at,
   coalesce((
     select array_agg(distinct pe.code)
     from role_permissions rp join permissions pe on pe.id = rp.permission_id
@@ -55,7 +57,7 @@ from profiles p
 join organizations o on o.id = p.organization_id
 join roles r on r.id = p.role_id and r.organization_id = p.organization_id
 left join lateral (
-  select sub.id, sub.plan_id, sub.status
+  select sub.id, sub.plan_id, sub.status, sub.current_period_ends_at
   from subscriptions sub
   join applications application
     on application.id = sub.application_id and application.code = 'ximo_pos'
@@ -79,6 +81,15 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
       const result = await db.query<ContextRow>(CONTEXT_SQL, [verified.id]);
       const row = result.rows[0];
       if (!row) throw unauthorized('No active POS profile is linked to this account');
+      if (
+        row.current_period_ends_at &&
+        new Date(row.current_period_ends_at).getTime() <= Date.now()
+      ) {
+        throw forbidden(
+          'SUBSCRIPTION_EXPIRED',
+          'Your subscription has expired. Renew it from Billing on the Ximo website to continue.',
+        );
+      }
       const [effectiveModules, platformAccess] = await Promise.all([
         entitlementService.getEffectiveModules(row.organization_id, row.business_profile),
         platformAccessService.getForUserOrganization(row.id, row.organization_id),
@@ -121,9 +132,9 @@ export function authenticate(db: Queryable, verifyToken: VerifyToken) {
                   role: row.role,
                   entitlements: Object.fromEntries(
                     effectiveModules.map((module) => [`module.${module}`, true]),
-                   ),
-                 },
-               ],
+                  ),
+                },
+              ],
         mustChangePassword: row.must_change_password,
       };
       next();

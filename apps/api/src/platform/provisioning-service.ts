@@ -14,6 +14,7 @@ export const provisionOrganizationRequestSchema = z.object({
   timezone: z.string(),
   planCode: z.string(),
   subscriptionStatus: z.string(),
+  currentPeriodEndsAt: z.iso.datetime({ offset: true }).optional(),
   businessProfile: z.enum(['retail', 'food_service', 'hybrid']).default('retail'),
   ownerEmail: z.string(),
   ownerName: z.string().optional(),
@@ -74,6 +75,7 @@ function normalize(input: ProvisionOrganizationRequest): ProvisionOrganizationRe
     timezone: input.timezone.trim(),
     planCode: input.planCode.trim().toLowerCase(),
     subscriptionStatus: input.subscriptionStatus.trim().toLowerCase(),
+    ...(input.currentPeriodEndsAt ? { currentPeriodEndsAt: input.currentPeriodEndsAt } : {}),
     businessProfile: input.businessProfile ?? 'retail',
     ownerEmail,
     ownerName: input.ownerName?.trim() || fallbackOwnerName,
@@ -253,11 +255,17 @@ export class PlatformProvisioningService {
           ownerAuthUser = existingOwner;
           ownerInvitationStatus = existingOwner.lastSignInAt ? 'accepted' : 'pending';
         } else {
-          ownerAuthUser = await this.authActions.inviteUser({
-            email: input.ownerEmail,
-            displayName: input.ownerName!,
-          });
-          invitedAuthUserId = ownerAuthUser.id;
+          const existingOwner = await this.authActions.findUserByEmail?.(input.ownerEmail);
+          if (existingOwner) {
+            ownerAuthUser = existingOwner;
+            ownerInvitationStatus = existingOwner.lastSignInAt ? 'accepted' : 'pending';
+          } else {
+            ownerAuthUser = await this.authActions.inviteUser({
+              email: input.ownerEmail,
+              displayName: input.ownerName!,
+            });
+            invitedAuthUserId = ownerAuthUser.id;
+          }
         }
 
         const organizationId = randomUUID();
@@ -281,9 +289,15 @@ export class PlatformProvisioningService {
           ],
         );
         await transaction.query(
-          `insert into subscriptions (organization_id,application_id,plan_id,status)
-           values ($1,$2,$3,$4)`,
-          [organizationId, plan.applicationId, plan.id, input.subscriptionStatus],
+          `insert into subscriptions (organization_id,application_id,plan_id,status,current_period_ends_at)
+           values ($1,$2,$3,$4,$5)`,
+          [
+            organizationId,
+            plan.applicationId,
+            plan.id,
+            input.subscriptionStatus,
+            input.currentPeriodEndsAt ?? null,
+          ],
         );
         await transaction.query(
           `insert into organization_settings (

@@ -176,7 +176,12 @@ class ProvisioningDatabase implements Database {
 }
 
 function authFixture(
-  options: { failInvite?: boolean; duplicateAuth?: boolean; existingUser?: boolean } = {},
+  options: {
+    failInvite?: boolean;
+    duplicateAuth?: boolean;
+    existingUser?: boolean;
+    existingAuthByEmail?: boolean;
+  } = {},
 ) {
   const invitations: string[] = [];
   const deletions: string[] = [];
@@ -195,6 +200,16 @@ function authFixture(
       return { id: OWNER_ID, email: input.email };
     },
     resendOwnerInvitation: async () => undefined,
+    findUserByEmail: async (email) =>
+      options.existingAuthByEmail && email === requestBody.ownerEmail
+        ? {
+            id: OWNER_ID,
+            email,
+            createdAt: '2026-08-10T00:00:00.000Z',
+            invitedAt: null,
+            lastSignInAt: '2026-08-10T00:05:00.000Z',
+          }
+        : null,
     getUser: async (userId) =>
       options.existingUser && userId === OWNER_ID
         ? {
@@ -234,6 +249,18 @@ const requestBody = {
 };
 
 describe('Platform organization provisioning', () => {
+  it('persists the paid-through date in the organization creation transaction', async () => {
+    const token = createPlatformToken();
+    const database = new ProvisioningDatabase(token.tokenHash);
+    await request(createProvisioningApp(database, authFixture().actions))
+      .post('/api/v1/platform/organizations')
+      .set('authorization', `Bearer ${token.token}`)
+      .set('idempotency-key', 'paid-subscription-1001')
+      .send({ ...requestBody, currentPeriodEndsAt: '2026-10-14T00:00:00.000Z' })
+      .expect(201);
+    const insert = database.calls.find((call) => call.text.includes('insert into subscriptions'));
+    expect(insert?.values?.[4]).toBe('2026-10-14T00:00:00.000Z');
+  });
   it('lists onboarding plans and module objects from the database', async () => {
     const token = createPlatformToken();
     const database = new ProvisioningDatabase(token.tokenHash);
@@ -346,6 +373,26 @@ describe('Platform organization provisioning', () => {
     expect(response.body.error.code).toBe('OWNER_ALREADY_EXISTS');
     expect(database.organizations.size).toBe(0);
     expect(database.idempotency.size).toBe(0);
+  });
+
+  it('attaches an existing authentication account found by owner email', async () => {
+    const token = createPlatformToken();
+    const database = new ProvisioningDatabase(token.tokenHash);
+    const auth = authFixture({ existingAuthByEmail: true });
+    const response = await request(createProvisioningApp(database, auth.actions))
+      .post('/api/v1/platform/organizations')
+      .set('authorization', `Bearer ${token.token}`)
+      .set('idempotency-key', 'website-order-existing-auth-1001')
+      .send(requestBody)
+      .expect(201);
+
+    expect(response.body.data.owner).toMatchObject({
+      email: requestBody.ownerEmail,
+      invitationStatus: 'accepted',
+    });
+    expect(auth.invitations).toHaveLength(0);
+    const profileInsert = database.calls.find((call) => call.text.includes('insert into profiles'));
+    expect(profileInsert?.values?.[0]).toBe(OWNER_ID);
   });
 
   it('links a website-authenticated owner instead of sending another invitation', async () => {

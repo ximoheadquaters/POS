@@ -113,6 +113,35 @@ export function createSupabaseAuth(config: AppConfig): {
           );
         }
       },
+      async findUserByEmail(email) {
+        const normalizedEmail = email.trim().toLowerCase();
+        const perPage = 1_000;
+
+        for (let page = 1; ; page += 1) {
+          const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+          if (error) {
+            throw serviceUnavailable(
+              'AUTH_USER_LOOKUP_UNAVAILABLE',
+              'Authentication account details are temporarily unavailable',
+            );
+          }
+
+          const user = data.users.find(
+            (candidate) => candidate.email?.trim().toLowerCase() === normalizedEmail,
+          );
+          if (user?.email) {
+            return {
+              id: user.id,
+              email: user.email,
+              createdAt: user.created_at,
+              invitedAt: user.invited_at ?? null,
+              lastSignInAt: user.last_sign_in_at ?? null,
+            };
+          }
+
+          if (data.users.length < perPage) return null;
+        }
+      },
       async getUser(userId) {
         const { data, error } = await adminClient.auth.admin.getUserById(userId);
         if (error) {
