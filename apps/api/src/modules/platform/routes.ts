@@ -34,6 +34,7 @@ const subscriptionStatusSchema = z.enum(['trialing', 'active', 'past_due', 'canc
 const organizationListQuery = paginationSchema.extend({
   planCode: z.string().trim().min(1).max(80).optional(),
   status: subscriptionStatusSchema.optional(),
+  ownerEmail: z.string().trim().email().optional(),
 });
 
 const updateSubscriptionSchema = z.object({
@@ -325,7 +326,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     requirePlatformScope('platform:read'),
     validateQuery(organizationListQuery),
     async (request, response) => {
-      const { page, pageSize, search, planCode, status } = request.query as unknown as z.infer<
+      const { page, pageSize, search, planCode, status, ownerEmail } = request.query as unknown as z.infer<
         typeof organizationListQuery
       >;
       const result = await database.query(
@@ -353,8 +354,12 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
            and ($2::text is null or p.code=$2)
            and ($3::subscription_status is null or
              coalesce(s.status,'cancelled'::subscription_status)=$3)
+           and ($6::text is null or exists (
+             select 1 from profiles pr
+             where pr.organization_id = o.id and lower(pr.email) = lower($6)
+           ))
          order by o.name limit $4 offset $5`,
-        [search ?? null, planCode ?? null, status ?? null, pageSize, (page - 1) * pageSize],
+        [search ?? null, planCode ?? null, status ?? null, pageSize, (page - 1) * pageSize, ownerEmail ?? null],
       );
       const total = result.rows[0]?.total ?? 0;
       sendPage(
@@ -528,6 +533,99 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
               lastSignInAt,
             }
           : null,
+      });
+    },
+  );
+
+  router.get(
+    '/organizations/:organizationId/store-data',
+    requirePlatformScope('platform:read'),
+    async (request, response) => {
+      const organizationId = uuidSchema.parse(request.params.organizationId);
+      await ensureOrganization(database, organizationId);
+
+      const [salesTotals, recentSales, branches, products, customers] = await Promise.all([
+        database.query<{ totalRevenue: string; totalTransactions: string }>(
+          `select coalesce(sum(total), 0)::text as "totalRevenue",
+                  count(*)::text as "totalTransactions"
+           from sales
+           where organization_id = $1 and status = 'completed'`,
+          [organizationId],
+        ),
+        database.query<{
+          id: string;
+          receiptNumber: string;
+          total: string;
+          status: string;
+          completedAt: string | null;
+          createdAt: string;
+        }>(
+          `select id, receipt_number as "receiptNumber", total::text as total,
+                  status::text as status, completed_at as "completedAt", created_at as "createdAt"
+           from sales
+           where organization_id = $1
+           order by created_at desc
+           limit 10`,
+          [organizationId],
+        ),
+        database.query<{
+          id: string;
+          name: string;
+          code: string;
+          address: string | null;
+          phone: string | null;
+          isActive: boolean;
+          createdAt: string;
+        }>(
+          `select id, name, code, address, phone, is_active as "isActive", created_at as "createdAt"
+           from branches
+           where organization_id = $1
+           order by created_at asc`,
+          [organizationId],
+        ),
+        database.query<{
+          id: string;
+          name: string;
+          sku: string | null;
+          sellingPrice: string;
+          status: string;
+          unit: string | null;
+          createdAt: string;
+        }>(
+          `select id, name, sku, selling_price::text as "sellingPrice",
+                  status::text as status, unit, created_at as "createdAt"
+           from products
+           where organization_id = $1
+           order by name asc
+           limit 50`,
+          [organizationId],
+        ),
+        database.query<{
+          id: string;
+          name: string;
+          email: string | null;
+          phone: string | null;
+          isActive: boolean;
+          createdAt: string;
+        }>(
+          `select id, name, email, phone, is_active as "isActive", created_at as "createdAt"
+           from customers
+           where organization_id = $1
+           order by created_at desc
+           limit 50`,
+          [organizationId],
+        ),
+      ]);
+
+      sendData(response, {
+        metrics: {
+          totalRevenue: Number(salesTotals.rows[0]?.totalRevenue || 0),
+          totalTransactions: Number(salesTotals.rows[0]?.totalTransactions || 0),
+        },
+        recentSales: recentSales.rows,
+        branches: branches.rows,
+        products: products.rows,
+        customers: customers.rows,
       });
     },
   );

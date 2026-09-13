@@ -236,9 +236,15 @@ export class PlatformProvisioningService {
           [input.ownerEmail],
         );
         if (duplicateOwner.rows[0]) {
+          const orgResult = await transaction.query<{ organization_id: string }>(
+            'select organization_id from profiles where lower(email)=lower($1) limit 1',
+            [input.ownerEmail],
+          );
+          const orgId = orgResult.rows[0]?.organization_id;
           throw conflict(
             'OWNER_ALREADY_EXISTS',
             'A POS organization owner already exists with this email',
+            orgId ? { organizationId: orgId } : undefined,
           );
         }
 
