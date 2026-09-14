@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -48,63 +48,88 @@ export default function LoginScreen() {
   return (
     <Screen>
       <KeyboardAvoidingView
-        className="flex-1 justify-center px-5"
+        className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View className="mb-5 rounded-3xl bg-brand-700 p-6">
-          <View className="mb-5">
-            <BrandLogo size={56} />
-          </View>
-          <Text className="text-4xl font-black text-white">Ximo POS</Text>
-          <Text className="mt-2 text-base leading-6 text-brand-100">
-            Fast, clear checkout for every branch.
-          </Text>
-        </View>
-        <View className="rounded-3xl border border-slate-100 bg-white p-5">
-          <Text className="mb-5 text-xl font-black text-brand-900">Welcome Back</Text>
-          <Controller
-            control={control}
-            name="email"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <Field
-                label="Email"
-                autoCapitalize="none"
-                autoComplete="email"
-                autoCorrect={false}
-                keyboardType="email-address"
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                error={errors.email?.message}
-              />
-            )}
-          />
-          <Controller
-            control={control}
-            name="password"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <Field
-                label="Password"
-                autoComplete="current-password"
-                secureTextEntry
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                error={errors.password?.message}
-              />
-            )}
-          />
-          {serverError ? (
-            <View className="mb-4 rounded-xl bg-red-50 p-3">
-              <Text className="text-sm leading-5 text-red-700">{serverError}</Text>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View className="w-full max-w-md self-center">
+            <View className="mb-8 flex-row items-center justify-center gap-3">
+              <View className="h-12 w-12 items-center justify-center rounded-2xl bg-brand-700">
+                <BrandLogo size={36} />
+              </View>
+              <Text className="text-2xl font-bold tracking-tight text-brand-900">Ximo POS</Text>
             </View>
-          ) : null}
-          <Button
-            title={isSubmitting ? 'Signing In…' : 'Sign In'}
-            disabled={isSubmitting}
-            onPress={handleSubmit(submit)}
-          />
-        </View>
+            <View className="rounded-3xl border border-slate-100 bg-white p-6 sm:p-8">
+              <Text
+                accessibilityRole="header"
+                className="text-2xl font-bold tracking-tight text-brand-900"
+              >
+                Welcome back
+              </Text>
+              <Text className="mb-7 mt-2 text-sm leading-5 text-slate-500">
+                Sign in to your workspace to get started.
+              </Text>
+              <Controller
+                control={control}
+                name="email"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Field
+                    label="Email"
+                    accessibilityLabel="Email"
+                    placeholder="you@example.com"
+                    className="min-h-12"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    error={errors.email?.message}
+                  />
+                )}
+              />
+              <Controller
+                control={control}
+                name="password"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Field
+                    label="Password"
+                    accessibilityLabel="Password"
+                    placeholder="Enter your password"
+                    className="min-h-12"
+                    autoComplete="current-password"
+                    secureTextEntry
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    error={errors.password?.message}
+                  />
+                )}
+              />
+              {serverError ? (
+                <View className="mb-4 rounded-xl bg-red-50 p-3">
+                  <Text accessibilityRole="alert" className="text-sm leading-5 text-red-700">
+                    {serverError}
+                  </Text>
+                </View>
+              ) : null}
+              <View className="mt-3">
+                <Button
+                  title={isSubmitting ? 'Signing In…' : 'Sign In'}
+                  disabled={isSubmitting}
+                  onPress={handleSubmit(submit)}
+                />
+              </View>
+            </View>
+            <Text className="mt-6 text-center text-xs leading-5 text-slate-400">
+              Fast, clear checkout for every branch.
+            </Text>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
