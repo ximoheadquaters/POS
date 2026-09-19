@@ -336,21 +336,27 @@ export function promotionsRouter(database: Database): Router {
     // POST /promotions/:id -> Update alias
     router.post('/:id', validateBody(updatePromotionSchema), updateHandler);
 
-  // POST /promotions/:id/toggle -> Enable or disable promotion
-  router.post('/:id/toggle', async (request, response) => {
+  // POST /promotions/:id/toggle -> Enable or disable promotion for the selected branch
+  router.post(
+    '/:id/toggle',
+    validateBody(z.object({ branchId: uuidSchema })),
+    requireBranchAccess('body'),
+    async (request, response) => {
     const id = uuidSchema.parse(request.params.id);
+    const { branchId } = request.body as { branchId: string };
     const organizationId = request.authUser!.organization.id;
 
     const result = await database.query(
       `update promotions set is_active = not is_active, updated_at = now()
-       where id = $1 and organization_id = $2 and branch_id=any($3::uuid[])
+       where id = $1 and organization_id = $2 and branch_id = $3
        returning id, is_active as "isActive"`,
-      [id, organizationId, request.authUser!.branches.map((branch) => branch.id)],
+      [id, organizationId, branchId],
     );
 
     if (!result.rows[0]) throw notFound('Promotion');
     sendData(response, result.rows[0]);
-  });
+    },
+  );
 
   return router;
 }

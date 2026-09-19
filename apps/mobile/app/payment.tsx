@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
@@ -36,6 +36,13 @@ interface RegisterStatus {
   activeCashierId?: string;
 }
 
+interface Customer {
+  id: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+}
+
 function safeMoney(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -51,6 +58,7 @@ export default function PaymentScreen() {
   const { currentUser } = useSession();
   const items = useCartStore((state) => state.items);
   const customerId = useCartStore((state) => state.customerId);
+  const setCustomer = useCartStore((state) => state.setCustomer);
   const clear = useCartStore((state) => state.clear);
   const branch = useBranchStore((state) => state.activeBranch);
   const shift = useShiftStore((state) => state.activeShift);
@@ -67,6 +75,9 @@ export default function PaymentScreen() {
   const [percentValue, setPercentValue] = useState('');
   const [selectedPromoId, setSelectedPromoId] = useState<string | null>(null);
   const [manualClear, setManualClear] = useState(false);
+  const [customerPickerVisible, setCustomerPickerVisible] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const trimmedCustomerSearch = customerSearch.trim();
 
   const promotionsQuery = useQuery({
     queryKey: ['pos-checkout-promotions', branch?.id],
@@ -86,6 +97,20 @@ export default function PaymentScreen() {
     },
     enabled: Boolean(branch?.id),
   });
+  const customersQuery = useQuery({
+    queryKey: ['payment-customers', branch?.id, trimmedCustomerSearch],
+    queryFn: async () => {
+      if (!branch?.id) return [];
+      return api<Customer[]>(
+        `/customers?branchId=${branch.id}&page=1&pageSize=20&search=${encodeURIComponent(trimmedCustomerSearch)}`,
+      );
+    },
+    enabled: Boolean(branch?.id) && customerPickerVisible,
+  });
+  const selectedCustomer = useMemo(
+    () => customersQuery.data?.find((customer) => customer.id === customerId) ?? null,
+    [customerId, customersQuery.data],
+  );
 
   const subtotal = useMemo(() => cartSubtotal(items), [items]);
 
@@ -342,6 +367,40 @@ export default function PaymentScreen() {
             )}
           </View>
 
+          <View className="rounded-2xl border border-slate-200 bg-white p-4">
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
+              Customer
+            </Text>
+            <View className="flex-row items-center gap-2">
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setCustomerPickerVisible(true)}
+                className="min-h-12 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3 active:bg-slate-100"
+              >
+                <Feather name="user" size={16} color="#1A593B" />
+                <View className="ml-2 min-w-0 flex-1">
+                  <Text className="text-sm font-semibold text-slate-900" numberOfLines={1}>
+                    {selectedCustomer?.name ?? (customerId ? 'Selected Customer' : 'Walk-In Customer')}
+                  </Text>
+                  <Text className="mt-0.5 text-xs text-slate-500" numberOfLines={1}>
+                    {selectedCustomer?.phone || selectedCustomer?.email || 'Tap to link a customer'}
+                  </Text>
+                </View>
+                <Feather name="chevron-down" size={16} color="#64748B" />
+              </Pressable>
+              {customerId ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear Customer"
+                  onPress={() => setCustomer(null)}
+                  className="h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-white active:bg-slate-50"
+                >
+                  <Feather name="x" size={16} color="#64748B" />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
           <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-3">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center gap-1.5">
@@ -543,6 +602,98 @@ export default function PaymentScreen() {
           />
         </View>
       </ScrollView>
+
+      <Modal
+        visible={customerPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCustomerPickerVisible(false)}
+      >
+        <View className="flex-1 items-center justify-center bg-black/40 p-4">
+          <Pressable className="absolute inset-0" onPress={() => setCustomerPickerVisible(false)} />
+          <View className="max-h-[82%] w-full max-w-md rounded-3xl bg-white p-5">
+            <View className="mb-4 flex-row items-start justify-between gap-3">
+              <View className="min-w-0 flex-1">
+                <Text className="text-lg font-bold text-slate-950">Select Customer</Text>
+                <Text className="mt-1 text-sm text-slate-500">
+                  Link this sale to an existing customer record.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close Customer Picker"
+                onPress={() => setCustomerPickerVisible(false)}
+                className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
+              >
+                <Feather name="x" size={18} color="#475569" />
+              </Pressable>
+            </View>
+
+            <TextInput
+              value={customerSearch}
+              onChangeText={setCustomerSearch}
+              placeholder="Search Customers"
+              placeholderTextColor="#81776E"
+              selectionColor="#1A593B"
+              style={{ outline: 'none' }}
+              className="mb-3 min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
+            />
+
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setCustomer(null);
+                  setCustomerPickerVisible(false);
+                }}
+                className={`mb-2 rounded-xl border px-4 py-3 ${
+                  !customerId ? 'border-brand-200 bg-brand-50' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <Text className="text-sm font-bold text-slate-900">Walk-In Customer</Text>
+                <Text className="mt-1 text-xs text-slate-500">Do not link this transaction.</Text>
+              </Pressable>
+
+              {customersQuery.isLoading ? (
+                <Text className="px-1 py-4 text-center text-sm text-slate-500">
+                  Loading Customers…
+                </Text>
+              ) : customersQuery.isError ? (
+                <Text className="rounded-xl bg-red-50 px-3 py-3 text-sm text-red-700">
+                  Could Not Load Customers
+                </Text>
+              ) : customersQuery.data?.length ? (
+                customersQuery.data.map((customer) => {
+                  const selected = customer.id === customerId;
+                  return (
+                    <Pressable
+                      key={customer.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => {
+                        setCustomer(customer.id);
+                        setCustomerPickerVisible(false);
+                      }}
+                      className={`mb-2 rounded-xl border px-4 py-3 ${
+                        selected ? 'border-brand-200 bg-brand-50' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <Text className="text-sm font-bold text-slate-900">{customer.name}</Text>
+                      <Text className="mt-1 text-xs text-slate-500" numberOfLines={1}>
+                        {customer.phone || customer.email || 'No Contact Details'}
+                      </Text>
+                    </Pressable>
+                  );
+                })
+              ) : (
+                <Text className="px-1 py-4 text-center text-sm text-slate-500">
+                  No customers found.
+                </Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
