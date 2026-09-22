@@ -19,6 +19,8 @@ function CustomersContent() {
   const branch = useBranchStore((state) => state.activeBranch);
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const client = useQueryClient();
   const trimmedSearch = search.trim();
   const query = useInfiniteQuery({
@@ -32,12 +34,23 @@ function CustomersContent() {
     getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
   });
   const create = useMutation({
-    mutationFn: () => api('/customers', {
-      method: 'POST',
-      body: JSON.stringify({ branchId: branch!.id, name: name.trim() }),
-    }),
+    mutationFn: () => {
+      const trimmedPhone = phone.trim();
+      const trimmedEmail = email.trim();
+      return api('/customers', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: branch!.id,
+          name: name.trim(),
+          ...(trimmedPhone ? { phone: trimmedPhone } : {}),
+          ...(trimmedEmail ? { email: trimmedEmail } : {}),
+        }),
+      });
+    },
     onSuccess: async () => {
       setName('');
+      setPhone('');
+      setEmail('');
       await client.invalidateQueries({ queryKey: ['customers'] });
     },
     onError: (error) => appAlert('Could not create customer', error.message),
@@ -61,25 +74,51 @@ function CustomersContent() {
             className="flex-1 min-h-14 bg-transparent text-sm text-slate-900"
           />
         </View>
-        <View className="flex-row gap-2">
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="New customer name"
-            placeholderTextColor="#81776E"
-            selectionColor="#1A593B"
-            style={{ outline: 'none' }}
-            onSubmitEditing={(e: any) => {
-              if (e && e.preventDefault) e.preventDefault();
-              if (name.trim()) create.mutate();
-            }}
-            className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
-          />
-          <Button
-            title="Add"
-            disabled={name.trim().length < 1 || create.isPending}
-            onPress={() => create.mutate()}
-          />
+        <View className="gap-2">
+          <View className="flex-row gap-2">
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="New Customer Name"
+              placeholderTextColor="#81776E"
+              selectionColor="#1A593B"
+              style={{ outline: 'none' }}
+              onSubmitEditing={(e: any) => {
+                if (e && e.preventDefault) e.preventDefault();
+                if (name.trim()) create.mutate();
+              }}
+              className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
+            />
+            <Button
+              title="Add"
+              disabled={name.trim().length < 1 || create.isPending}
+              onPress={() => create.mutate()}
+            />
+          </View>
+          <View className="flex-row gap-2">
+            <TextInput
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="Phone"
+              placeholderTextColor="#81776E"
+              selectionColor="#1A593B"
+              keyboardType="phone-pad"
+              style={{ outline: 'none' }}
+              className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
+            />
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              placeholderTextColor="#81776E"
+              selectionColor="#1A593B"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              style={{ outline: 'none' }}
+              className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
+            />
+          </View>
         </View>
       </View>
       <FlatList

@@ -7,10 +7,12 @@ interface BrandLogoProps {
 
 export function BrandLogo({ size = 64 }: BrandLogoProps) {
   return (
-    <View style={{ height: size, overflow: 'hidden', width: size }}>
+    <View
+      accessibilityLabel="Ximo Logo"
+      accessible
+      style={{ height: size, overflow: 'hidden', width: size }}
+    >
       <Image
-        accessibilityLabel="Ximo Logo"
-        accessible
         resizeMode="cover"
         source={logo}
         // The exported PNG has a dark artifact on its outer left edge. Crop its edge,

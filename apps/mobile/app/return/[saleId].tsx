@@ -102,9 +102,10 @@ function ReturnFormContent() {
       const qtyStr = quantities[item.id] ?? '0';
       const qty = parseFloat(qtyStr.replace(',', '.')) || 0;
       if (qty > 0) {
-        const unitPriceMinor = moneyToMinor(item.unitPrice);
-        const qtyMinor = BigInt(Math.round(qty * 100));
-        totalMinor += (qtyMinor * unitPriceMinor) / 100n;
+        const lineTotalMinor = moneyToMinor(item.lineTotal);
+        const quantityMinor = BigInt(Math.round(qty * 1_000));
+        const soldQuantityMinor = BigInt(Math.round(item.quantity * 1_000));
+        totalMinor += (lineTotalMinor * quantityMinor) / soldQuantityMinor;
       }
     }
     return minorToMoney(totalMinor);

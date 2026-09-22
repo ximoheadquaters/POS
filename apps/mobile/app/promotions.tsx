@@ -367,23 +367,10 @@ function PromotionsContent() {
             body: JSON.stringify(payload),
           });
         } catch {
-          try {
-            return await api(`/promotions/${editingId}`, {
-              method: 'POST',
-              body: JSON.stringify(payload),
-            });
-          } catch {
-            const created = await api<{ id?: string }>('/promotions', {
-              method: 'POST',
-              body: JSON.stringify(payload),
-            });
-            try {
-              await api(`/promotions/${editingId}/toggle`, { method: 'POST' });
-            } catch {
-              // ignore
-            }
-            return created;
-          }
+          return await api(`/promotions/${editingId}`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
         }
       }
       return api('/promotions', {
@@ -415,7 +402,13 @@ function PromotionsContent() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: (promoId: string) => api(`/promotions/${promoId}/toggle`, { method: 'POST' }),
+    mutationFn: (promoId: string) => {
+      if (!branch?.id) throw new Error('Select a branch before updating a promotion.');
+      return api(`/promotions/${promoId}/toggle`, {
+        method: 'POST',
+        body: JSON.stringify({ branchId: branch.id }),
+      });
+    },
     onSuccess: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['promotions'] }),
