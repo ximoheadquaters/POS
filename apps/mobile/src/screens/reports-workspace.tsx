@@ -281,24 +281,10 @@ const METRIC_TONES: Record<MetricTone, { bg: string; accent: string }> = {
   red: { bg: 'bg-[#FCEEEE]', accent: '#A13D3D' },
 };
 
-function useChartReady(dependencyKey: string | number) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    setReady(false);
-    const timer = setTimeout(() => setReady(true), 50);
-    return () => clearTimeout(timer);
-  }, [dependencyKey]);
-  return ready;
-}
-
-function pathLengthOf(points: Array<{ x: number; y: number }>): number {
-  let length = 0;
-  for (let i = 1; i < points.length; i += 1) {
-    const dx = points[i]!.x - points[i - 1]!.x;
-    const dy = points[i]!.y - points[i - 1]!.y;
-    length += Math.sqrt(dx * dx + dy * dy);
-  }
-  return length;
+function useChartReady(_dependencyKey: string | number) {
+  // Reports are reference material, not a presentation. Render their values immediately
+  // instead of replaying chart reveals whenever a filter or report section changes.
+  return true;
 }
 
 const softCardShadow = {
@@ -407,8 +393,6 @@ function DonutChart({
                 style={{
                   transform: 'rotate(-90deg)',
                   transformOrigin: '50% 50%',
-                  transition: 'stroke-dasharray 900ms cubic-bezier(0.22, 1, 0.36, 1)',
-                  transitionDelay: `${i * 80}ms`,
                 }}
               />
             );
@@ -446,10 +430,6 @@ function DonutChart({
                   style={{
                     width: ready ? `${Math.max(seg.percentage, 2)}%` : '0%',
                     backgroundColor: seg.color,
-                    transitionProperty: 'width',
-                    transitionDuration: '900ms',
-                    transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                    transitionDelay: `${120 + i * 80}ms`,
                   }}
                 />
               </View>
@@ -510,9 +490,6 @@ function RadialGauge({
             strokeWidth={strokeWidth}
             strokeDasharray={`${ready ? (clamped / 100) * circumference : 0} ${circumference}`}
             strokeLinecap="round"
-            style={{
-              transition: 'stroke-dasharray 1000ms cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
           />
         </svg>
         <View className="absolute bottom-0 items-center">
@@ -781,10 +758,6 @@ function BarRows({
                 className={`h-1.5 rounded-full ${row.value < 0 ? 'bg-rose-500' : 'bg-brand-600'}`}
                 style={{
                   width: ready ? `${widthPct}%` : '0%',
-                  transitionProperty: 'width',
-                  transitionDuration: '900ms',
-                  transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                  transitionDelay: `${index * 70}ms`,
                 }}
               />
             </View>
@@ -939,8 +912,6 @@ function SalesLineChart({
   const bottomPad = 28;
   const plotWidth = chartWidth - leftPad - rightPad;
   const plotHeight = chartHeight - topPad - bottomPad;
-  const ready = useChartReady(`${from}|${to}|line|${maxSales}|${series.length}`);
-
   const rawPoints = useMemo(
     () =>
       series.map((item, index) => {
@@ -973,8 +944,6 @@ function SalesLineChart({
     const last = curvePoints.at(-1)!;
     return `${linePath} L ${last.x.toFixed(2)} ${baseY} L ${first.x.toFixed(2)} ${baseY} Z`;
   }, [curvePoints, linePath, plotHeight, topPad]);
-
-  const drawLength = useMemo(() => Math.max(pathLengthOf(curvePoints), 1), [curvePoints]);
 
   const labelIndexes = useMemo(() => {
     if (series.length <= 6) return series.map((_, i) => i);
@@ -1040,8 +1009,7 @@ function SalesLineChart({
           <path
             d={areaPath}
             fill="url(#salesAreaFill)"
-            opacity={ready ? 1 : 0}
-            style={{ transition: 'opacity 700ms ease-out 350ms' }}
+            opacity={1}
           />
           <path
             d={linePath}
@@ -1050,11 +1018,6 @@ function SalesLineChart({
             strokeWidth="2.75"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeDasharray={drawLength}
-            strokeDashoffset={ready ? 0 : drawLength}
-            style={{
-              transition: 'stroke-dashoffset 1200ms cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
           />
           {lastActive
             ? (() => {
@@ -1065,11 +1028,10 @@ function SalesLineChart({
                   <circle
                     cx={point.x}
                     cy={point.y}
-                    r={ready ? 4 : 0}
+                    r={4}
                     fill="#1A593B"
                     stroke="#FFFFFF"
                     strokeWidth="2"
-                    style={{ transition: 'r 400ms ease-out 1000ms' }}
                   />
                 );
               })()
@@ -1410,9 +1372,6 @@ function ProfitTrendChart({
     return `${linePath} L ${last.x.toFixed(2)} ${baseY} L ${first.x.toFixed(2)} ${baseY} Z`;
   }, [curvePoints, linePath, plotHeight, topPad, zeroY]);
 
-  const drawLength = useMemo(() => Math.max(pathLengthOf(curvePoints), 1), [curvePoints]);
-  const ready = useChartReady(`profit|${from}|${to}|${maxProfit}|${series.length}`);
-
   const labelIndexes = useMemo(() => {
     if (series.length <= 4) return series.map((_, i) => i);
     const step = (series.length - 1) / 3;
@@ -1496,8 +1455,7 @@ function ProfitTrendChart({
           <path
             d={areaPath}
             fill="url(#profitAreaFill)"
-            opacity={ready ? 1 : 0}
-            style={{ transition: 'opacity 700ms ease-out 350ms' }}
+            opacity={1}
           />
           <path
             d={linePath}
@@ -1506,11 +1464,6 @@ function ProfitTrendChart({
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeDasharray={drawLength}
-            strokeDashoffset={ready ? 0 : drawLength}
-            style={{
-              transition: 'stroke-dashoffset 1200ms cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
           />
           {lastActive
             ? (() => {
@@ -1521,11 +1474,10 @@ function ProfitTrendChart({
                   <circle
                     cx={point.x}
                     cy={point.y}
-                    r={ready ? 4 : 0}
+                    r={4}
                     fill="#1A593B"
                     stroke="#FFFFFF"
                     strokeWidth="2"
-                    style={{ transition: 'r 400ms ease-out 1000ms' }}
                   />
                 );
               })()
@@ -4450,7 +4402,7 @@ function InventoryReport({
         <View className="flex-row items-center gap-2">
           <Pressable
             onPress={() => setSubTab('stock')}
-            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
+            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 ${
               subTab === 'stock' ? 'bg-brand-700 shadow-xs' : 'bg-slate-50 hover:bg-slate-100'
             }`}
           >
@@ -4462,7 +4414,7 @@ function InventoryReport({
 
           <Pressable
             onPress={() => setSubTab('movements')}
-            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
+            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 ${
               subTab === 'movements' ? 'bg-brand-700 shadow-xs' : 'bg-slate-50 hover:bg-slate-100'
             }`}
           >
@@ -4474,7 +4426,7 @@ function InventoryReport({
 
           <Pressable
             onPress={() => setSubTab('conversions')}
-            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
+            className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 ${
               subTab === 'conversions' ? 'bg-brand-700 shadow-xs' : 'bg-slate-50 hover:bg-slate-100'
             }`}
           >

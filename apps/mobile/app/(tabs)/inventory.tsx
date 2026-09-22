@@ -1,5 +1,5 @@
 import { useMemo, useState, type ComponentProps } from 'react';
-import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
@@ -8,13 +8,14 @@ import { liveDataQueryOptions } from '@/lib/live-data';
 import { getStockStatus } from '@/lib/product-list-badges';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
-import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import { QuickAccess } from '@/components/quick-access';
+import { ExpandableSection, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 
 function qtyBadgeClass(status: ReturnType<typeof getStockStatus>['status']) {
-  if (status === 'out_of_stock' || status === 'low_stock') {
+  if (status === 'out_of_stock') {
     return { wrap: 'bg-red-100', text: 'text-red-700' };
   }
-  if (status === 'warning') {
+  if (status === 'warning' || status === 'low_stock') {
     return { wrap: 'bg-amber-100', text: 'text-amber-800' };
   }
   return { wrap: 'bg-brand-50', text: 'text-brand-700' };
@@ -106,6 +107,8 @@ function containerBreakdown(item: Inventory): string | null {
 }
 
 export default function InventoryScreen() {
+  const { width } = useWindowDimensions();
+  const phone = width < 640;
   const [inventoryFilter, setInventoryFilter] = useState<InventoryFilter>('all');
   const [sort, setSort] = useState<InventorySort>('name');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -167,25 +170,37 @@ export default function InventoryScreen() {
 
   return (
     <Screen>
-      <Header title="Inventory" subtitle={branch?.name} />
-      <View className="border-b border-slate-100 bg-white px-4 py-3 gap-3">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Repack And Production"
-          onPress={() => router.push('/production')}
-          className="w-full flex-row items-center rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5 active:bg-brand-100"
+      <Header title="Stock overview" subtitle={branch?.name} />
+      <View
+        className={`border-b border-slate-100 bg-white ${phone ? 'gap-2 px-3 py-2' : 'gap-3 px-4 py-3'}`}
+      >
+        <ExpandableSection
+          title="Stock tools"
+          summary="Restock, adjust, transfer or repack stock"
         >
-          <View className="h-9 w-9 items-center justify-center rounded-lg bg-white">
-            <Feather name="repeat" size={17} color="#1A593B" />
-          </View>
-          <View className="ml-3 flex-1">
-            <Text className="text-sm font-semibold text-brand-950">Repack / Production</Text>
-            <Text numberOfLines={1} className="mt-0.5 text-xs text-brand-800">
-              Consume BOM · add packs to sellable stock
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={18} color="#1A593B" />
-        </Pressable>
+          <QuickAccess
+            title=""
+            minimum={1}
+            routes={['/purchasing', '/stock-adjustment', '/stock-transfers', '/retail/repacking']}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Repack And Production"
+            onPress={() => router.push('/production')}
+            className="w-full flex-row items-center rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5 active:bg-brand-100"
+          >
+            <View className="h-9 w-9 items-center justify-center rounded-lg bg-white">
+              <Feather name="repeat" size={17} color="#1A593B" />
+            </View>
+            <View className="ml-3 flex-1">
+              <Text className="text-sm font-semibold text-brand-950">Repack / Production</Text>
+              <Text numberOfLines={1} className="mt-0.5 text-xs text-brand-800">
+                Consume BOM · add packs to sellable stock
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={18} color="#1A593B" />
+          </Pressable>
+        </ExpandableSection>
 
         <View className="min-h-11 flex-row items-center rounded-xl border border-slate-200 bg-slate-100 px-3">
           <Feather name="search" size={17} color="#81776E" />
@@ -199,7 +214,11 @@ export default function InventoryScreen() {
             className="ml-2 flex-1 min-h-11 bg-transparent text-sm text-slate-900"
           />
           {search ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Clear Search" onPress={() => setSearch('')}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear Search"
+              onPress={() => setSearch('')}
+            >
               <Feather name="x" size={16} color="#81776E" />
             </Pressable>
           ) : null}
@@ -214,7 +233,10 @@ export default function InventoryScreen() {
           >
             <View className="mr-2 flex-1 flex-row items-center gap-2">
               <Feather name={activeFilter.icon} size={15} color="#1A593B" />
-              <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-900">
+              <Text
+                numberOfLines={1}
+                className={`flex-1 ${phone ? 'text-[13px]' : 'text-sm'} font-semibold text-slate-900`}
+              >
                 {activeFilter.title}
               </Text>
             </View>
@@ -229,7 +251,10 @@ export default function InventoryScreen() {
           >
             <View className="mr-2 flex-1 flex-row items-center gap-2">
               <Feather name={activeSort.icon} size={15} color="#1A593B" />
-              <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-900">
+              <Text
+                numberOfLines={1}
+                className={`flex-1 ${phone ? 'text-[13px]' : 'text-sm'} font-semibold text-slate-900`}
+              >
                 {activeSort.title}
               </Text>
             </View>
@@ -237,7 +262,7 @@ export default function InventoryScreen() {
           </Pressable>
         </View>
 
-        <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
+        {!phone ? <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
           <Text className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
             Qty Color
           </Text>
@@ -253,7 +278,7 @@ export default function InventoryScreen() {
             <View className="h-2.5 w-2.5 rounded-full bg-red-500" />
             <Text className="text-xs font-medium text-slate-600">Low Stock</Text>
           </View>
-        </View>
+        </View> : null}
       </View>
 
       {query.isLoading ? (
@@ -265,7 +290,7 @@ export default function InventoryScreen() {
           className="flex-1"
           data={items}
           keyExtractor={(item) => item.id}
-          contentContainerClassName="p-4 gap-2 grow"
+          contentContainerClassName={phone ? 'grow gap-2 p-3' : 'grow gap-2 p-4'}
           onEndReached={() => {
             if (query.hasNextPage && !query.isFetchingNextPage) {
               void query.fetchNextPage();
@@ -317,7 +342,9 @@ export default function InventoryScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Adjust stock for ${item.name}`}
-                className="flex-row items-center rounded-2xl border border-slate-100 bg-white p-4 active:border-brand-300 active:bg-brand-50"
+                className={`flex-row items-center rounded-2xl border border-slate-100 bg-white active:border-brand-300 active:bg-brand-50 ${
+                  phone ? 'p-3' : 'p-4'
+                }`}
                 onPress={() =>
                   router.push({
                     pathname: '/stock-adjustment',
@@ -338,9 +365,9 @@ export default function InventoryScreen() {
                 }
               >
                 <View className="flex-1">
-                  <Text className="font-bold text-slate-900">{item.name}</Text>
-                  <Text className="mt-1 text-xs text-slate-500">{item.sku}</Text>
-                  <Text className="mt-1 text-xs font-medium text-slate-500">
+                  <Text className="font-semibold text-slate-900">{item.name}</Text>
+                  <Text className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs text-slate-500`}>{item.sku}</Text>
+                  <Text className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs font-medium text-slate-500`}>
                     {item.inventoryRole === 'ingredient'
                       ? 'Raw ingredient'
                       : item.inventoryRole === 'both'
@@ -348,11 +375,11 @@ export default function InventoryScreen() {
                         : 'Sellable product'}
                   </Text>
                   {breakdown ? (
-                    <Text className="mt-1 text-xs font-medium text-brand-700">{breakdown}</Text>
+                    <Text className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs font-medium text-brand-700`}>{breakdown}</Text>
                   ) : null}
                 </View>
-                <View className={`rounded-xl px-4 py-2 ${badge.wrap}`}>
-                  <Text className={`text-lg font-black ${badge.text}`}>
+                <View className={`rounded-xl ${phone ? 'px-3 py-1.5' : 'px-4 py-2'} ${badge.wrap}`}>
+                  <Text className={`${phone ? 'text-base' : 'text-lg'} font-semibold ${badge.text}`}>
                     {item.quantity} {item.unit}
                   </Text>
                 </View>
@@ -362,7 +389,12 @@ export default function InventoryScreen() {
         />
       )}
 
-      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
+      <Modal
+        visible={filterOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterOpen(false)}
+      >
         <View className="flex-1 items-center justify-center p-4">
           <Pressable
             accessibilityRole="button"
@@ -373,7 +405,11 @@ export default function InventoryScreen() {
           <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
             <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
               <Text className="text-base font-bold text-slate-900">Stock Type</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setFilterOpen(false)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={() => setFilterOpen(false)}
+              >
                 <Feather name="x" size={20} color="#64748B" />
               </Pressable>
             </View>
@@ -394,7 +430,11 @@ export default function InventoryScreen() {
                     }`}
                   >
                     <View className="flex-row items-center gap-2.5 flex-1">
-                      <Feather name={filter.icon} size={17} color={selected ? '#1A593B' : '#64748B'} />
+                      <Feather
+                        name={filter.icon}
+                        size={17}
+                        color={selected ? '#1A593B' : '#64748B'}
+                      />
                       <View className="flex-1">
                         <Text
                           className={`text-sm ${selected ? 'font-bold text-brand-900' : 'font-medium text-slate-700'}`}
@@ -405,7 +445,9 @@ export default function InventoryScreen() {
                       </View>
                     </View>
                     <View className="ml-2 flex-row items-center gap-2">
-                      <Text className={`text-sm font-semibold ${selected ? 'text-brand-800' : 'text-slate-500'}`}>
+                      <Text
+                        className={`text-sm font-semibold ${selected ? 'text-brand-800' : 'text-slate-500'}`}
+                      >
                         {displayedInventoryCounts[filter.id]}
                       </Text>
                       {selected ? <Feather name="check" size={16} color="#1A593B" /> : null}
@@ -418,7 +460,12 @@ export default function InventoryScreen() {
         </View>
       </Modal>
 
-      <Modal visible={sortOpen} transparent animationType="fade" onRequestClose={() => setSortOpen(false)}>
+      <Modal
+        visible={sortOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortOpen(false)}
+      >
         <View className="flex-1 items-center justify-center p-4">
           <Pressable
             accessibilityRole="button"
@@ -429,7 +476,11 @@ export default function InventoryScreen() {
           <View className="z-10 w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
             <View className="mb-3 flex-row items-center justify-between border-b border-slate-100 pb-3">
               <Text className="text-base font-bold text-slate-900">Sort By</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setSortOpen(false)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={() => setSortOpen(false)}
+              >
                 <Feather name="x" size={20} color="#64748B" />
               </Pressable>
             </View>
@@ -450,7 +501,11 @@ export default function InventoryScreen() {
                     }`}
                   >
                     <View className="flex-row items-center gap-2.5 flex-1">
-                      <Feather name={option.icon} size={17} color={selected ? '#1A593B' : '#64748B'} />
+                      <Feather
+                        name={option.icon}
+                        size={17}
+                        color={selected ? '#1A593B' : '#64748B'}
+                      />
                       <View className="flex-1">
                         <Text
                           className={`text-sm ${selected ? 'font-bold text-brand-900' : 'font-medium text-slate-700'}`}

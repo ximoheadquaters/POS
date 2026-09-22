@@ -1,8 +1,8 @@
-export const LIVE_DATA_REFRESH_MS = 5_000;
+export const LIVE_DATA_REFRESH_MS = 30_000;
 
 export const liveDataQueryOptions = {
   refetchInterval: LIVE_DATA_REFRESH_MS,
-  refetchOnMount: 'always' as const,
+  refetchOnMount: false,
   refetchOnReconnect: true,
   refetchOnWindowFocus: true,
 };

@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Keep hierarchy clear without the overly heavy type used by the first pass of the UI. */
+:where(.font-black) {
+  font-weight: 700 !important;
+}
+
+:where(.font-bold) {
+  font-weight: 600 !important;
+}
+
+:where(.font-semibold) {
+  font-weight: 500 !important;
+}
+
+/* Keyboard focus remains visible, including inputs with inline outline resets. */
+:where([role='button'], [role='tab'], a, button, input, textarea, select):focus-visible {
+  outline: 2px solid #1a593b !important;
+  outline-offset: 2px;
+}

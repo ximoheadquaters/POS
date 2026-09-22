@@ -15,7 +15,7 @@ import type { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AppSidebarProvider } from '@/components/app-sidebar';
-import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import { ExpandableSection, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { formatMoney } from '@/lib/format';
 import { calculateBulkCostSuggestion, formatCalculatedUnitCost } from '@/lib/bulk-cost';
 import { normalizeBarcode } from '@/lib/product-scan';
@@ -173,12 +173,13 @@ const PRODUCT_PRESETS = [
 
 type ProductSetup = (typeof PRODUCT_PRESETS)[number]['id'];
 
-function resolveBusinessProfile(user: {
-  organization?: { businessProfile?: string };
-  businessProfile?: string;
-} | null): 'retail' | 'food_service' | 'hybrid' {
-  const profile =
-    user?.organization?.businessProfile ?? user?.businessProfile ?? 'retail';
+function resolveBusinessProfile(
+  user: {
+    organization?: { businessProfile?: string };
+    businessProfile?: string;
+  } | null,
+): 'retail' | 'food_service' | 'hybrid' {
+  const profile = user?.organization?.businessProfile ?? user?.businessProfile ?? 'retail';
   if (profile === 'food_service' || profile === 'hybrid') return profile;
   return 'retail';
 }
@@ -369,8 +370,7 @@ function ProductFormContent() {
   const userModules = currentUser?.modules ?? [];
   const visibleProductPresets = getVisibleProductPresets(businessProfile, userModules);
   const defaultProductSetup =
-    visibleProductPresets[0]?.id ??
-    (businessProfile === 'food_service' ? 'raw' : 'retail');
+    visibleProductPresets[0]?.id ?? (businessProfile === 'food_service' ? 'raw' : 'retail');
   const productId = typeof params.id === 'string' ? params.id : '';
   const isEditing = Boolean(productId);
   const suggestedPrice =
@@ -547,21 +547,30 @@ function ProductFormContent() {
 
   const wizardSteps = recipeEnabled
     ? [
-        { step: 1, label: 'Product Setup', icon: 'package' as const },
+        { step: 1, label: 'Basic information', icon: 'package' as const },
         {
           step: 2,
           label: productSetup === 'repacked' ? 'Repacking (BOM)' : 'Recipe (BOM)',
           icon: productSetup === 'repacked' ? ('layers' as const) : ('coffee' as const),
         },
-        { step: 3, label: 'Pricing & Tax', icon: 'dollar-sign' as const },
-        { step: 4, label: 'Availability', icon: 'settings' as const },
+        { step: 3, label: 'Price and tax', icon: 'dollar-sign' as const },
+        { step: 4, label: 'Media and availability', icon: 'settings' as const },
       ]
     : [
-        { step: 1, label: 'Product Setup', icon: 'package' as const },
-        { step: 2, label: 'Inventory & Units', icon: 'box' as const },
-        { step: 3, label: 'Pricing & Tax', icon: 'dollar-sign' as const },
-        { step: 4, label: 'Availability', icon: 'settings' as const },
+        { step: 1, label: 'Basic information', icon: 'package' as const },
+        { step: 2, label: 'Inventory', icon: 'box' as const },
+        { step: 3, label: 'Price and tax', icon: 'dollar-sign' as const },
+        { step: 4, label: 'Media and availability', icon: 'settings' as const },
       ];
+
+  const formSections = [
+    'Basic information',
+    'Price and tax',
+    'Inventory',
+    'Variants and selling units',
+    'Media and availability',
+    'Advanced settings',
+  ];
 
   const activeUnits =
     units.data?.filter((unit) => unit.isActive) ??
@@ -734,11 +743,9 @@ function ProductFormContent() {
     if (!next) return;
     setProductSetup(next.id);
     setRecipeEnabled(next.id === 'prepared_food' || next.id === 'repacked');
-    form.setValue(
-      'inventoryRole',
-      next.id === 'raw' ? 'ingredient' : 'sellable',
-      { shouldValidate: true },
-    );
+    form.setValue('inventoryRole', next.id === 'raw' ? 'ingredient' : 'sellable', {
+      shouldValidate: true,
+    });
     form.setValue('unit', next.unit, { shouldValidate: true });
     form.setValue('trackInventory', next.trackInventory, { shouldValidate: true });
   }, [form, isEditing, productSetup, visibleProductPresets]);
@@ -793,7 +800,11 @@ function ProductFormContent() {
   const applySuggestedPrice = () => {
     const amount = Number(suggestedPrice);
     if (!Number.isFinite(amount) || amount < 0) {
-      showAlert({ title: 'Invalid suggested price', message: 'Refresh the product list and try again.', type: 'warning' });
+      showAlert({
+        title: 'Invalid suggested price',
+        message: 'Refresh the product list and try again.',
+        type: 'warning',
+      });
       return;
     }
     form.setValue('sellingPrice', amount.toFixed(2), {
@@ -1010,7 +1021,8 @@ function ProductFormContent() {
                     barcode: alternateBarcode.trim() || undefined,
                     unit: alternateUnit,
                     unitsPerBase: conversion,
-                    sellingPrice: input.inventoryRole === 'ingredient' ? '0.00' : finalAlternatePrice,
+                    sellingPrice:
+                      input.inventoryRole === 'ingredient' ? '0.00' : finalAlternatePrice,
                     isPortioningContainer: portioningEnabled,
                   },
                 ]
@@ -1082,7 +1094,11 @@ function ProductFormContent() {
     const nameVal = form.getValues('name')?.trim() || '';
     if (!nameVal) {
       setCurrentStep(1);
-      showAlert({ title: 'Product name required', message: 'Please enter a product name before saving.', type: 'warning' });
+      showAlert({
+        title: 'Product name required',
+        message: 'Please enter a product name before saving.',
+        type: 'warning',
+      });
       return;
     }
     if (!form.getValues('sku')?.trim()) {
@@ -1118,7 +1134,8 @@ function ProductFormContent() {
         if (errors.sku) setShowAdditionalDetails(true);
         showAlert({
           title: 'Product information is incomplete',
-          message: firstFormErrorMessage(errors) ?? 'Review the highlighted product fields and try again.',
+          message:
+            firstFormErrorMessage(errors) ?? 'Review the highlighted product fields and try again.',
           type: 'warning',
         });
       },
@@ -1160,7 +1177,8 @@ function ProductFormContent() {
           />
           {fieldState.error?.message ? (
             <Text className="mt-1 text-xs text-red-600">
-              {name === 'name' && (fieldState.error.message.includes('1') || fieldState.error.message.includes('>=1'))
+              {name === 'name' &&
+              (fieldState.error.message.includes('1') || fieldState.error.message.includes('>=1'))
                 ? 'Enter a product name.'
                 : fieldState.error.message}
             </Text>
@@ -1324,10 +1342,32 @@ function ProductFormContent() {
               </View>
             </View>
 
+            <View className="mb-6 rounded-2xl border border-slate-200 bg-white p-3">
+              <Text className="px-1 text-xs font-semibold text-slate-600">Product sections</Text>
+              <View className="mt-2 flex-row flex-wrap gap-2">
+                {formSections.map((section) => (
+                  <View
+                    key={section}
+                    className={`rounded-lg px-2.5 py-1.5 ${
+                      wizardSteps[currentStep - 1]?.label.toLowerCase() === section.toLowerCase()
+                        ? 'bg-brand-50'
+                        : 'bg-slate-50'
+                    }`}
+                  >
+                    <Text className="text-xs text-slate-600">{section}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text className="mt-2 px-1 text-xs leading-4 text-slate-500">
+                Complete the current section first. Related selling units and advanced controls
+                appear only when they apply.
+              </Text>
+            </View>
+
             {currentStep === 1 ? (
               <View>
-                <SectionLabel>Product Setup</SectionLabel>
-                <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
+                <SectionLabel>Basic information</SectionLabel>
+                <View className="mb-7 rounded-2xl border border-slate-200 bg-white p-5">
                   <Text className="font-semibold text-slate-950">What are you adding?</Text>
                   <Text className="mb-4 mt-1 text-sm leading-5 text-slate-500">
                     Pick one. Ximo will set the recommended inventory behavior automatically.
@@ -1355,11 +1395,7 @@ function ProductFormContent() {
                             form.setValue('trackInventory', preset.trackInventory, {
                               shouldValidate: true,
                             });
-                            setStockSaleMode(
-                              preset.id === 'raw'
-                                ? 'portions_only'
-                                : 'single_unit',
-                            );
+                            setStockSaleMode(preset.id === 'raw' ? 'portions_only' : 'single_unit');
                             setShowAdvancedInventory(false);
                             if (usesRecipe) setOpeningQuantity('0');
                             if (!preset.trackInventory || preset.id !== 'retail') {
@@ -1414,7 +1450,7 @@ function ProductFormContent() {
                 </View>
 
                 <SectionLabel>Basic Information</SectionLabel>
-                <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+                <View className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                   <CardHeader
                     icon="tag"
                     title="Product Details"
@@ -1598,10 +1634,10 @@ function ProductFormContent() {
 
             {currentStep === 3 ? (
               <View>
-                <SectionLabel>Pricing</SectionLabel>
+                <SectionLabel>Price and tax</SectionLabel>
                 <View
                   onLayout={(event) => setPricingOffset(event.nativeEvent.layout.y)}
-                  className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white"
+                  className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white"
                 >
                   <CardHeader
                     icon="credit-card"
@@ -1841,8 +1877,8 @@ function ProductFormContent() {
               <View>
                 {!recipeEnabled ? (
                   <View>
-                    <SectionLabel>Inventory And Units</SectionLabel>
-                    <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+                    <SectionLabel>Inventory</SectionLabel>
+                    <View className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                       <CardHeader
                         icon="box"
                         title={
@@ -2151,12 +2187,12 @@ function ProductFormContent() {
                           {isEditing
                             ? inventoryRole === 'ingredient'
                               ? 'Storage packages'
-                              : 'Variants'
+                              : 'Variants and selling units'
                             : inventoryRole === 'ingredient'
                               ? 'Storage package'
-                              : 'Package setup'}
+                              : 'Variants and selling units'}
                         </SectionLabel>
-                        <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+                        <View className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                           <View className="min-h-24 flex-row items-center p-5">
                             <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
                               <Feather name="copy" size={17} color="#1A593B" />
@@ -2422,7 +2458,7 @@ function ProductFormContent() {
                         ? 'Repacking & Source Materials (BOM)'
                         : 'Recipe & Ingredients (BOM)'}
                     </SectionLabel>
-                    <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+                    <View className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                       <CardHeader
                         icon={isRepackedProduct ? 'layers' : 'coffee'}
                         title={
@@ -2854,14 +2890,16 @@ function ProductFormContent() {
 
             {currentStep === 4 ? (
               <View>
-                <SectionLabel>Summary And Review</SectionLabel>
-                <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 gap-3">
+                <SectionLabel>Advanced settings</SectionLabel>
+                <View className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 gap-3">
                   <Text className="text-base font-bold text-slate-900">Product Summary</Text>
 
                   <View className="rounded-2xl bg-slate-50 p-4 gap-2.5">
                     <View className="flex-row items-center justify-between">
                       <Text className="text-xs font-semibold text-slate-500">Product Name</Text>
-                      <Text className="text-sm font-bold text-slate-900">{form.getValues('name') || 'Unnamed'}</Text>
+                      <Text className="text-sm font-bold text-slate-900">
+                        {form.getValues('name') || 'Unnamed'}
+                      </Text>
                     </View>
                     <View className="flex-row items-center justify-between">
                       <Text className="text-xs font-semibold text-slate-500">Stocking Method</Text>
@@ -2875,11 +2913,15 @@ function ProductFormContent() {
                     </View>
                     <View className="flex-row items-center justify-between">
                       <Text className="text-xs font-semibold text-slate-500">Base Stock Unit</Text>
-                      <Text className="text-sm font-semibold text-slate-800">{(baseUnit ?? 'piece').toUpperCase()}</Text>
+                      <Text className="text-sm font-semibold text-slate-800">
+                        {(baseUnit ?? 'piece').toUpperCase()}
+                      </Text>
                     </View>
                     {alternateEnabled ? (
                       <View className="flex-row items-center justify-between">
-                        <Text className="text-xs font-semibold text-slate-500">Supplier Package</Text>
+                        <Text className="text-xs font-semibold text-slate-500">
+                          Supplier Package
+                        </Text>
                         <Text className="text-sm font-semibold text-slate-800">
                           1 {alternateUnit} contains {packageSize} {packageMeasureUnit}
                         </Text>
@@ -2888,84 +2930,97 @@ function ProductFormContent() {
                     <View className="flex-row items-center justify-between">
                       <Text className="text-xs font-semibold text-slate-500">Opening Stock</Text>
                       <Text className="text-sm font-semibold text-slate-800">
-                        {alternateEnabled ? `${openingContainerQuantity} sealed ${alternateUnit}s and ` : ''}
+                        {alternateEnabled
+                          ? `${openingContainerQuantity} sealed ${alternateUnit}s and `
+                          : ''}
                         {openingQuantity} opened {baseUnit}
                       </Text>
                     </View>
                     <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold text-slate-500">Cashier Availability</Text>
+                      <Text className="text-xs font-semibold text-slate-500">
+                        Cashier Availability
+                      </Text>
                       <Text className="text-sm font-semibold text-slate-800">
-                        {inventoryRole === 'ingredient' ? 'Not sold directly at the cashier' : 'Available at cashier'}
+                        {inventoryRole === 'ingredient'
+                          ? 'Not sold directly at the cashier'
+                          : 'Available at cashier'}
                       </Text>
                     </View>
                   </View>
                 </View>
 
-                <SectionLabel>Other Settings</SectionLabel>
-                <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-                  <CardHeader
-                    icon="settings"
-                    title="Media And Availability"
-                    description="Add an optional image and control whether the product appears in POS."
-                  />
-                  <View className="p-5">
-                    {renderTextField('imagePath', 'Image path', '/images/product.png', {
-                      autoCapitalize: 'none',
-                      helper: 'Optional. You can add or change the product image later.',
-                    })}
-                  </View>
-                  {incoming ? (
-                    <View className="min-h-20 flex-row items-center border-t border-slate-100 bg-amber-50 px-5 py-3">
-                      <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
-                        <Feather name="clock" size={17} color="#B45309" />
-                      </View>
-                      <View className="flex-1 pr-3">
-                        <Text className="font-medium text-amber-900">Hidden Until Received</Text>
-                        <Text className="mt-1 text-xs leading-4 text-amber-800">
-                          The product will automatically become available after its first stock
-                          receipt.
+                <ExpandableSection
+                  title="Media and availability"
+                  summary="Optional image and availability at checkout"
+                >
+                  <View className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <CardHeader
+                      icon="settings"
+                      title="Media And Availability"
+                      description="Add an optional image and control whether the product appears in POS."
+                    />
+                    <View className="p-5">
+                      {renderTextField('imagePath', 'Image path', '/images/product.png', {
+                        autoCapitalize: 'none',
+                        helper: 'Optional. You can add or change the product image later.',
+                      })}
+                    </View>
+                    {incoming ? (
+                      <View className="min-h-20 flex-row items-center border-t border-slate-100 bg-amber-50 px-5 py-3">
+                        <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
+                          <Feather name="clock" size={17} color="#B45309" />
+                        </View>
+                        <View className="flex-1 pr-3">
+                          <Text className="font-medium text-amber-900">Hidden Until Received</Text>
+                          <Text className="mt-1 text-xs leading-4 text-amber-800">
+                            The product will automatically become available after its first stock
+                            receipt.
+                          </Text>
+                        </View>
+                        <Text className="rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-800">
+                          Incoming
                         </Text>
                       </View>
-                      <Text className="rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-800">
-                        Incoming
-                      </Text>
-                    </View>
-                  ) : (
-                    <Controller
-                      control={form.control}
-                      name="status"
-                      render={({ field }) => {
-                        const enabled = field.value === 'active';
-                        return (
-                          <View className="min-h-20 flex-row items-center border-t border-slate-100 px-5 py-3">
-                            <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
-                              <Feather name="eye" size={17} color="#64748B" />
+                    ) : (
+                      <Controller
+                        control={form.control}
+                        name="status"
+                        render={({ field }) => {
+                          const enabled = field.value === 'active';
+                          return (
+                            <View className="min-h-20 flex-row items-center border-t border-slate-100 px-5 py-3">
+                              <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+                                <Feather name="eye" size={17} color="#64748B" />
+                              </View>
+                              <View className="flex-1 pr-3">
+                                <Text className="font-medium text-slate-900">
+                                  Available For Sale
+                                </Text>
+                                <Text className="mt-1 text-xs leading-4 text-slate-500">
+                                  Turn off to hide the product from POS without deleting its
+                                  history.
+                                </Text>
+                              </View>
+                              <Switch
+                                value={enabled}
+                                onValueChange={(value) =>
+                                  field.onChange(value ? 'active' : 'inactive')
+                                }
+                                trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
+                                thumbColor={enabled ? '#1A593B' : '#FFFFFF'}
+                              />
                             </View>
-                            <View className="flex-1 pr-3">
-                              <Text className="font-medium text-slate-900">Available For Sale</Text>
-                              <Text className="mt-1 text-xs leading-4 text-slate-500">
-                                Turn off to hide the product from POS without deleting its history.
-                              </Text>
-                            </View>
-                            <Switch
-                              value={enabled}
-                              onValueChange={(value) =>
-                                field.onChange(value ? 'active' : 'inactive')
-                              }
-                              trackColor={{ false: '#D7D2CC', true: '#A7D2BC' }}
-                              thumbColor={enabled ? '#1A593B' : '#FFFFFF'}
-                            />
-                          </View>
-                        );
-                      }}
-                    />
-                  )}
-                </View>
+                          );
+                        }}
+                      />
+                    )}
+                  </View>
+                </ExpandableSection>
               </View>
             ) : null}
 
             {/* Wizard Navigation Footer Bar */}
-            <View className="mt-4 rounded-3xl border border-slate-200 bg-white p-4">
+            <View className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
               <View className="gap-3 sm:flex-row">
                 {currentStep > 1 ? (
                   <Pressable
@@ -3032,7 +3087,7 @@ function ProductFormContent() {
         onRequestClose={closeScanner}
       >
         <View className="flex-1 items-center justify-center bg-black/70 p-4">
-          <View className="w-full max-w-xl overflow-hidden rounded-3xl bg-white">
+          <View className="w-full max-w-xl overflow-hidden rounded-2xl bg-white">
             <View className="flex-row items-start justify-between p-5">
               <View className="mr-4 flex-1">
                 <Text className="text-lg font-semibold text-slate-950">
@@ -3079,33 +3134,33 @@ function ProductFormContent() {
                 </View>
               ) : cameraPermission?.granted && scannerTarget ? (
                 <View className="flex-1">
-                <CameraView
-                  key={scannerCameraSession}
-                  style={{ flex: 1 }}
-                  facing="back"
-                  barcodeScannerSettings={{ barcodeTypes: [...CAMERA_BARCODE_TYPES] }}
-                  onBarcodeScanned={scanChecking ? undefined : handleCameraScan}
-                  onCameraReady={() => {
-                    setScannerCameraReady(true);
-                    setScannerCameraError('');
-                  }}
-                  onMountError={(event) => {
-                    scannerLockRef.current = true;
-                    setScannerCameraReady(false);
-                    setScannerCameraError(
-                      event.message || 'Check that another application is not using the camera.',
-                    );
-                  }}
-                >
-                  <View className="flex-1 items-center justify-center">
-                    <View className="h-32 w-[82%] max-w-sm rounded-2xl border-2 border-white" />
-                    <View className="mt-4 rounded-full bg-black/60 px-4 py-2">
-                      <Text className="text-sm font-medium text-white">
-                        {scanChecking ? 'Checking barcode…' : 'Ready to scan'}
-                      </Text>
+                  <CameraView
+                    key={scannerCameraSession}
+                    style={{ flex: 1 }}
+                    facing="back"
+                    barcodeScannerSettings={{ barcodeTypes: [...CAMERA_BARCODE_TYPES] }}
+                    onBarcodeScanned={scanChecking ? undefined : handleCameraScan}
+                    onCameraReady={() => {
+                      setScannerCameraReady(true);
+                      setScannerCameraError('');
+                    }}
+                    onMountError={(event) => {
+                      scannerLockRef.current = true;
+                      setScannerCameraReady(false);
+                      setScannerCameraError(
+                        event.message || 'Check that another application is not using the camera.',
+                      );
+                    }}
+                  >
+                    <View className="flex-1 items-center justify-center">
+                      <View className="h-32 w-[82%] max-w-sm rounded-2xl border-2 border-white" />
+                      <View className="mt-4 rounded-full bg-black/60 px-4 py-2">
+                        <Text className="text-sm font-medium text-white">
+                          {scanChecking ? 'Checking barcode…' : 'Ready to scan'}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                </CameraView>
+                  </CameraView>
                   {!scannerCameraReady ? (
                     <View className="absolute inset-0 items-center justify-center bg-black">
                       <LoadingState label="Starting Camera…" />

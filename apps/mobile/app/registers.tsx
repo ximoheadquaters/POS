@@ -7,7 +7,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { minorToMoney, moneyToMinor } from '@ximo/shared';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
-import { Button, EmptyState, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
+import {
+  ShiftTabs,
+  Button,
+  EmptyState,
+  ErrorState,
+  Field,
+  Header,
+  LoadingState,
+  Screen,
+} from '@/components/ui';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
 import { useSession } from '@/providers/session';
@@ -245,7 +254,8 @@ function RegistersContent() {
           </View>
           <Text className="text-xl font-bold text-slate-900">Module Access Disabled</Text>
           <Text className="mt-2 max-w-xs text-center text-xs text-slate-500 leading-relaxed">
-            The Registers & Shifts module is disabled for your organization. Contact your administrator or store owner to enable register management.
+            The Registers & Shifts module is disabled for your organization. Contact your
+            administrator or store owner to enable register management.
           </Text>
           <View className="mt-6 w-full max-w-xs">
             <Button title="Return To POS" onPress={() => router.push('/(tabs)/pos')} />
@@ -280,7 +290,6 @@ function RegistersContent() {
           <Header
             title="Registers & Shifts"
             subtitle="Loading…"
-            showBack
             backLabel="More"
             fallbackHref="/(tabs)/more"
           />
@@ -293,7 +302,6 @@ function RegistersContent() {
         <Header
           title="Registers & Shifts"
           subtitle="Branch required"
-          showBack
           backLabel="More"
           fallbackHref="/(tabs)/more"
         />
@@ -312,20 +320,17 @@ function RegistersContent() {
       <Header
         title="Registers & Shifts"
         subtitle={branch.name}
-        showBack
         backLabel="More"
         fallbackHref="/(tabs)/more"
       />
 
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="px-4 py-6 pb-12"
-      >
+      <ShiftTabs active="current" />
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="px-4 py-6 pb-12">
         <View className="w-full max-w-3xl self-center">
           {shift ? (
             <>
               <SectionLabel>Active Shift</SectionLabel>
-              <View className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <View className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                 <View className="flex-row items-start justify-between p-5">
                   <View className="mr-4 flex-1 flex-row items-center">
                     <View className="mr-3 h-11 w-11 items-center justify-center rounded-2xl bg-brand-50">
@@ -473,7 +478,7 @@ function RegistersContent() {
               </View>
 
               <SectionLabel>Close Shift</SectionLabel>
-              <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
+              <View className="mb-7 rounded-2xl border border-slate-200 bg-white p-5">
                 <View className="mb-4 flex-row items-start">
                   <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
                     <Feather name="archive" size={18} color="#64748B" />
@@ -523,7 +528,7 @@ function RegistersContent() {
           ) : (
             <>
               <SectionLabel>Step 1 · Starting Cash</SectionLabel>
-              <View className="mb-7 rounded-3xl border border-slate-200 bg-white p-5">
+              <View className="mb-7 rounded-2xl border border-slate-200 bg-white p-5">
                 <View className="mb-4 flex-row items-start">
                   <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
                     <Feather name="inbox" size={18} color="#1A593B" />
@@ -573,11 +578,11 @@ function RegistersContent() {
             ) : null}
           </View>
           {query.isLoading ? (
-            <View className="min-h-40 rounded-3xl border border-slate-200 bg-white">
+            <View className="min-h-40 rounded-2xl border border-slate-200 bg-white">
               <LoadingState label="Loading Registers…" />
             </View>
           ) : query.isError ? (
-            <View className="min-h-40 rounded-3xl border border-slate-200 bg-white">
+            <View className="min-h-40 rounded-2xl border border-slate-200 bg-white">
               <ErrorState message={query.error.message} retry={() => void query.refetch()} />
             </View>
           ) : query.data?.length ? (
@@ -585,8 +590,7 @@ function RegistersContent() {
               {query.data.map((register) => {
                 const current = register.id === shift?.registerId;
                 const occupied = Boolean(register.activeShiftId);
-                const disabled =
-                  Boolean(shift) || occupied || open.isPending || !startingCashValid;
+                const disabled = Boolean(shift) || occupied || open.isPending || !startingCashValid;
                 const status = current
                   ? 'Your active shift'
                   : occupied
@@ -663,7 +667,7 @@ function RegistersContent() {
         }}
       >
         <View className="flex-1 items-center justify-center bg-black/40 p-5">
-          <View className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
+          <View className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
             <View className="mb-4 flex-row items-start justify-between">
               <View className="mr-4 flex-1">
                 <Text className="text-lg font-semibold text-slate-950">Close this shift?</Text>
@@ -728,7 +732,7 @@ function RegistersContent() {
         }}
       >
         <View className="flex-1 items-center justify-center bg-black/40 p-5">
-          <View className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl gap-4">
+          <View className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl gap-4">
             <View className="flex-row items-start justify-between">
               <View className="mr-4 flex-1">
                 <Text className="text-lg font-semibold text-slate-950">Add Cashier Counter</Text>

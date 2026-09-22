@@ -52,9 +52,30 @@ const sidebarSections: SidebarSection[] = [
   {
     sectionTitle: 'DAILY WORK',
     groups: [
-      { id: 'dashboard', title: 'Dashboard', icon: 'grid', href: '/(tabs)', module: 'dashboard', permission: 'reports:read' },
-      { id: 'pos', title: 'POS', icon: 'shopping-cart', href: '/(tabs)/pos', module: 'pos', permission: 'sales:create' },
-      { id: 'sales', title: 'Sales & Orders', icon: 'shopping-bag', href: '/(tabs)/sales', module: 'pos', permission: 'sales:read_branch' },
+      {
+        id: 'dashboard',
+        title: 'Dashboard',
+        icon: 'grid',
+        href: '/(tabs)',
+        module: 'dashboard',
+        permission: 'reports:read',
+      },
+      {
+        id: 'pos',
+        title: 'POS',
+        icon: 'shopping-cart',
+        href: '/(tabs)/pos',
+        module: 'pos',
+        permission: 'sales:create',
+      },
+      {
+        id: 'sales',
+        title: 'Sales & Orders',
+        icon: 'shopping-bag',
+        href: '/(tabs)/sales',
+        module: 'pos',
+        permission: 'sales:read_branch',
+      },
     ],
   },
   {
@@ -62,17 +83,41 @@ const sidebarSections: SidebarSection[] = [
     groups: [
       {
         id: 'products',
-        title: 'Product Catalog',
+        title: 'Catalog',
         icon: 'box',
         permission: 'products:read',
         children: [
           { title: 'Overview', href: '/products', module: 'products', permission: 'products:read' },
-          { title: 'Categories', href: '/catalogue', module: 'products', permission: 'products:manage' },
-          { title: 'Variants', href: '/product-variants', module: 'products', permission: 'products:manage' },
+          {
+            title: 'Categories',
+            href: '/catalogue',
+            module: 'products',
+            permission: 'products:manage',
+          },
+          {
+            title: 'Variants',
+            href: '/product-variants',
+            module: 'products',
+            permission: 'products:manage',
+          },
         ],
       },
-      { id: 'customers', title: 'Customers', icon: 'user', href: '/customers', module: 'customers', permission: 'customers:read' },
-      { id: 'promotions', title: 'Promotions & Combos', icon: 'tag', href: '/promotions', module: 'promotions', permission: 'promotions:read' },
+      {
+        id: 'customers',
+        title: 'Customers',
+        icon: 'users',
+        href: '/customers',
+        module: 'customers',
+        permission: 'customers:read',
+      },
+      {
+        id: 'promotions',
+        title: 'Promotions & Combos',
+        icon: 'tag',
+        href: '/promotions',
+        module: 'promotions',
+        permission: 'promotions:read',
+      },
     ],
   },
   {
@@ -80,15 +125,40 @@ const sidebarSections: SidebarSection[] = [
     groups: [
       {
         id: 'inventory_tools',
-        title: 'Stock & Restock',
+        title: 'Inventory',
         icon: 'archive',
         permission: 'inventory:read',
         children: [
-          { title: 'Stock Overview', href: '/(tabs)/inventory', module: 'inventory', permission: 'inventory:read' },
-          { title: 'Purchasing & Restock', href: '/purchasing', module: 'purchasing', permission: 'purchasing:read' },
-          { title: 'Stock Adjustments', href: '/stock-adjustment', module: 'inventory', permission: 'inventory:adjust' },
-          { title: 'Branch Transfers', href: '/stock-transfers', module: 'stock_transfers', permission: 'transfers:read' },
-          { title: 'Repacking', href: '/retail/repacking', module: 'production', permission: 'products:manage' },
+          {
+            title: 'Stock Overview',
+            href: '/(tabs)/inventory',
+            module: 'inventory',
+            permission: 'inventory:read',
+          },
+          {
+            title: 'Purchasing & Restock',
+            href: '/purchasing',
+            module: 'purchasing',
+            permission: 'purchasing:read',
+          },
+          {
+            title: 'Stock Adjustments',
+            href: '/stock-adjustment',
+            module: 'inventory',
+            permission: 'inventory:adjust',
+          },
+          {
+            title: 'Branch Transfers',
+            href: '/stock-transfers',
+            module: 'stock_transfers',
+            permission: 'transfers:read',
+          },
+          {
+            title: 'Repacking',
+            href: '/retail/repacking',
+            module: 'production',
+            permission: 'products:manage',
+          },
         ],
       },
     ],
@@ -103,8 +173,18 @@ const sidebarSections: SidebarSection[] = [
         module: 'registers',
         permission: 'registers:read',
         children: [
-          { title: 'Active Register', href: '/registers', module: 'registers', permission: 'registers:read' },
-          { title: 'Shift History', href: '/shift-reports', module: 'registers', permission: 'registers:read' },
+          {
+            title: 'Active Register',
+            href: '/registers',
+            module: 'registers',
+            permission: 'registers:read',
+          },
+          {
+            title: 'Shift History',
+            href: '/shift-reports',
+            module: 'registers',
+            permission: 'registers:read',
+          },
         ],
       },
       {
@@ -125,7 +205,7 @@ const sidebarSections: SidebarSection[] = [
       },
       {
         id: 'settings',
-        title: 'Settings & Admin',
+        title: 'Administration',
         icon: 'settings',
         children: [
           { title: 'Organization', href: '/organization', permission: 'organization:read' },
@@ -133,8 +213,18 @@ const sidebarSections: SidebarSection[] = [
           { title: 'Store Settings', href: '/settings', permission: 'settings:manage' },
           { title: 'Staff & Roles', href: '/users', permission: 'users:manage' },
           { title: 'Audit Logs', href: '/audit', module: 'audit', permission: 'audit:read' },
-          { title: 'Hardware Devices', href: '/hardware', module: 'receipt_printer', permission: 'settings:manage' },
-          { title: 'Offline Data Sync', href: '/offline-sync', module: 'offline', permission: 'sales:create' },
+          {
+            title: 'Hardware Devices',
+            href: '/hardware',
+            module: 'receipt_printer',
+            permission: 'settings:manage',
+          },
+          {
+            title: 'Offline Data Sync',
+            href: '/offline-sync',
+            module: 'offline',
+            permission: 'sales:create',
+          },
         ],
       },
     ],
@@ -144,13 +234,33 @@ const sidebarSections: SidebarSection[] = [
     groups: [
       {
         id: 'food_service',
-        title: 'Food & Recipes',
+        title: 'Food service',
         icon: 'coffee',
         children: [
-          { title: 'Raw Ingredients', href: '/products?inventoryRole=ingredient', module: 'ingredients', permission: 'products:read' },
-          { title: 'BOM Recipes', href: '/products?preparationBehavior=cook_to_order', module: 'recipes', permission: 'products:read' },
-          { title: 'Batch Production', href: '/production', module: 'production', permission: 'products:manage' },
-          { title: 'Parked / Held Sales', href: '/held-sales' as Href, module: 'held_sales', permission: 'sales:create' },
+          {
+            title: 'Raw Ingredients',
+            href: '/products?inventoryRole=ingredient',
+            module: 'ingredients',
+            permission: 'products:read',
+          },
+          {
+            title: 'BOM Recipes',
+            href: '/products?preparationBehavior=cook_to_order',
+            module: 'recipes',
+            permission: 'products:read',
+          },
+          {
+            title: 'Batch Production',
+            href: '/production',
+            module: 'production',
+            permission: 'products:manage',
+          },
+          {
+            title: 'Parked / Held Sales',
+            href: '/held-sales' as Href,
+            module: 'held_sales',
+            permission: 'sales:create',
+          },
         ],
       },
     ],
@@ -179,52 +289,18 @@ export function isPathActive(pathname: string, href: Href): boolean {
   if (current.startsWith(`${target}/`)) return true;
 
   // Specific alias routes where details pages belong exclusively to a parent group
-  if (target === '/purchasing' && (current.startsWith('/purchase/') || current.startsWith('/supplier/'))) {
+  if (
+    target === '/purchasing' &&
+    (current.startsWith('/purchase/') || current.startsWith('/supplier/'))
+  ) {
     return true;
   }
 
   return false;
 }
 
-function SidebarMenu({ close }: { close(): void }) {
-  const pathname = usePathname();
-  const { currentUser, refreshUser, signOut } = useSession();
-  const branch = useBranchStore((state) => state.activeBranch);
-  const branchLabel = branch?.name ?? currentUser?.branches?.[0]?.name ?? 'No branch selected';
-  const [refreshing, setRefreshing] = useState(false);
-
-  const getActiveGroupId = (currentPath: string) => {
-    for (const section of sidebarSections) {
-      for (const group of section.groups) {
-        if (group.children) {
-          const hasActiveChild = group.children.some((child) => isPathActive(currentPath, child.href));
-          if (hasActiveChild) return group.id;
-        }
-      }
-    }
-    return null;
-  };
-
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
-    const active = getActiveGroupId(pathname);
-    return active ? { [active]: true } : { products: true };
-  });
-
-  // Auto-expand active group and collapse non-active groups when route changes
-  useEffect(() => {
-    const active = getActiveGroupId(pathname);
-    if (active) {
-      setExpandedGroups({ [active]: true });
-    }
-  }, [pathname]);
-
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
-  };
-
+export function useVisibleNavigation(): SidebarSection[] {
+  const { currentUser } = useSession();
   const hasModuleAccess = (module?: ModuleCode, groupId?: string) => {
     if (!module) return true;
     if (groupId === 'dashboard') {
@@ -264,6 +340,93 @@ function SidebarMenu({ close }: { close(): void }) {
     });
   };
 
+  return filterSectionsByProfile(currentUser)
+    .map((section) => ({
+      ...section,
+      groups: filterVisibleGroups(section.groups).map((group) => ({
+        ...group,
+        children: group.children ? filterVisibleChildren(group.children) : undefined,
+      })),
+    }))
+    .filter((section) => section.groups.length > 0);
+}
+
+/** Arrange already-authorized destinations without changing their access checks. */
+function compactNavigation(sections: SidebarSection[]): SidebarSection[] {
+  return sections.map((section) => {
+    if (section.sectionTitle === 'CATALOG') {
+      const children = section.groups.flatMap(
+        (group) => group.children ?? (group.href ? [{ title: group.title, href: group.href }] : []),
+      );
+      return {
+        ...section,
+        sectionTitle: undefined,
+        groups: [{ id: 'products', title: 'Catalog', icon: 'box', children }],
+      };
+    }
+    if (section.sectionTitle === 'STORE MANAGEMENT') {
+      const reports = section.groups.filter(
+        (group) => group.id === 'reports' || group.id === 'analytics',
+      );
+      const groups = section.groups.filter(
+        (group) => group.id !== 'reports' && group.id !== 'analytics',
+      );
+      if (reports.length)
+        groups.splice(1, 0, {
+          id: 'reports',
+          title: 'Reports',
+          icon: 'bar-chart-2',
+          children: reports.map((group) => ({
+            title: group.id === 'reports' ? 'Reports overview' : group.title,
+            href: group.href!,
+          })),
+        });
+      return { ...section, sectionTitle: undefined, groups };
+    }
+    return { ...section, sectionTitle: undefined };
+  });
+}
+
+function SidebarMenu({ close }: { close(): void }) {
+  const pathname = usePathname();
+  const { currentUser, refreshUser, signOut } = useSession();
+  const branch = useBranchStore((state) => state.activeBranch);
+  const branchLabel = branch?.name ?? currentUser?.branches?.[0]?.name ?? 'No branch selected';
+  const [refreshing, setRefreshing] = useState(false);
+
+  const visibleSections = compactNavigation(useVisibleNavigation());
+
+  const getActiveGroupId = (currentPath: string) => {
+    for (const section of visibleSections) {
+      for (const group of section.groups) {
+        if (group.children) {
+          const hasActiveChild = group.children.some((child) =>
+            isPathActive(currentPath, child.href),
+          );
+          if (hasActiveChild) return group.id;
+        }
+      }
+    }
+    return null;
+  };
+
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
+    const active = getActiveGroupId(pathname);
+    return active ? { [active]: true } : {};
+  });
+
+  // Auto-expand active group and collapse non-active groups when route changes
+  useEffect(() => {
+    const active = getActiveGroupId(pathname);
+    setExpandedGroups(active ? { [active]: true } : {});
+  }, [pathname]);
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((prev) => ({
+      [groupId]: !prev[groupId],
+    }));
+  };
+
   const getBadgeStyle = (color?: SidebarSubItem['badgeColor']) => {
     switch (color) {
       case 'amber':
@@ -280,10 +443,10 @@ function SidebarMenu({ close }: { close(): void }) {
   };
 
   return (
-    <View className="h-full w-64 border-r border-slate-200/80 bg-[#F8F9FA] px-3 pb-4 pt-4 shadow-sm">
+    <View className="h-full w-64 border-r border-slate-200/80 bg-[#F8F9FA] px-3 pb-4 pt-4">
       {/* Brand Header */}
       <View className="mb-4 flex-row items-center px-2">
-        <View className="mr-3 h-10 w-10 overflow-hidden rounded-xl bg-brand-700 shadow-sm">
+        <View className="mr-3 h-10 w-10 overflow-hidden rounded-xl bg-brand-700">
           <Image
             source={ximoIcon}
             resizeMode="cover"
@@ -302,8 +465,8 @@ function SidebarMenu({ close }: { close(): void }) {
       {/* Navigation Sections & Hierarchy */}
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="pb-6">
-          {filterSectionsByProfile(currentUser).map((section, sectionIdx) => {
-            const visibleGroups = filterVisibleGroups(section.groups);
+          {visibleSections.map((section, sectionIdx) => {
+            const visibleGroups = section.groups;
             if (visibleGroups.length === 0) return null;
 
             return (
@@ -317,7 +480,7 @@ function SidebarMenu({ close }: { close(): void }) {
                 <View className="gap-1">
                   {visibleGroups.map((group) => {
                     const hasChildren = group.children && group.children.length > 0;
-                    const visibleChildren = filterVisibleChildren(group.children);
+                    const visibleChildren = group.children ?? [];
                     const isExpanded = expandedGroups[group.id] ?? false;
                     const isDirectActive = group.href ? isPathActive(pathname, group.href) : false;
                     const isAnyChildActive = visibleChildren.some((child) =>
@@ -334,29 +497,28 @@ function SidebarMenu({ close }: { close(): void }) {
                             close();
                             router.push(group.href!);
                           }}
-                          className={`min-h-11 flex-row items-center justify-between rounded-xl px-3 py-2.5 transition-all ${
+                          className={`min-h-11 flex-row items-center justify-between rounded-xl px-3 py-2.5 border ${
                             isDirectActive
-                              ? 'bg-white border border-slate-200/90 shadow-sm'
-                              : 'active:bg-slate-200/60'
+                              ? 'bg-[#EAF2EE] border-[#DCE8E1]'
+                              : 'border-transparent active:bg-[#F0F4F2]'
                           }`}
                         >
                           <View className="flex-row items-center flex-1 pr-2">
                             <Feather
                               name={group.icon}
-                              size={19}
-                              color={isDirectActive ? '#1A593B' : '#64748B'}
+                              size={16}
+                              color={isDirectActive ? '#1A593B' : '#7B8982'}
                             />
                             <Text
                               className={`ml-3 text-sm ${
                                 isDirectActive
-                                  ? 'font-bold text-slate-900'
-                                  : 'font-semibold text-slate-700'
+                                  ? 'font-semibold text-[#1A593B]'
+                                  : 'font-medium text-[#66766E]'
                               }`}
                             >
                               {group.title}
                             </Text>
                           </View>
-
                         </Pressable>
                       );
                     }
@@ -369,24 +531,25 @@ function SidebarMenu({ close }: { close(): void }) {
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`Toggle ${group.title} group`}
+                          accessibilityState={{ expanded: isExpanded }}
                           onPress={() => toggleGroup(group.id)}
                           className={`min-h-11 flex-row items-center justify-between rounded-xl px-3 py-2.5 ${
                             isAnyChildActive && !isExpanded
-                              ? 'bg-slate-200/40'
-                              : 'active:bg-slate-200/50'
+                              ? 'bg-[#EAF2EE]'
+                              : 'border-transparent active:bg-[#F0F4F2]'
                           }`}
                         >
                           <View className="flex-row items-center">
                             <Feather
                               name={group.icon}
-                              size={19}
-                              color={isAnyChildActive ? '#1A593B' : '#64748B'}
+                              size={16}
+                              color={isAnyChildActive ? '#1A593B' : '#7B8982'}
                             />
                             <Text
                               className={`ml-3 text-sm ${
                                 isAnyChildActive
-                                  ? 'font-bold text-slate-900'
-                                  : 'font-semibold text-slate-800'
+                                  ? 'font-semibold text-[#1A593B]'
+                                  : 'font-medium text-[#66766E]'
                               }`}
                             >
                               {group.title}
@@ -415,20 +578,21 @@ function SidebarMenu({ close }: { close(): void }) {
                                   <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel={`Go to ${subItem.title}`}
+                                    accessibilityState={{ selected: active }}
                                     onPress={() => {
                                       close();
                                       router.push(subItem.href);
                                     }}
-                                    className={`min-h-10 flex-1 flex-row items-center justify-between rounded-xl px-3.5 py-2 ${
+                                    className={`min-h-10 flex-1 flex-row items-center justify-between rounded-xl border px-3.5 py-2 ${
                                       active
-                                        ? 'bg-white border border-slate-200/90 shadow-sm'
-                                        : 'active:bg-slate-200/40'
+                                        ? 'bg-[#EAF2EE] border-[#DCE8E1]'
+                                        : 'border-transparent active:bg-[#F0F4F2]'
                                     }`}
                                   >
                                     <Text
                                       className={`text-sm ${
                                         active
-                                          ? 'font-bold text-slate-950'
+                                          ? 'font-semibold text-[#1A593B]'
                                           : 'font-medium text-slate-600'
                                       }`}
                                     >
@@ -461,7 +625,7 @@ function SidebarMenu({ close }: { close(): void }) {
 
       {/* User & Branch Footer */}
       <View className="mt-auto border-t border-slate-200/80 pt-3 gap-2">
-        <View className="flex-row items-center justify-between rounded-2xl border border-slate-200/60 bg-white p-3 shadow-sm">
+        <View className="flex-row items-center justify-between rounded-2xl border border-slate-200/60 bg-white p-3">
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -527,8 +691,15 @@ function SidebarMenu({ close }: { close(): void }) {
 }
 
 export function AppSidebarProvider({ children }: PropsWithChildren) {
+  const parentSidebar = useContext(SidebarContext);
   const { width } = useWindowDimensions();
-  const compact = width < 1100;
+  const { session, currentUser } = useSession();
+  const pathname = usePathname();
+  const hasWorkspace = Boolean(session && currentUser);
+  const navigationVisible =
+    hasWorkspace &&
+    !['/branch-select', '/login', '/accept-invitation', '/change-password'].includes(pathname);
+  const compact = navigationVisible && width < 1100;
   const [open, setOpen] = useState(false);
   const value = useMemo(
     () => ({
@@ -540,12 +711,16 @@ export function AppSidebarProvider({ children }: PropsWithChildren) {
     [compact, open],
   );
 
+  // Individual screens used to provide their own sidebar. The app shell now owns it,
+  // so nested wrappers must not add a second rail or a second layout container.
+  if (parentSidebar) return <>{children}</>;
+
   return (
     <SidebarContext.Provider value={value}>
       <View className="flex-1 flex-row">
-        {!compact ? <SidebarMenu close={() => setOpen(false)} /> : null}
+        {!compact && navigationVisible ? <SidebarMenu close={() => setOpen(false)} /> : null}
         <View className="flex-1">{children}</View>
-        {compact && open ? (
+        {compact && navigationVisible && open ? (
           <View className="absolute inset-0 z-50 flex-row">
             <SidebarMenu close={() => setOpen(false)} />
             <Pressable

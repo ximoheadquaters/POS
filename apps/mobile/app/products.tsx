@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { appAlert } from '@/providers/ios-alert';
-import { FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { convertRecipeQuantity } from '@ximo/shared';
@@ -9,8 +18,9 @@ import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
+import { useConnectivityStore } from '@/store/connectivity';
 import { AppSidebarProvider } from '@/components/app-sidebar';
-import { ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import { ExpandableSection, ErrorState, Header, LoadingState, OfflineState, Screen } from '@/components/ui';
 import {
   formatCatalogUnitPrice,
   getRetailProductTypeBadges,
@@ -443,13 +453,18 @@ function RecipeModal({
 }
 
 function ProductsContent() {
+  const { width } = useWindowDimensions();
+  const phone = width < 640;
   const [search, setSearch] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
   const [selectedFilters, setSelectedFilters] =
     useState<ProductFilterId[]>(DEFAULT_PRODUCT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
   const [editingRecipeProduct, setEditingRecipeProduct] = useState<Product | null>(null);
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
+  const connectivityInitialized = useConnectivityStore((state) => state.initialized);
+  const isOnline = useConnectivityStore((state) => state.isOnline);
   const queryClient = useQueryClient();
 
   const businessProfile =
@@ -466,10 +481,7 @@ function ProductsContent() {
     return ROLE_FILTERS;
   }, [isFoodService]);
 
-  const productFilters = useMemo(
-    () => [...STATUS_FILTERS, ...roleFilters],
-    [roleFilters],
-  );
+  const productFilters = useMemo(() => [...STATUS_FILTERS, ...roleFilters], [roleFilters]);
 
   const selectedFilterSet = useMemo(() => new Set(selectedFilters), [selectedFilters]);
 
@@ -487,9 +499,7 @@ function ProductsContent() {
   }, [productFilters]);
 
   const roleQuery = useMemo(() => {
-    const roles = roleFilters
-      .map((filter) => filter.id)
-      .filter((id) => selectedFilterSet.has(id));
+    const roles = roleFilters.map((filter) => filter.id).filter((id) => selectedFilterSet.has(id));
     return roles.length ? roles.join(',') : '';
   }, [roleFilters, selectedFilterSet]);
 
@@ -560,16 +570,16 @@ function ProductsContent() {
     const wantsDisabled = selectedFilterSet.has('disabled');
 
     return products.filter((product) => {
+      if (category && product.categoryName !== category) return false;
       const isEnabled = product.status === 'active';
-      const statusMatch =
-        (wantsEnabled && isEnabled) || (wantsDisabled && !isEnabled);
+      const statusMatch = (wantsEnabled && isEnabled) || (wantsDisabled && !isEnabled);
       if (!statusMatch) return false;
 
       if (selectedRoles.length === 0) return true;
       const role = product.inventoryRole ?? 'sellable';
       return selectedRoles.includes(role);
     });
-  }, [products, roleFilters, selectedFilterSet]);
+  }, [products, roleFilters, selectedFilterSet, category]);
   const applyStatusToProductsCache = (id: string, status: string) => {
     queryClient.setQueriesData({ queryKey: ['products'] }, (current: unknown) => {
       if (!current || typeof current !== 'object' || !('pages' in current)) return current;
@@ -603,23 +613,25 @@ function ProductsContent() {
     <Screen>
       <Header
         title="Products"
-        subtitle="Manage Your Product Catalog"
+        subtitle="Prices, stock and availability"
         action={
           currentUser?.permissions.includes('products:manage') ? (
-            <View className="flex-row gap-2">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Manage Catalog"
-                className="rounded-xl bg-brand-50 px-3 py-3"
-                onPress={() => router.push('/catalogue')}
-              >
-                <Feather name="folder" size={18} color="#1A593B" />
-              </Pressable>
+            <View className={`${phone ? 'gap-1.5' : 'gap-2'} flex-row`}>
+              {!phone ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Manage Catalog"
+                  className="items-center justify-center rounded-xl bg-brand-50 px-3 py-3"
+                  onPress={() => router.push('/catalogue')}
+                >
+                  <Feather name="folder" size={18} color="#1A593B" />
+                </Pressable>
+              ) : null}
               {currentUser.modules.includes('barcode_scanner') ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Scan New Product"
-                  className="rounded-xl bg-brand-50 px-3 py-3"
+                  className={`${phone ? 'h-11 w-11 px-0' : 'px-3 py-3'} items-center justify-center rounded-xl bg-brand-50`}
                   onPress={() => router.push('/product-scan')}
                 >
                   <Feather name="maximize" size={18} color="#1A593B" />
@@ -628,17 +640,17 @@ function ProductsContent() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add New Product"
-                className="min-h-11 flex-row items-center rounded-xl bg-brand-700 px-4"
+                className={`${phone ? 'h-11 w-11 justify-center px-0' : 'min-h-11 px-4'} flex-row items-center rounded-xl bg-brand-700`}
                 onPress={() => router.push('/product-form')}
               >
                 <Feather name="plus" size={17} color="#FFFFFF" />
-                <Text className="ml-2 font-medium text-white">New Product</Text>
+                {!phone ? <Text className="ml-2 font-medium text-white">Add product</Text> : null}
               </Pressable>
             </View>
           ) : null
         }
       />
-      <View className="gap-3 border-b border-slate-100 bg-white px-4 py-3">
+      <View className={`border-b border-slate-100 bg-white ${phone ? 'gap-2 px-3 py-2' : 'gap-3 px-4 py-3'}`}>
         <View className="min-h-11 flex-row items-center rounded-xl border border-slate-200 bg-slate-100 px-3">
           <Feather name="search" size={17} color="#81776E" />
           <TextInput
@@ -664,16 +676,61 @@ function ProductsContent() {
           ) : null}
         </View>
 
+        {!phone ? <View className="flex-row flex-wrap gap-2">
+          {STATUS_FILTERS.map((filter) => (
+            <Pressable
+              key={filter.id}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: selectedFilterSet.has(filter.id) }}
+              onPress={() => toggleFilter(filter.id)}
+              className={`min-h-11 flex-row items-center gap-2 rounded-xl border px-3 ${selectedFilterSet.has(filter.id) ? 'border-brand-200 bg-brand-50' : 'border-slate-200 bg-white'}`}
+            >
+              <Feather
+                name={selectedFilterSet.has(filter.id) ? 'check-square' : 'square'}
+                size={16}
+                color="#637169"
+              />
+              <Text className="text-sm text-slate-700">{filter.title}</Text>
+            </Pressable>
+          ))}
+        </View> : null}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View className="flex-row gap-2">
+            {[
+              null,
+              ...new Set(
+                products
+                  .map((product) => product.categoryName)
+                  .filter((name): name is string => Boolean(name)),
+              ),
+            ].map((name) => (
+              <Pressable
+                key={name ?? 'all'}
+                accessibilityRole="button"
+                accessibilityState={{ selected: category === name }}
+                onPress={() => setCategory(name)}
+                className={`min-h-10 justify-center rounded-xl border ${phone ? 'px-2.5' : 'px-3'} ${category === name ? 'border-brand-200 bg-brand-50' : 'border-slate-200 bg-white'}`}
+              >
+                <Text className={`${phone ? 'text-[13px]' : 'text-sm'} text-slate-700`}>
+                  {name ?? 'Loaded categories'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Filter Products"
+          accessibilityLabel="All filters"
           onPress={() => setFilterOpen(true)}
           className="min-h-11 flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
         >
           <View className="mr-2 min-w-0 flex-1 flex-row items-center gap-2">
             <Feather name="filter" size={15} color="#1A593B" />
-            <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-slate-900">
-              {filterSummary}
+            <Text
+              numberOfLines={1}
+              className={`flex-1 ${phone ? 'text-[13px]' : 'text-sm'} font-semibold text-slate-900`}
+            >
+              All filters · {filterSummary}
             </Text>
           </View>
           <View className="flex-row items-center gap-2">
@@ -684,7 +741,13 @@ function ProductsContent() {
           </View>
         </Pressable>
       </View>
-      {query.isLoading ? (
+      {connectivityInitialized && !isOnline && !query.data ? (
+        <OfflineState
+          title="Products unavailable"
+          message="The POS server is unavailable. Saved products will appear automatically when available."
+          retry={() => void query.refetch()}
+        />
+      ) : query.isLoading ? (
         <LoadingState />
       ) : query.isError ? (
         <ErrorState message={query.error.message} retry={() => void query.refetch()} />
@@ -692,7 +755,7 @@ function ProductsContent() {
         <FlatList
           data={visibleProducts}
           keyExtractor={(item) => item.id}
-          contentContainerClassName="p-4 gap-2"
+          contentContainerClassName={phone ? 'gap-2 p-3' : 'gap-2 p-4'}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center py-20">
               <Feather name={search ? 'search' : 'box'} size={42} color="#C7C0B8" />
@@ -706,7 +769,7 @@ function ProductsContent() {
               <Text className="mt-2 text-center text-sm text-slate-500 max-w-xs">
                 {search
                   ? 'Try searching for another product name or SKU, or clear your query.'
-                  : 'Add something you sell, such as a snack, drink, card pack, or bulk item.'}
+                  : 'Add your first product to begin selling.'}
               </Text>
               {search ? (
                 <Pressable
@@ -737,7 +800,7 @@ function ProductsContent() {
             const legacyCheck = hasLegacyInvalidConversion(item);
             return (
               <View
-                className={`mb-3 rounded-2xl border bg-white p-4 shadow-xs md:p-5 ${
+                className={`mb-1 rounded-2xl border bg-white p-3 md:p-4 ${
                   item.status === 'active' ? 'border-slate-200' : 'border-slate-300 opacity-75'
                 }`}
               >
@@ -797,144 +860,157 @@ function ProductsContent() {
                   </View>
                 ) : null}
 
-                {/* Spec Metrics Row */}
-                <View className="mt-3 flex-row flex-wrap items-center gap-3">
-                  <View className="flex-row items-center rounded-xl bg-slate-50 px-3 py-1.5">
-                    <Feather name="box" size={13} color="#64748B" />
-                    <Text className="ml-1.5 text-xs text-slate-600">
-                      {(item.unit ?? 'piece').toUpperCase()} · {stockInfo.label}
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center rounded-xl bg-slate-50 px-3 py-1.5">
-                    <Feather name="dollar-sign" size={13} color="#64748B" />
-                    <Text className="ml-1.5 text-xs text-slate-600">
-                      Avg cost {formatMoney(item.averageCost)}
-                    </Text>
-                  </View>
-                  <View
-                    className={`flex-row items-center rounded-xl px-3 py-1.5 ${
-                      item.isLowMargin ? 'bg-red-50' : 'bg-brand-50'
-                    }`}
-                  >
-                    <Feather
-                      name={item.isLowMargin ? 'alert-circle' : 'pie-chart'}
-                      size={13}
-                      color={item.isLowMargin ? '#B91C1C' : '#1A593B'}
-                    />
-                    <Text
-                      className={`ml-1.5 text-xs font-medium ${
-                        item.isLowMargin ? 'text-red-700' : 'text-brand-800'
+                <View className="mt-3 flex-row flex-wrap items-center justify-between gap-2">
+                  <Text className="text-sm text-slate-600">
+                    {stockInfo.label} · {item.status === 'active' ? 'Enabled' : 'Disabled'}
+                  </Text>
+                  {currentUser?.permissions.includes('products:manage') ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${item.name}`}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/product-form',
+                          params: { id: item.id },
+                        })
+                      }
+                      className="min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800"
+                    >
+                      <Feather name="edit-2" size={13} color="#FFFFFF" />
+                      <Text className="ml-1.5 text-xs font-semibold text-white">Edit</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                <ExpandableSection
+                  title="Product details and actions"
+                  summary={item.isLowMargin ? 'Low margin - review pricing' : undefined}
+                >
+                  {/* Spec Metrics Row */}
+                  <View className="mt-3 flex-row flex-wrap items-center gap-3">
+                    <View className="flex-row items-center rounded-xl bg-slate-50 px-3 py-1.5">
+                      <Feather name="box" size={13} color="#64748B" />
+                      <Text className="ml-1.5 text-xs text-slate-600">
+                        {(item.unit ?? 'piece').toUpperCase()} · {stockInfo.label}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center rounded-xl bg-slate-50 px-3 py-1.5">
+                      <Feather name="dollar-sign" size={13} color="#64748B" />
+                      <Text className="ml-1.5 text-xs text-slate-600">
+                        Avg cost {formatMoney(item.averageCost)}
+                      </Text>
+                    </View>
+                    <View
+                      className={`flex-row items-center rounded-xl px-3 py-1.5 ${
+                        item.isLowMargin ? 'bg-red-50' : 'bg-brand-50'
                       }`}
                     >
-                      Margin {item.grossMarginPercent ?? '0.00'}%
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Actions Footer */}
-                {currentUser?.permissions.includes('products:manage') ? (
-                  <View className="mt-4 flex-row flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <View className="flex-row flex-wrap items-center gap-2">
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${item.name}`}
-                        onPress={() =>
-                          router.push({
-                            pathname: '/product-form',
-                            params: { id: item.id },
-                          })
-                        }
-                        className="min-h-9 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800"
+                      <Feather
+                        name={item.isLowMargin ? 'alert-circle' : 'pie-chart'}
+                        size={13}
+                        color={item.isLowMargin ? '#B91C1C' : '#1A593B'}
+                      />
+                      <Text
+                        className={`ml-1.5 text-xs font-medium ${
+                          item.isLowMargin ? 'text-red-700' : 'text-brand-800'
+                        }`}
                       >
-                        <Feather name="edit-2" size={13} color="#FFFFFF" />
-                        <Text className="ml-1.5 text-xs font-semibold text-white">Edit</Text>
-                      </Pressable>
-
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() =>
-                          router.push({
-                            pathname: '/product-variants',
-                            params: {
-                              productId: item.id,
-                              name: item.name,
-                              baseUnit: item.unit ?? 'piece',
-                            },
-                          })
-                        }
-                        className="min-h-9 flex-row items-center justify-center rounded-xl bg-slate-100 px-3 active:bg-slate-200"
-                      >
-                        <Feather name="copy" size={13} color="#334155" />
-                        <Text className="ml-1.5 text-xs font-semibold text-slate-700">Variants</Text>
-                      </Pressable>
-
-                      {isFoodService && item.inventoryRole !== 'ingredient' ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => setEditingRecipeProduct(item)}
-                          className="min-h-9 flex-row items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 active:bg-emerald-100"
-                        >
-                          <Feather name="coffee" size={13} color="#059669" />
-                          <Text className="ml-1.5 text-xs font-semibold text-emerald-700">
-                            Recipe (BOM)
-                          </Text>
-                        </Pressable>
-                      ) : null}
+                        Margin {item.grossMarginPercent ?? '0.00'}%
+                      </Text>
                     </View>
+                  </View>
 
-                    <View className="flex-row items-center gap-2">
-                      {item.isLowMargin ? (
+                  {/* Actions Footer */}
+                  {currentUser?.permissions.includes('products:manage') ? (
+                    <View className="mt-4 flex-row flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                      <View className="flex-row flex-wrap items-center gap-2">
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel={`Review suggested price for ${item.name}`}
                           onPress={() =>
                             router.push({
-                              pathname: '/product-form',
+                              pathname: '/product-variants',
                               params: {
-                                id: item.id,
-                                suggestedPrice: item.suggestedSellingPrice,
-                                targetMargin: item.targetMarginPercent,
+                                productId: item.id,
+                                name: item.name,
+                                baseUnit: item.unit ?? 'piece',
                               },
                             })
                           }
-                          className="min-h-9 flex-row items-center justify-center rounded-xl bg-amber-50 px-3 active:bg-amber-100"
+                          className="min-h-11 flex-row items-center justify-center rounded-xl bg-slate-100 px-3 active:bg-slate-200"
                         >
-                          <Feather name="trending-up" size={13} color="#B45309" />
-                          <Text className="ml-1.5 text-xs font-semibold text-amber-800">
-                            Review {formatMoney(item.suggestedSellingPrice)}
+                          <Feather name="copy" size={13} color="#334155" />
+                          <Text className="ml-1.5 text-xs font-semibold text-slate-700">
+                            Variants
                           </Text>
                         </Pressable>
-                      ) : null}
 
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                          item.status === 'active'
-                            ? `${item.name} is enabled. Tap to disable.`
-                            : `${item.name} is disabled. Tap to enable.`
-                        }
-                        disabled={statusMutation.isPending}
-                        onPress={() =>
-                          statusMutation.mutate({
-                            id: item.id,
-                            status: item.status === 'active' ? 'inactive' : 'active',
-                          })
-                        }
-                        className={`min-h-9 flex-row items-center justify-center rounded-xl px-3 ${
-                          item.status === 'active' ? 'bg-emerald-50' : 'bg-slate-100'
-                        }`}
-                      >
-                        <Text
-                          className={`text-xs font-semibold ${
-                            item.status === 'active' ? 'text-emerald-800' : 'text-slate-600'
+                        {isFoodService && item.inventoryRole !== 'ingredient' ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => setEditingRecipeProduct(item)}
+                            className="min-h-11 flex-row items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 active:bg-emerald-100"
+                          >
+                            <Feather name="coffee" size={13} color="#059669" />
+                            <Text className="ml-1.5 text-xs font-semibold text-emerald-700">
+                              Recipe (BOM)
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+
+                      <View className="flex-row items-center gap-2">
+                        {item.isLowMargin ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Review suggested price for ${item.name}`}
+                            onPress={() =>
+                              router.push({
+                                pathname: '/product-form',
+                                params: {
+                                  id: item.id,
+                                  suggestedPrice: item.suggestedSellingPrice,
+                                  targetMargin: item.targetMarginPercent,
+                                },
+                              })
+                            }
+                            className="min-h-11 flex-row items-center justify-center rounded-xl bg-amber-50 px-3 active:bg-amber-100"
+                          >
+                            <Feather name="trending-up" size={13} color="#B45309" />
+                            <Text className="ml-1.5 text-xs font-semibold text-amber-800">
+                              Review {formatMoney(item.suggestedSellingPrice)}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            item.status === 'active'
+                              ? `${item.name} is enabled. Tap to disable.`
+                              : `${item.name} is disabled. Tap to enable.`
+                          }
+                          disabled={statusMutation.isPending}
+                          onPress={() =>
+                            statusMutation.mutate({
+                              id: item.id,
+                              status: item.status === 'active' ? 'inactive' : 'active',
+                            })
+                          }
+                          className={`min-h-11 flex-row items-center justify-center rounded-xl px-3 ${
+                            item.status === 'active' ? 'bg-emerald-50' : 'bg-slate-100'
                           }`}
                         >
-                          {item.status === 'active' ? 'Enabled' : 'Disabled'}
-                        </Text>
-                      </Pressable>
+                          <Text
+                            className={`text-xs font-semibold ${
+                              item.status === 'active' ? 'text-emerald-800' : 'text-slate-600'
+                            }`}
+                          >
+                            {item.status === 'active' ? 'Enabled' : 'Disabled'}
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
-                  </View>
-                ) : null}
+                  ) : null}
+                </ExpandableSection>
               </View>
             );
           }}
@@ -992,9 +1068,7 @@ function ProductsContent() {
                       <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
                         <View
                           className={`h-5 w-5 items-center justify-center rounded border ${
-                            selected
-                              ? 'border-brand-700 bg-brand-700'
-                              : 'border-slate-300 bg-white'
+                            selected ? 'border-brand-700 bg-brand-700' : 'border-slate-300 bg-white'
                           }`}
                         >
                           {selected ? <Feather name="check" size={12} color="#FFFFFF" /> : null}
@@ -1012,7 +1086,9 @@ function ProductsContent() {
                           >
                             {filter.title}
                           </Text>
-                          <Text className="mt-0.5 text-xs text-slate-500">{filter.description}</Text>
+                          <Text className="mt-0.5 text-xs text-slate-500">
+                            {filter.description}
+                          </Text>
                         </View>
                       </View>
                       <Text

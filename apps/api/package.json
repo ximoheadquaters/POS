@@ -6,8 +6,10 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:local-fallback": "tsx src/local-fallback-server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
+    "start:local-fallback": "node dist/local-fallback-server.js",
     "seed:users": "tsx src/scripts/create-demo-users.ts",
     "platform:token:create": "tsx src/scripts/create-platform-token.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

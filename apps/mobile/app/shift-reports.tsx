@@ -1,11 +1,19 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { DateRangeCalendar } from '@/components/date-range-calendar';
-import { Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
+import { ShiftTabs, Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useBranchStore } from '@/store/branch';
@@ -169,8 +177,8 @@ function ShiftReportsContent() {
           </View>
           <Text className="text-xl font-bold text-slate-900">Module Access Disabled</Text>
           <Text className="mt-2 max-w-xs text-center text-xs leading-relaxed text-slate-500">
-            The Registers & Shifts module is disabled for your organization. Contact your administrator
-            or store owner to enable register management.
+            The Registers & Shifts module is disabled for your organization. Contact your
+            administrator or store owner to enable register management.
           </Text>
           <View className="mt-6 w-full max-w-xs">
             <Button title="Return To POS" onPress={() => router.push('/(tabs)/pos')} />
@@ -185,10 +193,10 @@ function ShiftReportsContent() {
       <Header
         title="Cash And Shift Reports"
         subtitle={`${rangeLabel} · ${branch?.name ?? 'All accessible branches'}`}
-        showBack
         backLabel="Reports"
         fallbackHref="/reports"
       />
+      <ShiftTabs active="history" />
       <View className="border-b border-slate-200 bg-white p-4">
         <Text className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Date Range
@@ -200,7 +208,7 @@ function ShiftReportsContent() {
             const active =
               period === 'custom'
                 ? customRange
-                : PERIOD_PRESETS.find((p) => p.key === period)?.getRange() ?? customRange;
+                : (PERIOD_PRESETS.find((p) => p.key === period)?.getRange() ?? customRange);
             setDraftFrom(active.from);
             setDraftTo(active.to);
             setDateRangeError('');
@@ -216,7 +224,9 @@ function ShiftReportsContent() {
             <Text className="text-sm font-semibold text-slate-950" numberOfLines={1}>
               {rangeLabel}
             </Text>
-            <Text className="mt-0.5 text-[11px] text-brand-800">Tap to pick dates on the calendar</Text>
+            <Text className="mt-0.5 text-[11px] text-brand-800">
+              Tap to pick dates on the calendar
+            </Text>
           </View>
           <Feather name="chevron-right" size={18} color="#1A593B" />
         </Pressable>
@@ -231,7 +241,9 @@ function ShiftReportsContent() {
                   selected ? 'bg-brand-700' : 'bg-slate-100 active:bg-slate-200'
                 }`}
               >
-                <Text className={`text-xs font-medium ${selected ? 'text-white' : 'text-slate-700'}`}>
+                <Text
+                  className={`text-xs font-medium ${selected ? 'text-white' : 'text-slate-700'}`}
+                >
                   {item.label}
                 </Text>
               </Pressable>
@@ -317,7 +329,7 @@ function ShiftReportsContent() {
       >
         <View className={`flex-1 items-center justify-center bg-black/40 ${phone ? 'p-3' : 'p-6'}`}>
           <View
-            className="max-h-[92%] w-full overflow-hidden rounded-3xl bg-white"
+            className="max-h-[92%] w-full overflow-hidden rounded-2xl bg-white"
             style={{ maxWidth: width >= 760 ? 720 : 440 }}
           >
             <ScrollView contentContainerClassName="gap-4 p-5" keyboardShouldPersistTaps="handled">
@@ -359,7 +371,9 @@ function ShiftReportsContent() {
                           isSel ? 'bg-brand-700' : 'bg-slate-50 active:bg-slate-100'
                         }`}
                       >
-                        <Text className={`text-xs font-semibold ${isSel ? 'text-white' : 'text-slate-700'}`}>
+                        <Text
+                          className={`text-xs font-semibold ${isSel ? 'text-white' : 'text-slate-700'}`}
+                        >
                           {p.label}
                         </Text>
                       </Pressable>

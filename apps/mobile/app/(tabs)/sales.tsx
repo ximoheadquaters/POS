@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
@@ -88,9 +88,13 @@ interface ResumedHeldSale {
 }
 
 export default function SalesHistoryScreen() {
+  const { width } = useWindowDimensions();
+  const phone = width < 640;
   const branch = useBranchStore((state) => state.activeBranch);
   const { showAlert } = useIosAlert();
   const queryClient = useQueryClient();
+  const [receiptSearch, setReceiptSearch] = useState('');
+  const [receiptPeriod, setReceiptPeriod] = useState<'all' | 'today' | '7d'>('all');
   const [activeTab, setActiveTab] = useState<'completed' | 'held' | 'voided'>('completed');
 
   // Query completed sales
@@ -183,6 +187,18 @@ export default function SalesHistoryScreen() {
   });
 
   const sales = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
+  // Presentation-only filtering of loaded receipts; pagination and requests stay unchanged.
+  const displayedSales = sales.filter((sale) => {
+    const matchesSearch = [sale.receiptNumber, sale.cashierName, ...(sale.paymentMethods ?? [])]
+      .join(' ')
+      .toLowerCase()
+      .includes(receiptSearch.trim().toLowerCase());
+    if (!matchesSearch || receiptPeriod === 'all') return matchesSearch;
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    if (receiptPeriod === '7d') from.setDate(from.getDate() - 6);
+    return Boolean(sale.completedAt && new Date(sale.completedAt) >= from);
+  });
   const heldSales = heldQuery.data ?? [];
   const voidedSales = useMemo(() => voidedQuery.data?.pages.flat() ?? [], [voidedQuery.data]);
 
@@ -191,18 +207,18 @@ export default function SalesHistoryScreen() {
       <Header title="Sales & Orders" subtitle={branch?.name} />
 
       {/* Tab Selector */}
-      <View className="pt-3 pb-2">
+      <View className={phone ? 'pb-1 pt-2' : 'pb-2 pt-3'}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerClassName="min-w-full px-4"
+          contentContainerClassName={`min-w-full ${phone ? 'px-3' : 'px-4'}`}
         >
           <View className="min-w-full flex-row rounded-2xl bg-slate-100 p-1">
             <Pressable
               accessibilityRole="button"
               onPress={() => setActiveTab('completed')}
-              className={`min-h-11 min-w-36 flex-1 flex-row items-center justify-center rounded-xl px-3 ${
-                activeTab === 'completed' ? 'bg-white shadow-xs' : 'active:bg-slate-200/50'
+              className={`min-h-11 ${phone ? 'min-w-0 px-2' : 'min-w-36 px-3'} flex-1 flex-row items-center justify-center rounded-xl ${
+                activeTab === 'completed' ? 'bg-white' : 'active:bg-slate-200/50'
               }`}
             >
               <Feather
@@ -211,17 +227,18 @@ export default function SalesHistoryScreen() {
                 color={activeTab === 'completed' ? '#1A593B' : '#64748B'}
               />
               <Text
-                className={`ml-2 text-sm ${activeTab === 'completed' ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}
+                numberOfLines={1}
+                className={`ml-1.5 ${phone ? 'text-[13px]' : 'text-sm'} ${activeTab === 'completed' ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}
               >
-                Completed Orders
+                {phone ? 'Completed' : 'Completed Orders'}
               </Text>
             </Pressable>
 
             <Pressable
               accessibilityRole="button"
               onPress={() => setActiveTab('held')}
-              className={`min-h-11 min-w-36 flex-1 flex-row items-center justify-center rounded-xl px-3 ${
-                activeTab === 'held' ? 'bg-white shadow-xs' : 'active:bg-slate-200/50'
+              className={`min-h-11 ${phone ? 'min-w-0 px-2' : 'min-w-36 px-3'} flex-1 flex-row items-center justify-center rounded-xl ${
+                activeTab === 'held' ? 'bg-white' : 'active:bg-slate-200/50'
               }`}
             >
               <Feather
@@ -230,17 +247,18 @@ export default function SalesHistoryScreen() {
                 color={activeTab === 'held' ? '#D97706' : '#64748B'}
               />
               <Text
-                className={`ml-2 text-sm ${activeTab === 'held' ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}
+                numberOfLines={1}
+                className={`ml-1.5 ${phone ? 'text-[13px]' : 'text-sm'} ${activeTab === 'held' ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}
               >
-                Held Sales ({heldSales.length})
+                {phone ? `Held (${heldSales.length})` : `Held Sales (${heldSales.length})`}
               </Text>
             </Pressable>
 
             <Pressable
               accessibilityRole="button"
               onPress={() => setActiveTab('voided')}
-              className={`min-h-11 min-w-40 flex-1 flex-row items-center justify-center rounded-xl px-3 ${
-                activeTab === 'voided' ? 'bg-white shadow-xs' : 'active:bg-slate-200/50'
+              className={`min-h-11 ${phone ? 'min-w-0 px-2' : 'min-w-40 px-3'} flex-1 flex-row items-center justify-center rounded-xl ${
+                activeTab === 'voided' ? 'bg-white' : 'active:bg-slate-200/50'
               }`}
             >
               <Feather
@@ -249,14 +267,53 @@ export default function SalesHistoryScreen() {
                 color={activeTab === 'voided' ? '#B91C1C' : '#64748B'}
               />
               <Text
-                className={`ml-2 text-sm ${activeTab === 'voided' ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}
+                numberOfLines={1}
+                className={`ml-1.5 ${phone ? 'text-[13px]' : 'text-sm'} ${activeTab === 'voided' ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}
               >
-                Voided / Discarded
+                {phone ? 'History' : 'Voided / Discarded'}
               </Text>
             </Pressable>
           </View>
         </ScrollView>
       </View>
+
+      {activeTab === 'completed' ? (
+        <View className={`gap-2 border-b border-slate-200 bg-white ${phone ? 'px-3 py-2' : 'px-4 py-3'}`}>
+          <TextInput
+            accessibilityLabel="Search loaded receipts"
+            placeholder="Search loaded receipts or cashier"
+            value={receiptSearch}
+            onChangeText={setReceiptSearch}
+            className="min-h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900"
+          />
+          <View className="flex-row flex-wrap gap-2">
+            {(
+              [
+                { key: 'all', label: 'All dates' },
+                { key: 'today', label: 'Today' },
+                { key: '7d', label: 'Last 7 days' },
+              ] as const
+            ).map((option) => (
+              <Pressable
+                key={option.key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: receiptPeriod === option.key }}
+                onPress={() => setReceiptPeriod(option.key)}
+                className={`min-h-10 justify-center rounded-xl ${phone ? 'flex-1 px-2' : 'px-3'} ${receiptPeriod === option.key ? 'bg-brand-50' : 'bg-slate-50'}`}
+              >
+                <Text numberOfLines={1} className={`${phone ? 'text-[13px]' : 'text-sm'} text-slate-700`}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {query.hasNextPage ? (
+            <Text className="text-xs text-slate-500">
+              Filters apply to loaded receipts. Load more below to include older sales.
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {activeTab === 'completed' ? (
         query.isLoading ? (
@@ -265,23 +322,45 @@ export default function SalesHistoryScreen() {
           <ErrorState message={query.error.message} retry={() => void query.refetch()} />
         ) : (
           <FlatList
-            data={sales}
+            data={displayedSales}
             keyExtractor={(item) => item.id}
-            contentContainerClassName="p-4 gap-3"
+            contentContainerClassName={phone ? 'gap-2 p-3' : 'gap-3 p-4'}
             onEndReached={() => query.hasNextPage && void query.fetchNextPage()}
+            ListFooterComponent={
+              query.hasNextPage ? (
+                <Button
+                  title={query.isFetchingNextPage ? 'Loading...' : 'Load more receipts'}
+                  variant="secondary"
+                  disabled={query.isFetchingNextPage}
+                  onPress={() => void query.fetchNextPage()}
+                />
+              ) : null
+            }
             ListEmptyComponent={
-              <EmptyState title="No Sales Yet" message="Completed sales will appear here." />
+              receiptSearch || receiptPeriod !== 'all' ? (
+                <EmptyState
+                  title="No matching receipts"
+                  message="Try another search or date range, or load more receipts."
+                />
+              ) : (
+                <EmptyState
+                  title="No sales yet"
+                  message="Complete a checkout and sales activity will appear here."
+                />
+              )
             }
             renderItem={({ item }) => (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`View receipt ${item.receiptNumber}`}
-                className="rounded-2xl border border-slate-100 bg-white p-4 active:border-brand-300 active:bg-brand-50 shadow-xs"
+                className={`rounded-2xl border border-slate-100 bg-white active:border-brand-300 active:bg-brand-50 ${
+                  phone ? 'p-3' : 'p-4'
+                }`}
                 onPress={() => router.push(`/sale/${item.id}`)}
               >
                 <View className="flex-row justify-between">
                   <Text className="font-bold text-slate-900">{item.receiptNumber}</Text>
-                  <Text className="text-lg font-black text-brand-700">
+                  <Text className="text-lg font-semibold text-brand-700">
                     {formatMoney(item.total)}
                   </Text>
                 </View>
@@ -313,9 +392,11 @@ export default function SalesHistoryScreen() {
           <FlatList
             data={heldSales}
             keyExtractor={(item) => item.id}
-            contentContainerClassName="p-4 gap-3"
+            contentContainerClassName={phone ? 'gap-2 p-3' : 'gap-3 p-4'}
             renderItem={({ item }) => (
-              <View className="rounded-2xl border border-amber-200/80 bg-white p-4 shadow-xs">
+              <View
+                className={`rounded-2xl border border-amber-200/80 bg-white ${phone ? 'p-3' : 'p-4'}`}
+              >
                 <View className="flex-row items-start justify-between">
                   <View className="flex-1 pr-3">
                     <View className="flex-row items-center gap-2">
@@ -344,7 +425,7 @@ export default function SalesHistoryScreen() {
                     </Text>
                   </View>
 
-                  <Text className="text-lg font-black text-amber-700">
+                  <Text className="text-lg font-semibold text-amber-700">
                     {formatMoney(item.total)}
                   </Text>
                 </View>
@@ -393,7 +474,7 @@ export default function SalesHistoryScreen() {
         <FlatList
           data={voidedSales}
           keyExtractor={(item) => item.id}
-          contentContainerClassName="p-4 gap-3"
+            contentContainerClassName={phone ? 'gap-2 p-3' : 'gap-3 p-4'}
           onEndReached={() => voidedQuery.hasNextPage && void voidedQuery.fetchNextPage()}
           ListEmptyComponent={
             <EmptyState
@@ -409,7 +490,9 @@ export default function SalesHistoryScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`View ${actionLabel.toLowerCase()} parked order ${item.receiptNumber}`}
                 onPress={() => router.push(`/sale/${item.id}`)}
-                className="rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50 shadow-xs"
+                className={`rounded-2xl border border-slate-200 bg-white active:bg-slate-50 ${
+                  phone ? 'p-3' : 'p-4'
+                }`}
               >
                 <View className="flex-row items-start justify-between gap-3">
                   <View className="flex-1">
@@ -451,7 +534,7 @@ export default function SalesHistoryScreen() {
                   </View>
 
                   <View className="items-end">
-                    <Text className="text-lg font-black text-slate-700">
+                    <Text className="text-lg font-semibold text-slate-700">
                       {formatMoney(item.total)}
                     </Text>
                     <Text className="mt-3 text-xs font-bold text-brand-700">View Details ›</Text>

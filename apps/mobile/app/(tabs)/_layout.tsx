@@ -1,32 +1,8 @@
 import { useEffect } from 'react';
 import { Redirect, Tabs } from 'expo-router';
-import { ActivityIndicator, Text, View, type ColorValue } from 'react-native';
-import { AppSidebarProvider } from '@/components/app-sidebar';
+import { ActivityIndicator, View } from 'react-native';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
-
-const Icon = ({
-  value,
-  color,
-  focused,
-}: {
-  value: string;
-  color: ColorValue;
-  focused: boolean;
-}) => (
-  <View
-    style={{
-      width: 30,
-      height: 26,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 10,
-      backgroundColor: focused ? '#DDEBE4' : 'transparent',
-    }}
-  >
-    <Text style={{ color, fontSize: 18, fontWeight: '600' }}>{value}</Text>
-  </View>
-);
 
 export default function TabLayout() {
   const { session, currentUser, loading } = useSession();
@@ -60,21 +36,11 @@ export default function TabLayout() {
     currentUser.modules.includes('dashboard') || currentUser.modules.includes('reports');
   const posEnabled = currentUser.modules.includes('pos');
   return (
-    <AppSidebarProvider>
-      <Tabs
+    <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#1A593B',
-          tabBarInactiveTintColor: '#4C4239',
           tabBarHideOnKeyboard: true,
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
-          tabBarStyle: {
-            height: 72,
-            paddingTop: 7,
-            paddingBottom: 9,
-            backgroundColor: '#FFFFFF',
-            borderTopColor: '#DDEBE4',
-          },
+          tabBarStyle: { display: 'none' },
         }}
       >
         <Tabs.Screen
@@ -82,7 +48,6 @@ export default function TabLayout() {
           options={{
             title: 'Dashboard',
             href: dashboardEnabled ? undefined : null,
-            tabBarIcon: (props) => <Icon value={'\u2302'} {...props} />,
           }}
         />
         <Tabs.Screen
@@ -90,7 +55,6 @@ export default function TabLayout() {
           options={{
             title: 'POS',
             href: posEnabled ? undefined : null,
-            tabBarIcon: (props) => <Icon value="+" {...props} />,
           }}
         />
         <Tabs.Screen
@@ -98,7 +62,6 @@ export default function TabLayout() {
           options={{
             title: 'Sales',
             href: null,
-            tabBarIcon: (props) => <Icon value="$" {...props} />,
           }}
         />
         <Tabs.Screen
@@ -106,7 +69,6 @@ export default function TabLayout() {
           options={{
             title: 'Stock',
             href: null,
-            tabBarIcon: (props) => <Icon value={'\u25A6'} {...props} />,
           }}
         />
         <Tabs.Screen
@@ -114,10 +76,8 @@ export default function TabLayout() {
           options={{
             title: 'More',
             href: null,
-            tabBarIcon: (props) => <Icon value={'\u2630'} {...props} />,
           }}
         />
       </Tabs>
-    </AppSidebarProvider>
   );
 }

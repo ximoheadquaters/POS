@@ -35,7 +35,7 @@ import { salesRouter } from './modules/sales/routes.js';
 import { settingsRouter } from './modules/settings/routes.js';
 import { stockTransfersRouter } from './modules/stock-transfers/routes.js';
 import { usersRouter } from './modules/users/routes.js';
-import { forbidden } from './shared/errors.js';
+import { forbidden, serviceUnavailable } from './shared/errors.js';
 import { sendData } from './shared/http.js';
 
 export interface AppDependencies {
@@ -43,10 +43,16 @@ export interface AppDependencies {
   verifyToken: VerifyToken;
   authActions: AuthActions;
   assetStorage?: AssetStorage;
+  /**
+   * Routes that require a server-only integration and therefore cannot safely
+   * run in the loopback fallback API.
+   */
+  disabledRoutes?: ReadonlyArray<'admin' | 'platform'>;
 }
 
 export function createApp(dependencies: AppDependencies) {
   const app = express();
+  const disabledRoutes = new Set(dependencies.disabledRoutes);
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(cors({ origin: true, credentials: false }));
@@ -104,8 +110,28 @@ export function createApp(dependencies: AppDependencies) {
     },
   );
   app.use('/api/v1/auth', auth);
-  app.use('/api/v1/platform', platformRouter(dependencies.database, dependencies.authActions));
-  app.use('/api/v1/admin', adminRouter(dependencies.database, dependencies.verifyToken));
+  const unavailableRoute = (area: string) =>
+    express.Router().use((_request, _response, next) =>
+      next(
+        serviceUnavailable(
+          'LOCAL_FALLBACK_LIMITED',
+          `${area} is unavailable while the local fallback API is running`,
+        ),
+      ),
+    );
+
+  app.use(
+    '/api/v1/platform',
+    disabledRoutes.has('platform')
+      ? unavailableRoute('Platform administration')
+      : platformRouter(dependencies.database, dependencies.authActions),
+  );
+  app.use(
+    '/api/v1/admin',
+    disabledRoutes.has('admin')
+      ? unavailableRoute('Platform administration')
+      : adminRouter(dependencies.database, dependencies.verifyToken),
+  );
 
   const protectedApi = express.Router();
   protectedApi.use(authenticate(dependencies.database, dependencies.verifyToken));

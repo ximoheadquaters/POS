@@ -15,7 +15,15 @@ import {
   type OrganizationProfileInput,
 } from '@ximo/shared';
 import { AppSidebarProvider } from '@/components/app-sidebar';
-import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
+import {
+  Button,
+  ErrorState,
+  ExpandableSection,
+  Field,
+  Header,
+  LoadingState,
+  Screen,
+} from '@/components/ui';
 import { api } from '@/lib/api';
 import {
   cacheRemoteOrganizationLogo,
@@ -94,7 +102,11 @@ function OrganizationContent() {
     queryFn: () => api<OrganizationUserSummary[]>('/users'),
     enabled: currentUser?.permissions?.includes('users:read') ?? false,
   });
-  const form = useForm<z.input<typeof organizationProfileSchema>, unknown, OrganizationProfileInput>({
+  const form = useForm<
+    z.input<typeof organizationProfileSchema>,
+    unknown,
+    OrganizationProfileInput
+  >({
     resolver: zodResolver(organizationProfileSchema),
     defaultValues: {
       name: '',
@@ -228,12 +240,11 @@ function OrganizationContent() {
   const enabledModules = Array.isArray(query.data?.enabledModules)
     ? query.data.enabledModules
     : (currentUser?.modules ?? []);
-  const fallbackBranches =
-    currentUser?.branches?.length
-      ? currentUser.branches
-      : activeBranch
-        ? [activeBranch]
-        : [];
+  const fallbackBranches = currentUser?.branches?.length
+    ? currentUser.branches
+    : activeBranch
+      ? [activeBranch]
+      : [];
   const branches =
     Array.isArray(query.data?.branches) && query.data.branches.length > 0
       ? query.data.branches
@@ -388,22 +399,36 @@ function OrganizationContent() {
                         <View className="flex-row flex-wrap gap-3">
                           {[
                             { key: 'retail', label: 'Retail', desc: 'Stores, Boutiques, Outlets' },
-                            { key: 'food_service', label: 'Food Service', desc: 'Restaurants, Cafes, Bakeries' },
-                            { key: 'hybrid', label: 'Retail + Food Service', desc: 'Hybrid Operations' },
+                            {
+                              key: 'food_service',
+                              label: 'Food Service',
+                              desc: 'Restaurants, Cafes, Bakeries',
+                            },
+                            {
+                              key: 'hybrid',
+                              label: 'Retail + Food Service',
+                              desc: 'Hybrid Operations',
+                            },
                           ].map((profile) => {
                             const selected = field.value === profile.key;
                             return (
                               <View
                                 key={profile.key}
                                 className={`flex-1 min-w-[200px] p-4 rounded-2xl border ${
-                                  selected ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-slate-50 opacity-60'
+                                  selected
+                                    ? 'border-brand-600 bg-brand-50'
+                                    : 'border-slate-200 bg-slate-50 opacity-60'
                                 }`}
                               >
                                 <View className="flex-row items-center justify-between">
-                                  <Text className={`font-semibold ${selected ? 'text-brand-950' : 'text-slate-700'}`}>
+                                  <Text
+                                    className={`font-semibold ${selected ? 'text-brand-950' : 'text-slate-700'}`}
+                                  >
                                     {profile.label}
                                   </Text>
-                                  {selected && <Feather name="check-circle" size={18} color="#1A593B" />}
+                                  {selected && (
+                                    <Feather name="check-circle" size={18} color="#1A593B" />
+                                  )}
                                 </View>
                                 <Text className="mt-1 text-xs text-slate-500">{profile.desc}</Text>
                               </View>
@@ -509,7 +534,10 @@ function OrganizationContent() {
                         const firstErrMsg = firstErrKey
                           ? (errors as any)[firstErrKey]?.message
                           : 'Please check required fields';
-                        appAlert('Validation error', String(firstErrMsg || 'Please check required fields'));
+                        appAlert(
+                          'Validation error',
+                          String(firstErrMsg || 'Please check required fields'),
+                        );
                       },
                     )}
                   />
@@ -521,14 +549,11 @@ function OrganizationContent() {
               </View>
             </View>
 
-            <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
-              <View className="border-b border-slate-100 p-5">
-                <Text className="font-semibold text-slate-950">Organization Identifiers</Text>
-                <Text className="mt-1 text-sm text-slate-500">
-                  Use the organization ID when contacting support or reviewing integrations.
-                </Text>
-              </View>
-              <View className="gap-3 p-5">
+            <ExpandableSection
+              title="Organization identifiers"
+              summary="Support and integration details"
+            >
+              <View className="gap-3">
                 <View className="rounded-xl bg-slate-50 p-3">
                   <Text className="text-xs uppercase tracking-wider text-slate-500">Slug</Text>
                   <Text selectable className="mt-1 font-medium text-slate-800">
@@ -544,9 +569,12 @@ function OrganizationContent() {
                   </Text>
                 </View>
               </View>
-            </View>
+            </ExpandableSection>
 
-            <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+            <ExpandableSection
+              title="Branches"
+              summary={`${activeBranchCount} active of ${branchCount} locations`}
+            >
               <View className="flex-row items-center border-b border-slate-100 p-5">
                 <View className="flex-1">
                   <Text className="font-semibold text-slate-950">Branches</Text>
@@ -593,7 +621,7 @@ function OrganizationContent() {
                   </View>
                 ) : null}
               </View>
-            </View>
+            </ExpandableSection>
 
             <View className="gap-3 md:flex-row">
               {currentUser?.permissions?.includes('users:read') ? (

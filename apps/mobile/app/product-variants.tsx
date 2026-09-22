@@ -41,7 +41,7 @@ function FormField({
         {label}
       </Text>
       <View
-        className={`min-h-12 justify-center rounded-xl border px-3 transition-all ${
+        className={`min-h-12 justify-center rounded-xl border px-3 ${
           focused
             ? 'border-brand-600 bg-white ring-2 ring-brand-200'
             : 'border-slate-200 bg-white'
@@ -151,7 +151,7 @@ function ProductChooserModal({
           </View>
 
           <View
-            className={`mb-3 flex-row items-center rounded-xl border px-3 py-2 transition-all ${
+            className={`mb-3 flex-row items-center rounded-xl border px-3 py-2 ${
               isSearchFocused
                 ? 'border-brand-600 bg-white ring-2 ring-brand-200'
                 : 'border-slate-300 bg-slate-50'

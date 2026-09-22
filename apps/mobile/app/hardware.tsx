@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HardwareModuleCode } from '@ximo/shared';
-import { Button, Header, LoadingState, Screen } from '@/components/ui';
+import { Button, ExpandableSection, Header, LoadingState, Screen } from '@/components/ui';
 import { ReceiptPrinterSetup } from '@/components/receipt-printer-setup';
 import { HARDWARE_CAPABILITIES } from '@/hardware/capabilities';
 import { getHardwareDriver, getHardwareStatuses } from '@/hardware/registry';
@@ -129,9 +129,12 @@ function HardwareContent() {
                 <Text className="text-base font-black text-brand-800">⚡</Text>
               </View>
               <View className="flex-1">
-                <Text className="text-xs font-bold text-brand-950">Hardware Integration Status</Text>
+                <Text className="text-xs font-bold text-brand-950">
+                  Hardware Integration Status
+                </Text>
                 <Text className="mt-0.5 text-xs text-slate-600 leading-relaxed">
-                  Modules are enabled by store administrators. Connect compatible drivers or devices to make them operational.
+                  Modules are enabled by store administrators. Connect compatible drivers or devices
+                  to make them operational.
                 </Text>
               </View>
             </View>
@@ -155,11 +158,15 @@ function HardwareContent() {
                     <View className="flex-row items-start justify-between">
                       <View className="mr-3 flex-1 flex-row items-start">
                         <View className="mr-3 h-11 w-11 items-center justify-center rounded-xl bg-slate-100">
-                          <Text className="text-base font-black text-slate-700">{capability.symbol}</Text>
+                          <Text className="text-base font-black text-slate-700">
+                            {capability.symbol}
+                          </Text>
                         </View>
                         <View className="flex-1">
                           <View className="flex-row flex-wrap items-center gap-2">
-                            <Text className="text-base font-bold text-slate-900">{capability.name}</Text>
+                            <Text className="text-base font-bold text-slate-900">
+                              {capability.name}
+                            </Text>
                             <View
                               className={`rounded-full px-2.5 py-0.5 ${
                                 ready
@@ -189,36 +196,38 @@ function HardwareContent() {
                       </View>
                     </View>
 
-                    {/* Driver details */}
-                    <View className="mt-3 rounded-xl bg-slate-50 p-3">
-                      <Text className="text-xs font-semibold text-slate-800">
-                        Driver: {status?.driverName ?? 'Standard Driver'}
-                      </Text>
-                      <Text className="mt-0.5 text-[11px] text-slate-500">{status?.detail}</Text>
-                    </View>
-
-                    {ready && capability.code !== 'receipt_printer' ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        disabled={test.isPending}
-                        onPress={() => test.mutate(capability.code)}
-                        className="mt-3.5 min-h-10 self-start flex-row items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-4 active:bg-brand-100"
+                    <View className="mt-3">
+                      <ExpandableSection
+                        title="Device settings"
+                        summary={`Driver: ${status?.driverName ?? 'Standard driver'}`}
+                        defaultExpanded={ready && capability.code === 'receipt_printer'}
                       >
-                        <Text className="text-xs font-bold text-brand-800">Test Device</Text>
-                      </Pressable>
-                    ) : null}
+                        <Text className="text-xs text-slate-500">{status?.detail}</Text>
+                        {ready && capability.code !== 'receipt_printer' ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={test.isPending}
+                            onPress={() => test.mutate(capability.code)}
+                            className="mt-3 min-h-11 self-start flex-row items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-4 active:bg-brand-100"
+                          >
+                            <Text className="text-xs font-bold text-brand-800">Test device</Text>
+                          </Pressable>
+                        ) : null}
 
-                    {capability.code === 'receipt_printer' && status?.state !== 'unavailable' ? (
-                      <ReceiptPrinterSetup
-                        value={printerSettings}
-                        onChange={setPrinterSettings}
-                        onSave={() => savePrinter.mutate()}
-                        onTest={() => test.mutate('receipt_printer')}
-                        saving={savePrinter.isPending}
-                        testing={test.isPending}
-                        saveLabel={saveLabel}
-                      />
-                    ) : null}
+                        {capability.code === 'receipt_printer' &&
+                        status?.state !== 'unavailable' ? (
+                          <ReceiptPrinterSetup
+                            value={printerSettings}
+                            onChange={setPrinterSettings}
+                            onSave={() => savePrinter.mutate()}
+                            onTest={() => test.mutate('receipt_printer')}
+                            saving={savePrinter.isPending}
+                            testing={test.isPending}
+                            saveLabel={saveLabel}
+                          />
+                        ) : null}
+                      </ExpandableSection>
+                    </View>
                   </View>
                 );
               })}

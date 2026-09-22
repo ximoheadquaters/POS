@@ -109,7 +109,7 @@ function PurchasingContent() {
         }
       />
       <View className="border-b border-slate-200 bg-white px-4 pt-3">
-        <View className="self-center w-full max-w-5xl flex-row gap-2">
+        <View className="self-center w-full max-w-5xl flex-row flex-wrap gap-2">
           {(
             [
               ['orders', 'Purchase orders', 'file-text'],
@@ -119,8 +119,10 @@ function PurchasingContent() {
           ).map(([key, label, icon]) => (
             <Pressable
               key={key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: section === key }}
               onPress={() => setSection(key)}
-              className={`min-h-12 flex-1 flex-row items-center justify-center rounded-t-xl px-3 ${
+              className={`min-h-11 min-w-[100px] flex-1 flex-row flex-wrap items-center justify-center rounded-t-xl px-2 ${
                 section === key ? 'border-b-2 border-brand-700 bg-brand-50' : ''
               }`}
             >

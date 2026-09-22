@@ -228,7 +228,11 @@ function transactionIdForRow(table: ReportTableDefinition, rowIndex: number): st
   return table.rowMeta?.[rowIndex]?.transactionId;
 }
 
-function rowSortValue(table: ReportTableDefinition, entry: ReportRowEntry, columnIndex: number): ReportCell {
+function rowSortValue(
+  table: ReportTableDefinition,
+  entry: ReportRowEntry,
+  columnIndex: number,
+): ReportCell {
   if (isDateColumn(table.columns[columnIndex] ?? '')) {
     return table.rowMeta?.[entry.rowIndex]?.sortValue ?? entry.row[columnIndex];
   }
@@ -243,7 +247,9 @@ function statusTone(value: ReportCell): {
   textClass: string;
 } {
   const normalized = cellText(value).toLowerCase();
-  if (/failed|cancelled|canceled|voided|overdue|out of stock|flagged|denied|error/.test(normalized)) {
+  if (
+    /failed|cancelled|canceled|voided|overdue|out of stock|flagged|denied|error/.test(normalized)
+  ) {
     return {
       kind: 'danger',
       icon: 'x',
@@ -328,7 +334,9 @@ function TransactionAtomicDetails({ saleId }: { saleId: string }) {
       const params = new URLSearchParams();
       if (branch?.id) params.set('branchId', branch.id);
       const query = params.toString();
-      return api<SaleTransactionDetail>(`/reports/transactions/${saleId}${query ? `?${query}` : ''}`);
+      return api<SaleTransactionDetail>(
+        `/reports/transactions/${saleId}${query ? `?${query}` : ''}`,
+      );
     },
   });
 
@@ -479,24 +487,24 @@ function CompactReportTable({
           </>
         );
         return (
-        <View
-          key={`${table.id}-compact-${entry.key}`}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
-        >
-          {transactionId ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`View Atomic Values For ${cellText(row[0])}`}
-              onPress={() => onToggleRow(entry)}
-              className="active:bg-slate-50"
-            >
-              {body}
-            </Pressable>
-          ) : (
-            body
-          )}
-          {transactionId && expanded ? <TransactionAtomicDetails saleId={transactionId} /> : null}
-        </View>
+          <View
+            key={`${table.id}-compact-${entry.key}`}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+          >
+            {transactionId ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`View Atomic Values For ${cellText(row[0])}`}
+                onPress={() => onToggleRow(entry)}
+                className="active:bg-slate-50"
+              >
+                {body}
+              </Pressable>
+            ) : (
+              body
+            )}
+            {transactionId && expanded ? <TransactionAtomicDetails saleId={transactionId} /> : null}
+          </View>
         );
       })}
     </View>
@@ -694,7 +702,7 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
                         accessibilityRole="button"
                         accessibilityState={{ selected }}
                         onPress={() => toggleMultiFilter(category, setCategoryFilters)}
-                        className={`min-h-9 justify-center rounded-lg border px-3 ${
+                        className={`min-h-11 justify-center rounded-lg border px-3 ${
                           selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
                         }`}
                       >
@@ -728,7 +736,7 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
                         accessibilityRole="button"
                         accessibilityState={{ selected }}
                         onPress={() => toggleMultiFilter(brand, setBrandFilters)}
-                        className={`min-h-9 justify-center rounded-lg border px-3 ${
+                        className={`min-h-11 justify-center rounded-lg border px-3 ${
                           selected ? 'border-brand-700 bg-brand-700' : 'border-slate-200 bg-white'
                         }`}
                       >
@@ -775,7 +783,7 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
                   onChangeText={(value) => setColumnFilter(columnIndex, value)}
                   placeholder={`Search ${column}`}
                   placeholderTextColor="#94A3B8"
-                  className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900"
+                  className="min-h-11 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900"
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
@@ -953,7 +961,9 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
                 ) : (
                   rowBody
                 )}
-                {transactionId && expanded ? <TransactionAtomicDetails saleId={transactionId} /> : null}
+                {transactionId && expanded ? (
+                  <TransactionAtomicDetails saleId={transactionId} />
+                ) : null}
               </View>
             );
           })}
@@ -1090,7 +1100,6 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
       <Header
         title="Reports"
         subtitle={branch?.name ?? 'Select a branch'}
-        showBack={!phone}
         backLabel="More"
         fallbackHref="/(tabs)/more"
       />
@@ -1144,7 +1153,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
                       accessibilityRole="tab"
                       accessibilityState={{ selected }}
                       onPress={() => router.replace(`/reports/${item.id}` as never)}
-                      className={`min-h-10 flex-row items-center rounded-xl px-3 ${selected ? 'bg-brand-700' : 'bg-white'}`}
+                      className={`min-h-11 flex-row items-center rounded-xl px-3 ${selected ? 'bg-brand-700' : 'bg-white'}`}
                     >
                       <Feather
                         name={item.icon}
@@ -1177,7 +1186,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
                   <Pressable
                     key={id}
                     onPress={() => setPeriod(id)}
-                    className={`min-h-9 justify-center rounded-lg px-3 ${period === id ? 'bg-[#E8F5EE]' : 'bg-white'}`}
+                    className={`min-h-11 justify-center rounded-lg px-3 ${period === id ? 'bg-[#E8F5EE]' : 'bg-white'}`}
                   >
                     <Text
                       className={`text-xs font-medium ${period === id ? 'text-brand-800' : 'text-slate-500'}`}
@@ -1192,7 +1201,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
                     setCalendarSession((value) => value + 1);
                     setCustomVisible(true);
                   }}
-                  className={`min-h-9 flex-row items-center justify-center rounded-lg px-3 ${period === 'custom' ? 'bg-[#E8F5EE]' : 'bg-white'}`}
+                  className={`min-h-11 flex-row items-center justify-center rounded-lg px-3 ${period === 'custom' ? 'bg-[#E8F5EE]' : 'bg-white'}`}
                 >
                   <Feather name="calendar" size={13} color="#1A593B" />
                   <Text className="ml-2 text-xs font-medium text-slate-600">Custom</Text>
@@ -1212,7 +1221,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
                   <Pressable
                     key={id}
                     onPress={() => setComparison(id)}
-                    className={`min-h-9 justify-center rounded-lg px-3 ${comparison === id ? 'bg-[#E8F5EE]' : 'bg-white'}`}
+                    className={`min-h-11 justify-center rounded-lg px-3 ${comparison === id ? 'bg-[#E8F5EE]' : 'bg-white'}`}
                   >
                     <Text
                       className={`text-xs font-medium ${comparison === id ? 'text-brand-800' : 'text-slate-500'}`}
@@ -1283,10 +1292,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
         <View className="flex-1 items-center justify-center bg-black/40 p-3 md:p-6">
           <Pressable className="absolute inset-0" onPress={() => setCustomVisible(false)} />
           <View className="max-h-[92%] w-full max-w-[440px] overflow-hidden rounded-2xl bg-white">
-            <ScrollView
-              contentContainerClassName="p-4 md:p-5"
-              showsVerticalScrollIndicator={false}
-            >
+            <ScrollView contentContainerClassName="p-4 md:p-5" showsVerticalScrollIndicator={false}>
               <View className="flex-row items-start justify-between gap-3">
                 <View className="min-w-0 flex-1">
                   <Text className="text-lg font-semibold text-slate-900">Select Date Range</Text>

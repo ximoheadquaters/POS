@@ -117,7 +117,6 @@ function SettingsContent() {
         <Header
           title="Store Settings"
           subtitle="Loading business configuration…"
-          showBack
           backLabel="More"
           fallbackHref="/(tabs)/more"
         />
@@ -147,10 +146,11 @@ function SettingsContent() {
         title="Store Settings"
         subtitle={
           editable
-            ? 'Business profile, checkout taxes, receipt design & stock rules'
+            ? form.formState.isDirty
+              ? 'Unsaved changes - Save when you are ready'
+              : 'Profile, taxes, stock and receipts'
             : 'Read-only business configuration'
         }
-        showBack
         backLabel="More"
         fallbackHref="/(tabs)/more"
         action={
@@ -189,7 +189,7 @@ function SettingsContent() {
                 key={tab.id}
                 accessibilityRole="button"
                 onPress={() => setActiveTab(tab.id as any)}
-                className={`min-h-10 flex-row items-center rounded-xl px-3 py-2 transition-all ${
+                className={`min-h-10 flex-row items-center rounded-xl px-3 py-2 ${
                   isActive ? 'bg-emerald-800' : 'bg-slate-100 active:bg-slate-200'
                 }`}
               >
@@ -261,7 +261,7 @@ function SettingsContent() {
                             key={c.value}
                             disabled={!editable}
                             onPress={() => field.onChange(c.value)}
-                            className={`flex-row items-center rounded-xl border px-3 py-2.5 transition-all ${
+                            className={`flex-row items-center rounded-xl border px-3 py-2.5 ${
                               isSelected
                                 ? 'border-emerald-600 bg-emerald-50/90 shadow-2xs'
                                 : 'border-slate-200 bg-white active:bg-slate-50'
@@ -298,7 +298,7 @@ function SettingsContent() {
                             key={tz.value}
                             disabled={!editable}
                             onPress={() => field.onChange(tz.value)}
-                            className={`rounded-xl border px-3 py-2 transition-all ${
+                            className={`rounded-xl border px-3 py-2 ${
                               isSelected
                                 ? 'border-emerald-600 bg-emerald-50/90 shadow-2xs'
                                 : 'border-slate-200 bg-white active:bg-slate-50'
@@ -504,7 +504,7 @@ function SettingsContent() {
                             key={method}
                             disabled={!editable}
                             onPress={toggleMethod}
-                            className={`flex-row items-center justify-between rounded-xl border p-3.5 transition-all ${
+                            className={`flex-row items-center justify-between rounded-xl border p-3.5 ${
                               isChecked ? cfg.bg : 'border-slate-200 bg-white active:bg-slate-50'
                             }`}
                           >
