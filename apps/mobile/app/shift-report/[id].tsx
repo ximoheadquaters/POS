@@ -151,12 +151,7 @@ function ShiftReportDetailContent() {
                 <Text numberOfLines={1} className="min-w-0 flex-1 text-xs capitalize text-slate-500">
                   {new Date(sale.completedAt).toLocaleString()} · {sale.status.replace('_', ' ')}
                 </Text>
-                <View className="flex-row items-center gap-2">
-                  {sale.status === 'completed' ? (
-                    <Text className="text-sm font-semibold text-brand-700">{formatMoney(sale.total)}</Text>
-                  ) : null}
-                  <Text className="text-xs font-semibold text-brand-700">View</Text>
-                </View>
+                <Text className="shrink-0 text-xs font-semibold text-brand-700">View</Text>
               </View>
             </Pressable>
           ))

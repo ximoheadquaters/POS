@@ -332,7 +332,7 @@ export default function InventoryScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Adjust stock for ${item.name}`}
-                className={`flex-row items-center rounded-2xl border border-slate-100 bg-white active:border-brand-300 active:bg-brand-50 ${
+                className={`rounded-2xl border border-slate-200 bg-white active:border-brand-300 active:bg-brand-50 ${
                   phone ? 'p-3' : 'p-4'
                 }`}
                 onPress={() =>
@@ -354,36 +354,42 @@ export default function InventoryScreen() {
                   })
                 }
               >
-                <View className="flex-1">
-                  <Text className="font-semibold text-slate-900">{item.name}</Text>
-                  <Text className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs text-slate-500`}>{item.sku}</Text>
-                  <Text className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs font-medium text-slate-500`}>
-                    {item.inventoryRole === 'ingredient'
-                      ? 'Raw ingredient'
-                      : item.inventoryRole === 'both'
-                        ? 'POS + ingredient'
-                        : 'Sellable product'}
-                  </Text>
-                  {breakdown ? (
-                    <Text className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs font-medium text-brand-700`}>{breakdown}</Text>
-                  ) : null}
+                <View className="flex-row items-start">
+                  <View className={`mr-3 items-center justify-center rounded-xl bg-slate-100 ${phone ? 'h-10 w-10' : 'h-11 w-11'}`}>
+                    <Feather name="package" size={phone ? 18 : 20} color="#64748B" />
+                  </View>
+                  <View className="min-w-0 flex-1 pr-2">
+                    <Text numberOfLines={1} className="font-semibold text-slate-900">{item.name}</Text>
+                    <Text numberOfLines={1} className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs text-slate-500`}>{item.sku}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color="#94A3B8" />
                 </View>
-                <View
-                  className={`flex-row items-center rounded-xl border border-slate-200 bg-slate-50 ${
-                    phone ? 'gap-1.5 px-3 py-1.5' : 'gap-2 px-4 py-2'
-                  }`}
-                >
-                  <View className="relative">
-                    <Feather name={status.icon} size={phone ? 16 : 18} color="#64748B" />
-                    {status.needsAlert ? (
-                      <View className="absolute -right-1.5 -top-1.5 h-3 w-3 items-center justify-center rounded-full bg-slate-600">
-                        <Text className="text-[9px] font-bold leading-none text-white">!</Text>
-                      </View>
+                <View className="mt-3 flex-row items-center justify-between border-t border-slate-100 pt-2.5">
+                  <View className="min-w-0 flex-1 pr-3">
+                    <Text numberOfLines={1} className="text-xs font-medium text-slate-500">
+                      {item.inventoryRole === 'ingredient'
+                        ? 'Raw ingredient'
+                        : item.inventoryRole === 'both'
+                          ? 'POS + ingredient'
+                          : 'Sellable product'}
+                    </Text>
+                    {breakdown ? (
+                      <Text numberOfLines={1} className="mt-0.5 text-xs font-medium text-brand-700">{breakdown}</Text>
                     ) : null}
                   </View>
-                  <Text className={`${phone ? 'text-sm' : 'text-base'} font-semibold text-slate-700`}>
-                    {status.label}
-                  </Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <View className="relative">
+                      <Feather name={status.icon} size={phone ? 15 : 16} color="#64748B" />
+                      {status.needsAlert ? (
+                        <View className="absolute -right-1.5 -top-1.5 h-3 w-3 items-center justify-center rounded-full bg-slate-600">
+                          <Text className="text-[9px] font-bold leading-none text-white">!</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text className={`${phone ? 'text-sm' : 'text-base'} font-semibold text-slate-700`}>
+                      {status.label}
+                    </Text>
+                  </View>
                 </View>
               </Pressable>
             );
