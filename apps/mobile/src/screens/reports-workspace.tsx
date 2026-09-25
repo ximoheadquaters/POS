@@ -337,6 +337,7 @@ function DonutChart({
   totalLabel = 'Total',
   segments,
   onSegmentPress,
+  stacked = false,
 }: {
   total: number | string;
   totalLabel?: string;
@@ -353,6 +354,7 @@ function DonutChart({
     percentage: number;
     note?: string;
   }) => void;
+  stacked?: boolean;
 }) {
   const size = 188;
   const strokeWidth = 22;
@@ -363,8 +365,11 @@ function DonutChart({
   let cumulativePercent = 0;
 
   return (
-    <View className="flex-row flex-wrap items-center gap-5">
-      <View className="relative items-center justify-center" style={{ width: size, height: size }}>
+    <View className={`items-center gap-5 ${stacked ? 'flex-col' : 'flex-row flex-wrap'}`}>
+      <View
+        className="relative items-center justify-center"
+        style={{ width: size, height: size, alignSelf: stacked ? 'center' : 'auto' }}
+      >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           <circle
             cx={size / 2}
@@ -406,7 +411,7 @@ function DonutChart({
         </View>
       </View>
 
-      <View className="min-w-[180px] flex-1 justify-center gap-3.5">
+      <View className={`${stacked ? 'w-full' : 'min-w-[180px] flex-1'} justify-center gap-3.5`}>
         {segments.map((seg, i) => {
           const row = (
             <View className="gap-1.5 px-1 py-0.5">
@@ -2741,6 +2746,7 @@ function OverviewReport({
 }) {
   const { width } = useWindowDimensions();
   const stackedPanels = width < 960;
+  const isPhone = width < 640;
   const { currentUser } = useSession();
   const permissions = currentUser?.permissions ?? [];
   const canViewCost = permissions.includes('reports:view_cost');
@@ -3206,8 +3212,8 @@ function OverviewReport({
         title="Sales Mix"
         subtitle={
           useProductMix
-            ? 'Product share and top sellers by gross sales'
-            : 'Category share and top sellers by gross sales'
+            ? 'How product sales were distributed in this period'
+            : 'How category sales were distributed in this period'
         }
       >
         <View className="gap-5">
@@ -3237,6 +3243,7 @@ function OverviewReport({
                 total={wheelTotal}
                 totalLabel="Sold"
                 segments={wheelSegments}
+                stacked={isPhone}
                 onSegmentPress={(seg) => {
                   if (useProductMix) {
                     setSection('products');
@@ -3260,7 +3267,10 @@ function OverviewReport({
 
           <View className="border-t border-slate-100 pt-4">
             <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-sm font-semibold text-slate-800">Top Products</Text>
+              <View>
+                <Text className="text-sm font-semibold text-slate-800">Top Products</Text>
+                <Text className="mt-0.5 text-xs text-slate-500">Best sellers for the selected period</Text>
+              </View>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setSection('products')}
@@ -5631,9 +5641,11 @@ function ReportsContent({
   }, []);
   const [period, setPeriod] = useState<ReportPeriod>('30d');
   const [section, setSection] = useState<ReportSection>(initialSection);
+  const [sectionPickerVisible, setSectionPickerVisible] = useState(false);
   useEffect(() => {
     setSection(initialSection);
   }, [initialSection]);
+  const activeSection = visibleSections.find((item) => item.key === section) ?? visibleSections[0];
   const [dateRangeVisible, setDateRangeVisible] = useState(false);
   const [calendarSession, setCalendarSession] = useState(0);
   const [customRange, setCustomRange] = useState(defaultCustomRange);
@@ -5915,42 +5927,24 @@ function ReportsContent({
                 </View>
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className="flex-row gap-2 pb-1">
-                  {visibleSections.map((item) => {
-                    const selected = item.key === section;
-                    return (
-                      <Pressable
-                        key={item.key}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        onPress={() => {
-                          setSection(item.key);
-                          setActiveMetricDrilldown(null);
-                        }}
-                        className={`min-h-11 flex-row items-center rounded-2xl border px-4 ${
-                          selected
-                            ? 'border-brand-600 bg-brand-700'
-                            : 'border-slate-200 bg-white'
-                        }`}
-                      >
-                        <Feather
-                          name={item.icon}
-                          size={15}
-                          color={selected ? '#FFFFFF' : '#64748B'}
-                        />
-                        <Text
-                          className={`ml-2 text-sm font-semibold ${
-                            selected ? 'text-white' : 'text-slate-600'
-                          }`}
-                        >
-                          {phone ? item.shortLabel : item.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Choose report section"
+                accessibilityState={{ expanded: sectionPickerVisible }}
+                onPress={() => setSectionPickerVisible(true)}
+                className="min-h-12 flex-row items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 active:bg-slate-100"
+              >
+                <View className="h-8 w-8 items-center justify-center rounded-lg bg-brand-50">
+                  <Feather name={activeSection?.icon ?? 'bar-chart-2'} size={16} color="#1A593B" />
                 </View>
-              </ScrollView>
+                <View className="ml-3 flex-1">
+                  <Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Report view</Text>
+                  <Text className="mt-0.5 text-sm font-semibold text-slate-900">
+                    {activeSection?.label ?? 'Reports'}
+                  </Text>
+                </View>
+                <Feather name="chevron-down" size={18} color="#64748B" />
+              </Pressable>
             </View>
           ) : null}
 
@@ -6041,6 +6035,69 @@ function ReportsContent({
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={sectionPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSectionPickerVisible(false)}
+      >
+        <View className="flex-1 items-center justify-end bg-black/40 p-3 sm:justify-center sm:p-6">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close report sections"
+            onPress={() => setSectionPickerVisible(false)}
+            className="absolute inset-0"
+          />
+          <View className="z-10 w-full max-w-md rounded-3xl bg-white p-4 shadow-xl">
+            <View className="mb-2 flex-row items-center justify-between px-1 py-2">
+              <View>
+                <Text className="text-base font-semibold text-slate-950">Choose report</Text>
+                <Text className="mt-0.5 text-xs text-slate-500">Switch to the report you need.</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={() => setSectionPickerVisible(false)}
+                className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
+              >
+                <Feather name="x" size={18} color="#475569" />
+              </Pressable>
+            </View>
+            <View className="gap-1">
+              {visibleSections.map((item) => {
+                const selected = item.key === section;
+                return (
+                  <Pressable
+                    key={item.key}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      setSection(item.key);
+                      setActiveMetricDrilldown(null);
+                      setSectionPickerVisible(false);
+                    }}
+                    className={`flex-row items-center rounded-2xl px-3 py-3 ${
+                      selected ? 'bg-brand-50' : 'active:bg-slate-50'
+                    }`}
+                  >
+                    <View className={`h-9 w-9 items-center justify-center rounded-xl ${selected ? 'bg-brand-700' : 'bg-slate-100'}`}>
+                      <Feather name={item.icon} size={17} color={selected ? '#FFFFFF' : '#64748B'} />
+                    </View>
+                    <View className="ml-3 flex-1">
+                      <Text className={`text-sm ${selected ? 'font-semibold text-brand-900' : 'font-medium text-slate-800'}`}>
+                        {item.label}
+                      </Text>
+                      <Text numberOfLines={1} className="mt-0.5 text-xs text-slate-500">{item.description}</Text>
+                    </View>
+                    {selected ? <Feather name="check" size={17} color="#1A593B" /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={exportMenuVisible}
