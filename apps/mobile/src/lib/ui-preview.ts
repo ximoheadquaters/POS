@@ -199,6 +199,21 @@ const completedSales = [
   },
 ];
 
+const previewShift = {
+  id: 'preview-shift-main-counter',
+  status: 'open',
+  openedAt: new Date(Date.now() - 4 * 3_600_000).toISOString(),
+  branchName: 'Main Branch',
+  registerName: 'Main Counter',
+  cashierName: 'Alex Rivera',
+  cashSales: '150.00',
+  cashRefunds: '0.00',
+  expectedCash: '150.00',
+  actualCash: '150.00',
+  variance: '0.00',
+  transactions: completedSales.length,
+};
+
 /** Returns data shaped like the API for local UI review only. */
 export function previewApiResponse<T>(path: string, method = 'GET'): T {
   const pathname = path.split('?')[0] ?? path;
@@ -237,6 +252,34 @@ export function previewApiResponse<T>(path: string, method = 'GET'): T {
           return { date: date.toISOString().slice(0, 10), sales: String(860 + index * 210), transactions: 4 + index };
         }),
       },
+    } as T;
+  }
+  if (pathname === '/reports/shifts') {
+    return {
+      summary: {
+        shiftCount: 1,
+        openShiftCount: 1,
+        cashSales: '150.00',
+        cashRefunds: '0.00',
+        cashIn: '0.00',
+        cashOut: '0.00',
+        expectedCash: '150.00',
+        actualCash: '150.00',
+        variance: '0.00',
+      },
+      shifts: [previewShift],
+      total: 1,
+    } as T;
+  }
+  if (pathname.startsWith('/reports/shifts/')) {
+    return {
+      ...previewShift,
+      startingCash: '0.00',
+      salesTotal: '635.00',
+      movements: [],
+      sales: completedSales,
+      payments: [{ method: 'cash', payments: '150.00', refunds: '0.00' }],
+      refunds: [],
     } as T;
   }
   if (pathname === '/products') return products as T;

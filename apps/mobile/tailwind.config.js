@@ -4,6 +4,12 @@ module.exports = {
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
+      boxShadow: {
+        sm: '0 1px 2px rgba(15, 23, 42, 0.05)',
+        lg: '0 6px 14px rgba(15, 23, 42, 0.08)',
+        xl: '0 10px 22px rgba(15, 23, 42, 0.10)',
+        '2xl': '0 14px 30px rgba(15, 23, 42, 0.12)',
+      },
       colors: {
         brand: {
           50: '#F1F7F4',

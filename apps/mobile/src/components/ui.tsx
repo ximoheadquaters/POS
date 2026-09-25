@@ -118,22 +118,30 @@ export function Field({
   error,
   className,
   textAlignVertical,
+  rightAccessory,
   ...props
-}: TextInputProps & { label: string; error?: string }) {
+}: TextInputProps & { label: string; error?: string; rightAccessory?: ReactNode }) {
   const isParagraph = Boolean(props.multiline);
 
   return (
     <View className="mb-3">
       {label ? <Text className="mb-1.5 text-sm font-medium text-slate-600">{label}</Text> : null}
-      <TextInput
-        className={`min-h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 focus:border-brand-600 focus:bg-white ${
-          isParagraph ? 'pt-4 pb-3' : ''
-        } ${className ?? ''}`}
-        placeholderTextColor="#94A3B8"
-        selectionColor="#1A593B"
-        textAlignVertical={textAlignVertical ?? (isParagraph ? 'top' : undefined)}
-        {...props}
-      />
+      <View className="relative">
+        <TextInput
+          className={`min-h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 focus:border-brand-600 focus:bg-white ${
+            isParagraph ? 'pt-4 pb-3' : ''
+          } ${rightAccessory ? 'pr-12' : ''} ${className ?? ''}`}
+          placeholderTextColor="#94A3B8"
+          selectionColor="#1A593B"
+          textAlignVertical={textAlignVertical ?? (isParagraph ? 'top' : undefined)}
+          {...props}
+        />
+        {rightAccessory ? (
+          <View className="absolute bottom-0 right-0 top-0 items-center justify-center pr-3">
+            {rightAccessory}
+          </View>
+        ) : null}
+      </View>
       {error ? <Text className="mt-1 text-xs font-medium text-red-600">{error}</Text> : null}
     </View>
   );

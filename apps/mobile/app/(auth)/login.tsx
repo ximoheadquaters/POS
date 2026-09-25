@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
+import Feather from '@expo/vector-icons/Feather';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginInput } from '@ximo/shared';
 import { api, ApiError } from '@/lib/api';
@@ -28,6 +29,7 @@ export default function LoginScreen() {
   const { refreshUser } = useSession();
   const [serverError, setServerError] = useState('');
   const [recoveryMessage, setRecoveryMessage] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const {
     control,
     handleSubmit,
@@ -141,11 +143,23 @@ export default function LoginScreen() {
                     placeholder="Enter your password"
                     className="min-h-12"
                     autoComplete="current-password"
-                    secureTextEntry
+                    secureTextEntry={!passwordVisible}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
                     error={errors.password?.message}
+                    rightAccessory={
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                        accessibilityState={{ selected: passwordVisible }}
+                        hitSlop={8}
+                        onPress={() => setPasswordVisible((visible) => !visible)}
+                        className="h-9 w-9 items-center justify-center rounded-lg active:bg-slate-100"
+                      >
+                        <Feather name={passwordVisible ? 'eye-off' : 'eye'} size={18} color="#64748B" />
+                      </Pressable>
+                    }
                   />
                 )}
               />

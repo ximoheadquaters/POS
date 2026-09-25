@@ -166,6 +166,7 @@ function ShiftReportsContent() {
       ),
     enabled: Boolean(isModuleEnabled && branch?.id),
   });
+  const summary = query.data?.summary;
 
   if (!isModuleEnabled) {
     return (
@@ -197,7 +198,7 @@ function ShiftReportsContent() {
         fallbackHref="/reports"
       />
       <ShiftTabs active="history" />
-      <View className="border-b border-slate-200 bg-white p-4">
+      <View className={`border-b border-slate-200 bg-white ${phone ? 'px-3 py-3' : 'p-4'}`}>
         <Text className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Date Range
         </Text>
@@ -250,17 +251,20 @@ function ShiftReportsContent() {
             );
           })}
         </View>
-        {query.data ? (
-          <View className="mt-4 flex-row flex-wrap gap-2">
+        {summary ? (
+          <View className={`mt-4 flex-row flex-wrap ${phone ? 'gap-2' : 'gap-2.5'}`}>
             {[
-              ['Cash sales', query.data.summary.cashSales],
-              ['Cash refunds', query.data.summary.cashRefunds],
-              ['Cash in', query.data.summary.cashIn],
-              ['Cash out', query.data.summary.cashOut],
-              ['Counted cash', query.data.summary.actualCash],
-              ['Variance', query.data.summary.variance],
+              ['Cash sales', summary.cashSales],
+              ['Cash refunds', summary.cashRefunds],
+              ['Cash in', summary.cashIn],
+              ['Cash out', summary.cashOut],
+              ['Counted cash', summary.actualCash],
+              ['Variance', summary.variance],
             ].map(([label, value]) => (
-              <View key={label} className="w-[32%] min-w-28 rounded-xl bg-slate-50 p-3">
+              <View
+                key={label}
+                className={`${phone ? 'w-[48%] p-2.5' : 'w-[32%] min-w-28 p-3'} rounded-xl bg-slate-50`}
+              >
                 <Text className="text-xs text-slate-500">{label}</Text>
                 <Text className="mt-1 font-semibold text-slate-900">{formatMoney(value)}</Text>
               </View>

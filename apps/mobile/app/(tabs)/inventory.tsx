@@ -11,14 +11,10 @@ import { useBranchStore } from '@/store/branch';
 import { QuickAccess } from '@/components/quick-access';
 import { ExpandableSection, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 
-function qtyBadgeClass(status: ReturnType<typeof getStockStatus>['status']) {
-  if (status === 'out_of_stock') {
-    return { wrap: 'bg-red-100', text: 'text-red-700' };
-  }
-  if (status === 'warning' || status === 'low_stock') {
-    return { wrap: 'bg-amber-100', text: 'text-amber-800' };
-  }
-  return { wrap: 'bg-brand-50', text: 'text-brand-700' };
+function stockStatusIcon(status: ReturnType<typeof getStockStatus>['status']): ComponentProps<typeof Feather>['name'] {
+  if (status === 'out_of_stock') return 'alert-octagon';
+  if (status === 'warning' || status === 'low_stock') return 'alert-triangle';
+  return 'check-circle';
 }
 
 interface Inventory {
@@ -262,23 +258,6 @@ export default function InventoryScreen() {
           </Pressable>
         </View>
 
-        {!phone ? <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
-          <Text className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            Qty Color
-          </Text>
-          <View className="flex-row items-center gap-1.5">
-            <View className="h-2.5 w-2.5 rounded-full bg-brand-600" />
-            <Text className="text-xs font-medium text-slate-600">In Stock</Text>
-          </View>
-          <View className="flex-row items-center gap-1.5">
-            <View className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-            <Text className="text-xs font-medium text-slate-600">Warning</Text>
-          </View>
-          <View className="flex-row items-center gap-1.5">
-            <View className="h-2.5 w-2.5 rounded-full bg-red-500" />
-            <Text className="text-xs font-medium text-slate-600">Low Stock</Text>
-          </View>
-        </View> : null}
       </View>
 
       {query.isLoading ? (
@@ -337,7 +316,7 @@ export default function InventoryScreen() {
           renderItem={({ item }) => {
             const breakdown = containerBreakdown(item);
             const stock = getStockStatus(item.quantity, item.lowStockLevel);
-            const badge = qtyBadgeClass(stock.status);
+            const statusIcon = stockStatusIcon(stock.status);
             return (
               <Pressable
                 accessibilityRole="button"
@@ -378,8 +357,9 @@ export default function InventoryScreen() {
                     <Text className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs font-medium text-brand-700`}>{breakdown}</Text>
                   ) : null}
                 </View>
-                <View className={`rounded-xl ${phone ? 'px-3 py-1.5' : 'px-4 py-2'} ${badge.wrap}`}>
-                  <Text className={`${phone ? 'text-base' : 'text-lg'} font-semibold ${badge.text}`}>
+                <View className={`flex-row items-center rounded-xl border border-brand-100 bg-brand-50 ${phone ? 'gap-1.5 px-3 py-1.5' : 'gap-2 px-4 py-2'}`}>
+                  <Feather name={statusIcon} size={phone ? 16 : 18} color="#1A593B" />
+                  <Text className={`${phone ? 'text-base' : 'text-lg'} font-semibold text-brand-700`}>
                     {item.quantity} {item.unit}
                   </Text>
                 </View>
