@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import Feather from '@expo/vector-icons/Feather';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { AppSidebarProvider } from '@/components/app-sidebar';
@@ -62,7 +60,6 @@ function ShiftReportDetailContent() {
     enabled: Boolean(branch),
     queryFn: () => api<ShiftDetail>(`/reports/shifts/${id}?branchId=${branch!.id}`),
   });
-  const [salesVisible, setSalesVisible] = useState(false);
   if (query.isLoading || !query.data) return <LoadingState />;
   if (query.isError)
     return <ErrorState message={query.error.message} retry={() => void query.refetch()} />;
@@ -134,46 +131,35 @@ function ShiftReportDetailContent() {
         ) : (
           <Text className="text-sm text-slate-500">No Cash Movements</Text>
         )}
-        <View className="mb-2 mt-7 flex-row items-center justify-between">
-          <Text className="font-semibold text-slate-900">Sales Invoices</Text>
-          {shift.sales?.length ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={salesVisible ? 'Hide sales invoices' : `View ${shift.sales.length} sales invoices`}
-              accessibilityState={{ expanded: salesVisible }}
-              onPress={() => setSalesVisible((visible) => !visible)}
-              className="min-h-9 flex-row items-center rounded-lg px-2.5 active:bg-brand-50"
-            >
-              <Text className="text-xs font-semibold text-brand-700">
-                {salesVisible ? 'Hide invoices' : `View invoices (${shift.sales.length})`}
-              </Text>
-              <Feather name={salesVisible ? 'chevron-up' : 'chevron-down'} size={15} color="#1A593B" />
-            </Pressable>
-          ) : null}
-        </View>
-        {shift.sales?.length && salesVisible ? (
+        <Text className="mb-2 mt-7 font-semibold text-slate-900">Sales Invoices</Text>
+        {shift.sales?.length ? (
           shift.sales.map((sale) => (
             <Pressable
               key={sale.id}
               onPress={() => router.push(`/sale/${sale.id}`)}
-              className="mb-2 flex-row items-center justify-between rounded-xl bg-white p-4 active:bg-brand-50"
+              className="mb-2 rounded-xl bg-white p-3.5 active:bg-brand-50"
             >
-              <View>
-                <Text className="font-medium text-slate-900">Invoice / Receipt #{sale.receiptNumber}</Text>
-                <Text className="mt-1 text-xs text-slate-500">
+              <Text className="text-sm font-semibold text-slate-900">Invoice / Receipt</Text>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                className="mt-1 text-xs font-medium text-slate-500"
+              >
+                {sale.receiptNumber}
+              </Text>
+              <View className="mt-3 flex-row items-center justify-between gap-3">
+                <Text numberOfLines={1} className="min-w-0 flex-1 text-xs capitalize text-slate-500">
                   {new Date(sale.completedAt).toLocaleString()} · {sale.status.replace('_', ' ')}
                 </Text>
-              </View>
-              <View className="items-end">
-                <Text className="font-semibold text-brand-700">{formatMoney(sale.total)}</Text>
-                <Text className="mt-0.5 text-[10px] font-bold text-brand-500">View ›</Text>
+                <View className="flex-row items-center gap-2">
+                  {sale.status === 'completed' ? (
+                    <Text className="text-sm font-semibold text-brand-700">{formatMoney(sale.total)}</Text>
+                  ) : null}
+                  <Text className="text-xs font-semibold text-brand-700">View</Text>
+                </View>
               </View>
             </Pressable>
           ))
-        ) : shift.sales?.length ? (
-          <Text className="rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-500">
-            {shift.sales.length} invoices are available for this shift.
-          </Text>
         ) : (
           <Text className="text-sm text-slate-500">No Sales Transactions</Text>
         )}
