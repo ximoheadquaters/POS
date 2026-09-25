@@ -746,20 +746,20 @@ export default function PosScreen() {
                             soldOut ? 'opacity-50' : 'active:bg-brand-50'
                           }`}
                         >
-                          <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-rose-50">
-                            <Feather name="gift" size={18} color="#BE123C" />
+                          <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
+                            <Feather name="package" size={18} color="#1A593B" />
                           </View>
                           <View className="flex-1">
                             <View className="flex-row items-center gap-2">
                               <Text className="font-medium text-slate-900">{item.promo.name}</Text>
-                              <View className="rounded-full bg-rose-100 px-2 py-0.5">
-                                <Text className="text-[9px] font-semibold uppercase text-rose-700">
-                                  Combo
+                              <View className="rounded-full bg-brand-50 px-2 py-0.5">
+                                <Text className="text-[9px] font-semibold uppercase text-brand-800">
+                                  Bundle
                                 </Text>
                               </View>
                             </View>
                             <Text className="mt-0.5 text-[10px] text-slate-400" numberOfLines={1}>
-                              {summary}
+                              {item.promo.components.length} items · {summary}
                             </Text>
                           </View>
                           <Text className="w-24 text-right text-base font-semibold text-slate-900">
@@ -1101,14 +1101,18 @@ export default function PosScreen() {
         </View>
         <Pressable
           onPress={() => router.push('/food/parked-sales')}
-          className={`flex-row items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 active:bg-amber-100 ${
+          accessibilityLabel={`Open held carts${heldCount ? `, ${heldCount} saved` : ''}`}
+          className={`flex-row items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100 ${
             phone ? 'px-2.5 py-2' : 'px-3 py-2'
           }`}
         >
-          <Feather name="pause-circle" size={15} color="#B45309" />
-          <Text className="text-xs font-semibold text-amber-900">
-            Parked{heldCount > 0 ? ` (${heldCount})` : ''}
-          </Text>
+          <Feather name="bookmark" size={14} color="#1A593B" />
+          <Text className="text-xs font-semibold text-slate-700">Held</Text>
+          {heldCount > 0 ? (
+            <View className="min-w-4 items-center justify-center rounded-full bg-brand-700 px-1 py-0.5">
+              <Text className="text-[10px] font-bold text-white">{heldCount}</Text>
+            </View>
+          ) : null}
         </Pressable>
       </View>
       <View className={`border-b border-slate-200 bg-white ${phone ? 'p-3' : 'p-4'}`}>
@@ -1258,29 +1262,27 @@ export default function PosScreen() {
                         soldOut ? 'opacity-50' : ''
                       }`}
                     >
-                      <View className={`${phone ? 'mr-2 h-9 w-9' : 'mr-3 h-10 w-10'} items-center justify-center rounded-xl bg-rose-50`}>
-                        <Feather name="gift" size={18} color="#BE123C" />
+                      <View className={`${phone ? 'mr-2 h-9 w-9' : 'mr-3 h-10 w-10'} items-center justify-center rounded-xl bg-brand-50`}>
+                        <Feather name="package" size={18} color="#1A593B" />
                       </View>
                       <View className="flex-1">
                         <View className="flex-row items-center gap-2">
                           <Text className="font-semibold text-slate-900">{item.promo.name}</Text>
-                          <View className="rounded-full bg-rose-100 px-2 py-0.5">
-                            <Text className="text-[9px] font-bold uppercase text-rose-700">
-                              Combo
+                          <View className="rounded-full bg-brand-50 px-2 py-0.5">
+                            <Text className="text-[9px] font-bold uppercase text-brand-800">
+                              Bundle
                             </Text>
                           </View>
                         </View>
                         <Text className="mt-0.5 text-xs text-slate-500" numberOfLines={1}>
-                          {summary}
+                          {item.promo.components.length} items · {summary}
                         </Text>
                       </View>
                       <View className="items-end pl-2">
                         <Text className={`${phone ? 'text-sm' : 'text-base'} font-semibold text-slate-900`}>
                           {formatMoney(item.promo.comboPrice)}
                         </Text>
-                      <Text className="mt-0.5 text-xs font-medium text-brand-700">
-                          + Add Combo
-                        </Text>
+                      <Text className="mt-0.5 text-xs font-medium text-brand-700">Add bundle</Text>
                       </View>
                     </Pressable>
                   );
@@ -1515,10 +1517,10 @@ export default function PosScreen() {
                     clearCart();
                     focusInput();
                   }}
-                  className={`${phone ? 'h-11 w-11' : 'h-12 w-12'} items-center justify-center rounded-xl border border-red-200 bg-red-50 active:bg-red-100`}
+                  className={`${phone ? 'h-11 w-11' : 'h-12 w-12'} items-center justify-center rounded-xl bg-rose-500 active:bg-rose-600`}
                   accessibilityLabel="Clear Cart Items"
                 >
-                  <Feather name="trash-2" size={18} color="#DC2626" />
+                  <Feather name="trash-2" size={18} color="#FFFFFF" />
                 </Pressable>
 
                 <Pressable
