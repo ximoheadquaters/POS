@@ -11,10 +11,21 @@ import { useBranchStore } from '@/store/branch';
 import { QuickAccess } from '@/components/quick-access';
 import { ExpandableSection, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 
-function stockStatusIcon(status: ReturnType<typeof getStockStatus>['status']): ComponentProps<typeof Feather>['name'] {
-  if (status === 'out_of_stock') return 'alert-octagon';
-  if (status === 'warning' || status === 'low_stock') return 'alert-triangle';
-  return 'check-circle';
+function stockStatusPresentation(
+  status: ReturnType<typeof getStockStatus>['status'],
+  quantity: number,
+): {
+  icon: ComponentProps<typeof Feather>['name'];
+  label: string;
+  needsAlert: boolean;
+} {
+  if (status === 'out_of_stock') {
+    return { icon: 'inbox', label: 'Out of stock', needsAlert: true };
+  }
+  if (status === 'warning' || status === 'low_stock') {
+    return { icon: 'package', label: `Low stock · ${quantity} left`, needsAlert: true };
+  }
+  return { icon: 'package', label: `${quantity} in stock`, needsAlert: false };
 }
 
 interface Inventory {
@@ -316,7 +327,7 @@ export default function InventoryScreen() {
           renderItem={({ item }) => {
             const breakdown = containerBreakdown(item);
             const stock = getStockStatus(item.quantity, item.lowStockLevel);
-            const statusIcon = stockStatusIcon(stock.status);
+            const status = stockStatusPresentation(stock.status, item.quantity);
             return (
               <Pressable
                 accessibilityRole="button"
@@ -357,10 +368,21 @@ export default function InventoryScreen() {
                     <Text className={`${phone ? 'mt-0.5' : 'mt-1'} text-xs font-medium text-brand-700`}>{breakdown}</Text>
                   ) : null}
                 </View>
-                <View className={`flex-row items-center rounded-xl border border-brand-100 bg-brand-50 ${phone ? 'gap-1.5 px-3 py-1.5' : 'gap-2 px-4 py-2'}`}>
-                  <Feather name={statusIcon} size={phone ? 16 : 18} color="#1A593B" />
-                  <Text className={`${phone ? 'text-base' : 'text-lg'} font-semibold text-brand-700`}>
-                    {item.quantity} {item.unit}
+                <View
+                  className={`flex-row items-center rounded-xl border border-slate-200 bg-slate-50 ${
+                    phone ? 'gap-1.5 px-3 py-1.5' : 'gap-2 px-4 py-2'
+                  }`}
+                >
+                  <View className="relative">
+                    <Feather name={status.icon} size={phone ? 16 : 18} color="#64748B" />
+                    {status.needsAlert ? (
+                      <View className="absolute -right-1.5 -top-1.5 h-3 w-3 items-center justify-center rounded-full bg-slate-600">
+                        <Text className="text-[9px] font-bold leading-none text-white">!</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text className={`${phone ? 'text-sm' : 'text-base'} font-semibold text-slate-700`}>
+                    {status.label}
                   </Text>
                 </View>
               </Pressable>
