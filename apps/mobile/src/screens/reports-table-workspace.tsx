@@ -980,6 +980,8 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
   const { currentUser, session, loading: sessionLoading } = useSession();
   const { showAlert } = useIosAlert();
   const [period, setPeriod] = useState<Period>('30d');
+  const [reportPickerVisible, setReportPickerVisible] = useState(false);
+  const [periodPickerVisible, setPeriodPickerVisible] = useState(false);
   const [customRange, setCustomRange] = useState(() => rangeFor('30d', { from: '', to: '' }));
   const [customVisible, setCustomVisible] = useState(false);
   const [draftRange, setDraftRange] = useState(customRange);
@@ -1014,6 +1016,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
   const section = visibleReports.some((item) => item.id === initialSection)
     ? initialSection
     : (visibleReports[0]?.id ?? 'overview');
+  const activeReport = visibleReports.find((item) => item.id === section) ?? visibleReports[0];
   const dateRange = useMemo(() => rangeFor(period, customRange), [customRange, period]);
   const previousDateRange = useMemo(
     () => comparisonRange(dateRange, comparison),
@@ -1142,71 +1145,13 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
             </View>
           </View>
 
-          <View className="rounded-2xl border border-slate-200 bg-white p-2">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-1">
-                {visibleReports.map((item) => {
-                  const selected = item.id === section;
-                  return (
-                    <Pressable
-                      key={item.id}
-                      accessibilityRole="tab"
-                      accessibilityState={{ selected }}
-                      onPress={() => router.replace(`/reports/${item.id}` as never)}
-                      className={`min-h-11 flex-row items-center rounded-xl px-3 ${selected ? 'bg-brand-700' : 'bg-white'}`}
-                    >
-                      <Feather
-                        name={item.icon}
-                        size={14}
-                        color={selected ? '#FFFFFF' : '#64748B'}
-                      />
-                      <Text
-                        className={`ml-2 text-xs font-medium ${selected ? 'text-white' : 'text-slate-600'}`}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </ScrollView>
+          <View className="flex-row items-center gap-2">
+            <Pressable onPress={() => setReportPickerVisible(true)} className="min-h-11 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"><Feather name={activeReport?.icon ?? 'file-text'} size={15} color="#1A593B" /><View className="ml-2 flex-1"><Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Report</Text><Text className="text-xs font-semibold text-slate-800">{activeReport?.label ?? 'Reports'}</Text></View><Feather name="chevron-down" size={16} color="#64748B" /></Pressable>
+            <Pressable onPress={() => setPeriodPickerVisible(true)} className="min-h-11 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"><Feather name="calendar" size={15} color="#1A593B" /><View className="ml-2 flex-1"><Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Date range</Text><Text className="text-xs font-semibold text-slate-800">{displayRange(dateRange)}</Text></View><Feather name="chevron-down" size={16} color="#64748B" /></Pressable>
           </View>
 
           <View className="rounded-2xl border border-slate-200 bg-white p-2">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row items-center gap-1">
-                {(
-                  [
-                    ['today', 'Today'],
-                    ['yesterday', 'Yesterday'],
-                    ['7d', 'Last 7 days'],
-                    ['30d', 'Last 30 days'],
-                  ] as Array<[Period, string]>
-                ).map(([id, label]) => (
-                  <Pressable
-                    key={id}
-                    onPress={() => setPeriod(id)}
-                    className={`min-h-11 justify-center rounded-lg px-3 ${period === id ? 'bg-[#E8F5EE]' : 'bg-white'}`}
-                  >
-                    <Text
-                      className={`text-xs font-medium ${period === id ? 'text-brand-800' : 'text-slate-500'}`}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                ))}
-                <Pressable
-                  onPress={() => {
-                    setDraftRange(customRange);
-                    setCalendarSession((value) => value + 1);
-                    setCustomVisible(true);
-                  }}
-                  className={`min-h-11 flex-row items-center justify-center rounded-lg px-3 ${period === 'custom' ? 'bg-[#E8F5EE]' : 'bg-white'}`}
-                >
-                  <Feather name="calendar" size={13} color="#1A593B" />
-                  <Text className="ml-2 text-xs font-medium text-slate-600">Custom</Text>
-                </Pressable>
-                <View className="mx-2 h-6 w-px bg-slate-200" />
+              <View className="flex-row flex-wrap items-center gap-1">
                 <Text className="px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                   Compare
                 </Text>
@@ -1231,7 +1176,6 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
                   </Pressable>
                 ))}
               </View>
-            </ScrollView>
           </View>
 
           {query.data ? (
@@ -1353,6 +1297,14 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      <Modal visible={reportPickerVisible} transparent animationType="fade" onRequestClose={() => setReportPickerVisible(false)}>
+        <View className="flex-1 items-center justify-end bg-black/40 p-3 sm:justify-center"><Pressable className="absolute inset-0" onPress={() => setReportPickerVisible(false)} /><View className="z-10 w-full max-w-md rounded-3xl bg-white p-4 shadow-xl"><View className="mb-2 flex-row items-center justify-between"><Text className="text-base font-semibold text-slate-950">Choose report</Text><Pressable onPress={() => setReportPickerVisible(false)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"><Feather name="x" size={18} color="#475569" /></Pressable></View><View className="gap-1">{visibleReports.map((item) => { const selected = item.id === section; return <Pressable key={item.id} onPress={() => { setReportPickerVisible(false); router.replace(`/reports/${item.id}` as never); }} className={`flex-row items-center rounded-2xl px-3 py-3 ${selected ? 'bg-brand-50' : 'active:bg-slate-50'}`}><View className={`h-9 w-9 items-center justify-center rounded-xl ${selected ? 'bg-brand-700' : 'bg-slate-100'}`}><Feather name={item.icon} size={17} color={selected ? '#FFFFFF' : '#64748B'} /></View><Text className={`ml-3 flex-1 text-sm ${selected ? 'font-semibold text-brand-900' : 'font-medium text-slate-800'}`}>{item.label}</Text>{selected ? <Feather name="check" size={17} color="#1A593B" /> : null}</Pressable>; })}</View></View></View>
+      </Modal>
+
+      <Modal visible={periodPickerVisible} transparent animationType="fade" onRequestClose={() => setPeriodPickerVisible(false)}>
+        <View className="flex-1 items-center justify-end bg-black/40 p-3 sm:justify-center"><Pressable className="absolute inset-0" onPress={() => setPeriodPickerVisible(false)} /><View className="z-10 w-full max-w-md rounded-3xl bg-white p-4 shadow-xl"><View className="mb-2 flex-row items-center justify-between"><Text className="text-base font-semibold text-slate-950">Date range</Text><Pressable onPress={() => setPeriodPickerVisible(false)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"><Feather name="x" size={18} color="#475569" /></Pressable></View><View className="gap-1">{([['today', 'Today'], ['yesterday', 'Yesterday'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days']] as Array<[Period, string]>).map(([id, label]) => <Pressable key={id} onPress={() => { setPeriod(id); setPeriodPickerVisible(false); }} className={`flex-row items-center justify-between rounded-2xl px-3 py-3 ${period === id ? 'bg-brand-50' : 'active:bg-slate-50'}`}><Text className={`text-sm ${period === id ? 'font-semibold text-brand-900' : 'font-medium text-slate-800'}`}>{label}</Text>{period === id ? <Feather name="check" size={17} color="#1A593B" /> : null}</Pressable>)}<Pressable onPress={() => { setDraftRange(customRange); setCalendarSession((value) => value + 1); setPeriodPickerVisible(false); setCustomVisible(true); }} className="mt-1 flex-row items-center rounded-2xl border border-slate-200 px-3 py-3"><Feather name="calendar" size={16} color="#1A593B" /><Text className="ml-3 flex-1 text-sm font-medium text-slate-800">Custom dates</Text><Feather name="chevron-right" size={17} color="#64748B" /></Pressable></View></View></View>
       </Modal>
 
       <Modal

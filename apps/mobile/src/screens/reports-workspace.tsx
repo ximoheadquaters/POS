@@ -4089,6 +4089,8 @@ function InventoryReport({
   onOpenDetail(config: MetricDrilldownConfig): void;
   exportRef?: React.MutableRefObject<(() => InventoryExportData) | null>;
 }) {
+  const { width } = useWindowDimensions();
+  const phone = width < 640;
   const { currentUser } = useSession();
   const isFoodService =
     (currentUser?.organization?.businessProfile ??
@@ -4409,7 +4411,7 @@ function InventoryReport({
     <View className="w-full gap-5">
       {/* Sub-Tab Navigation Bar */}
       <View className="flex-row flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
-        <View className="flex-row items-center gap-2">
+        <View className={`${phone ? 'w-full' : ''} flex-row flex-wrap items-center gap-2`}>
           <Pressable
             onPress={() => setSubTab('stock')}
             className={`flex-row items-center gap-2 rounded-xl px-4 py-2.5 ${
@@ -4460,7 +4462,7 @@ function InventoryReport({
       {subTab === 'stock' ? (
         <View className="relative z-40 rounded-2xl border border-slate-200 bg-white shadow-xs">
           <View className="relative z-50 flex-row flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
-            <View className="flex-1 min-w-[240px] flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <View className={`${phone ? 'w-full' : 'flex-1 min-w-[240px]'} flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2`}>
               <Feather name="search" size={16} color="#94A3B8" />
               <TextInput
                 value={stockSearch}
@@ -4476,7 +4478,7 @@ function InventoryReport({
               ) : null}
             </View>
 
-            <View className="flex-row items-center gap-2.5">
+            <View className={`${phone ? 'w-full flex-wrap' : ''} flex-row items-center gap-2.5`}>
               <SelectDropdown
                 label="Category"
                 icon="grid"
@@ -5642,6 +5644,7 @@ function ReportsContent({
   const [period, setPeriod] = useState<ReportPeriod>('30d');
   const [section, setSection] = useState<ReportSection>(initialSection);
   const [sectionPickerVisible, setSectionPickerVisible] = useState(false);
+  const [periodPickerVisible, setPeriodPickerVisible] = useState(false);
   useEffect(() => {
     setSection(initialSection);
   }, [initialSection]);
@@ -5846,13 +5849,26 @@ function ReportsContent({
                       {branch?.name ? ` · ${branch.name}` : ''}.
                     </Text>
                   </View>
-                  <View className="flex-row flex-wrap items-center gap-2">
+                  <View className="flex-row items-center gap-2">
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Choose date range"
+                      onPress={() => setPeriodPickerVisible(true)}
+                      className="min-h-11 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3 active:bg-slate-100"
+                    >
+                      <Feather name="calendar" size={15} color="#1A593B" />
+                      <View className="ml-2 min-w-0 flex-1">
+                        <Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Date range</Text>
+                        <Text numberOfLines={1} className="text-xs font-semibold text-slate-800">{rangeLabel}</Text>
+                      </View>
+                      <Feather name="chevron-down" size={16} color="#64748B" />
+                    </Pressable>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Export Reports"
                       disabled={!query.data || exporting}
                       onPress={() => setExportMenuVisible(true)}
-                      className={`min-h-11 flex-row items-center rounded-xl px-4 ${
+                      className={`min-h-11 flex-row items-center rounded-xl px-3.5 ${
                         !query.data || exporting ? 'bg-slate-300' : 'bg-slate-900'
                       }`}
                     >
@@ -5864,67 +5880,6 @@ function ReportsContent({
                   </View>
                 </View>
 
-                <View className="mt-5 flex-row flex-wrap gap-2">
-                  {[...PERIOD_PRESETS.filter((item) =>
-                    ['today', 'yesterday', '7d', '30d', 'this_month', 'last_month'].includes(item.key),
-                  )].map((item) => {
-                    const selected = item.key === period;
-                    return (
-                      <Pressable
-                        key={item.key}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        onPress={() => {
-                          setPeriod(item.key);
-                          setActiveMetricDrilldown(null);
-                        }}
-                        className={`min-h-10 items-center justify-center rounded-full px-3.5 ${
-                          selected ? 'bg-brand-700' : 'border border-slate-200 bg-slate-50'
-                        }`}
-                      >
-                        <Text
-                          className={`text-[13px] font-medium ${
-                            selected ? 'text-white' : 'text-slate-600'
-                          }`}
-                        >
-                          {item.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Open Calendar Date Range"
-                    onPress={() => {
-                      const active =
-                        period === 'custom'
-                          ? customRange
-                          : PERIOD_PRESETS.find((p) => p.key === period)?.getRange() ?? customRange;
-                      setDraftFrom(active.from);
-                      setDraftTo(active.to);
-                      setDateRangeError('');
-                      setCalendarSession((value) => value + 1);
-                      setDateRangeVisible(true);
-                    }}
-                    className={`min-h-10 flex-row items-center rounded-full px-3.5 ${
-                      period === 'custom' ? 'bg-slate-900' : 'border border-slate-200 bg-slate-50'
-                    }`}
-                  >
-                    <Feather
-                      name="calendar"
-                      size={15}
-                      color={period === 'custom' ? '#FFFFFF' : '#1A593B'}
-                    />
-                    <Text
-                      className={`ml-2 text-[13px] font-medium ${
-                        period === 'custom' ? 'text-white' : 'text-slate-700'
-                      }`}
-                      numberOfLines={1}
-                    >
-                      {period === 'custom' ? rangeLabel : 'Custom dates'}
-                    </Text>
-                  </Pressable>
-                </View>
               </View>
 
               <Pressable
@@ -6035,6 +5990,30 @@ function ReportsContent({
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={periodPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPeriodPickerVisible(false)}
+      >
+        <View className="flex-1 items-center justify-end bg-black/40 p-3 sm:justify-center sm:p-6">
+          <Pressable accessibilityRole="button" accessibilityLabel="Close date ranges" onPress={() => setPeriodPickerVisible(false)} className="absolute inset-0" />
+          <View className="z-10 w-full max-w-md rounded-3xl bg-white p-4 shadow-xl">
+            <View className="mb-2 flex-row items-center justify-between px-1 py-2">
+              <View><Text className="text-base font-semibold text-slate-950">Date range</Text><Text className="mt-0.5 text-xs text-slate-500">Choose the reporting period.</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setPeriodPickerVisible(false)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"><Feather name="x" size={18} color="#475569" /></Pressable>
+            </View>
+            <View className="gap-1">
+              {PERIOD_PRESETS.filter((item) => ['today', 'yesterday', '7d', '30d', 'this_month', 'last_month'].includes(item.key)).map((item) => {
+                const selected = item.key === period;
+                return <Pressable key={item.key} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => { setPeriod(item.key); setActiveMetricDrilldown(null); setPeriodPickerVisible(false); }} className={`flex-row items-center justify-between rounded-2xl px-3 py-3 ${selected ? 'bg-brand-50' : 'active:bg-slate-50'}`}><Text className={`text-sm ${selected ? 'font-semibold text-brand-900' : 'font-medium text-slate-800'}`}>{item.label}</Text>{selected ? <Feather name="check" size={17} color="#1A593B" /> : null}</Pressable>;
+              })}
+              <Pressable accessibilityRole="button" onPress={() => { const active = period === 'custom' ? customRange : PERIOD_PRESETS.find((p) => p.key === period)?.getRange() ?? customRange; setDraftFrom(active.from); setDraftTo(active.to); setDateRangeError(''); setCalendarSession((value) => value + 1); setPeriodPickerVisible(false); setDateRangeVisible(true); }} className="mt-1 flex-row items-center rounded-2xl border border-slate-200 px-3 py-3 active:bg-slate-50"><Feather name="calendar" size={16} color="#1A593B" /><Text className="ml-3 flex-1 text-sm font-medium text-slate-800">Custom dates</Text><Feather name="chevron-right" size={17} color="#64748B" /></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={sectionPickerVisible}
