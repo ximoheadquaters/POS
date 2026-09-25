@@ -46,6 +46,7 @@ export const previewCurrentUser: CurrentUser = {
     'reports:read',
     'branches:read',
     'products:read',
+    'products:manage',
     'inventory:read',
     'sales:read_all',
     'registers:read',

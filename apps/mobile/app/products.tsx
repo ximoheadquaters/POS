@@ -804,9 +804,12 @@ function ProductsContent() {
                   item.status === 'active' ? 'border-slate-200' : 'border-slate-300 opacity-75'
                 }`}
               >
-                {/* Header Row */}
-                <View className="gap-3 border-b border-slate-100 pb-3 md:flex-row md:items-center md:justify-between">
-                  <View className="min-w-0 flex-row flex-wrap items-center gap-2 md:flex-1">
+                <View
+                  className={`border-b border-slate-100 pb-3 ${
+                    phone ? 'flex-row items-start justify-between gap-3' : 'gap-3 md:flex-row md:items-center md:justify-between'
+                  }`}
+                >
+                  <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-2">
                     <Text
                       numberOfLines={2}
                       className="max-w-full text-base font-bold text-slate-900"
@@ -832,8 +835,8 @@ function ProductsContent() {
                     </View>
                   </View>
 
-                  <View className="min-w-0 flex-row flex-wrap items-center gap-2 md:justify-end">
-                    <Text numberOfLines={1} className="text-lg font-extrabold text-brand-700">
+                  <View className={`items-end ${phone ? 'pt-0.5' : 'min-w-0 flex-row flex-wrap gap-2 md:justify-end'}`}>
+                    <Text numberOfLines={1} className={`${phone ? 'text-base' : 'text-lg'} font-extrabold text-brand-700`}>
                       {formatCatalogUnitPrice(item.sellingPrice, item.unit)}
                     </Text>
                   </View>
@@ -860,10 +863,13 @@ function ProductsContent() {
                   </View>
                 ) : null}
 
-                <View className="mt-3 flex-row flex-wrap items-center justify-between gap-2">
-                  <Text className="text-sm text-slate-600">
-                    {stockInfo.label} · {item.status === 'active' ? 'Enabled' : 'Disabled'}
-                  </Text>
+                <View className="mt-3 flex-row items-center justify-between gap-3">
+                  <View className="min-w-0 flex-1 flex-row items-center gap-1.5">
+                    <Feather name="package" size={14} color="#637169" />
+                    <Text numberOfLines={1} className="text-sm text-slate-600">
+                      {stockInfo.label} · {item.status === 'active' ? 'Enabled' : 'Disabled'}
+                    </Text>
+                  </View>
                   {currentUser?.permissions.includes('products:manage') ? (
                     <Pressable
                       accessibilityRole="button"
@@ -874,17 +880,22 @@ function ProductsContent() {
                           params: { id: item.id },
                         })
                       }
-                      className="min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800"
+                      className={`min-h-10 flex-row items-center justify-center rounded-xl px-3.5 active:bg-brand-100 ${
+                        phone ? 'border border-brand-200 bg-brand-50' : 'bg-brand-700 active:bg-brand-800'
+                      }`}
                     >
-                      <Feather name="edit-2" size={13} color="#FFFFFF" />
-                      <Text className="ml-1.5 text-xs font-semibold text-white">Edit</Text>
+                      <Feather name="edit-2" size={13} color={phone ? '#1A593B' : '#FFFFFF'} />
+                      <Text className={`ml-1.5 text-xs font-semibold ${phone ? 'text-brand-800' : 'text-white'}`}>
+                        Edit
+                      </Text>
                     </Pressable>
                   ) : null}
                 </View>
-                <ExpandableSection
-                  title="Product details and actions"
-                  summary={item.isLowMargin ? 'Low margin - review pricing' : undefined}
-                >
+                <View className="mt-3">
+                  <ExpandableSection
+                    title={phone ? 'Details and actions' : 'Product details and actions'}
+                    summary={item.isLowMargin ? 'Low margin - review pricing' : undefined}
+                  >
                   {/* Spec Metrics Row */}
                   <View className="mt-3 flex-row flex-wrap items-center gap-3">
                     <View className="flex-row items-center rounded-xl bg-slate-50 px-3 py-1.5">
@@ -1010,7 +1021,8 @@ function ProductsContent() {
                       </View>
                     </View>
                   ) : null}
-                </ExpandableSection>
+                  </ExpandableSection>
+                </View>
               </View>
             );
           }}
