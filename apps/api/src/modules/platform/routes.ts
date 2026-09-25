@@ -28,6 +28,7 @@ import {
 } from '../../services/entitlement-service.js';
 import { badRequest, notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
+import { setupSubscriptionBranches } from '../../platform/subscription-setup-service.js';
 
 const subscriptionStatusSchema = z.enum(['trialing', 'active', 'past_due', 'cancelled']);
 
@@ -145,6 +146,15 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
     }),
     authenticatePlatformClient(database),
   );
+
+  router.post('/organizations/:organizationId/subscription-setup',
+    requirePlatformScope('platform:write'),
+    validateBody(z.object({ branchCount: z.number().int().min(1).max(50), orderId: uuidSchema })),
+    async (request, response) => {
+      const organizationId = uuidSchema.parse(request.params.organizationId);
+      const result = await setupSubscriptionBranches(database, organizationId, request.body.branchCount, request.body.orderId);
+      sendData(response, result);
+    });
 
   router.get('/plans', requirePlatformScope('platform:read'), async (_request, response) => {
     const result = await database.query(
