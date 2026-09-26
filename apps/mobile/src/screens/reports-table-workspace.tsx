@@ -470,6 +470,15 @@ function CompactReportTable({
             </View>
             {table.columns.slice(1).map((column, columnOffset) => {
               const columnIndex = columnOffset + 1;
+              const isDefinition = table.id === 'metrics' && column.toLowerCase() === 'definition';
+              if (isDefinition) {
+                return (
+                  <View key={`${table.id}-compact-${entry.key}-${column}`} className="border-t border-slate-100 px-3 py-3">
+                    <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{column}</Text>
+                    <View className="mt-1.5"><ReportCellValue value={row[columnIndex]} column={column} /></View>
+                  </View>
+                );
+              }
               return (
                 <View
                   key={`${table.id}-compact-${entry.key}-${column}`}
@@ -982,6 +991,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
   const [period, setPeriod] = useState<Period>('30d');
   const [reportPickerVisible, setReportPickerVisible] = useState(false);
   const [periodPickerVisible, setPeriodPickerVisible] = useState(false);
+  const [comparisonPickerVisible, setComparisonPickerVisible] = useState(false);
   const [customRange, setCustomRange] = useState(() => rangeFor('30d', { from: '', to: '' }));
   const [customVisible, setCustomVisible] = useState(false);
   const [draftRange, setDraftRange] = useState(customRange);
@@ -1147,36 +1157,10 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
 
           <View className="flex-row items-center gap-2">
             <Pressable onPress={() => setReportPickerVisible(true)} className="min-h-11 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"><Feather name={activeReport?.icon ?? 'file-text'} size={15} color="#1A593B" /><View className="ml-2 flex-1"><Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Report</Text><Text className="text-xs font-semibold text-slate-800">{activeReport?.label ?? 'Reports'}</Text></View><Feather name="chevron-down" size={16} color="#64748B" /></Pressable>
-            <Pressable onPress={() => setPeriodPickerVisible(true)} className="min-h-11 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"><Feather name="calendar" size={15} color="#1A593B" /><View className="ml-2 flex-1"><Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Date range</Text><Text className="text-xs font-semibold text-slate-800">{displayRange(dateRange)}</Text></View><Feather name="chevron-down" size={16} color="#64748B" /></Pressable>
+            <Pressable onPress={() => setPeriodPickerVisible(true)} className="min-h-11 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"><Feather name="calendar" size={15} color="#1A593B" /><View className="ml-2 min-w-0 flex-1"><Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Date range</Text><Text numberOfLines={1} className="text-xs font-semibold text-slate-800">{period === 'today' ? 'Today' : period === 'yesterday' ? 'Yesterday' : period === '7d' ? 'Last 7 days' : period === '30d' ? 'Last 30 days' : 'Custom dates'}</Text></View><Feather name="chevron-down" size={16} color="#64748B" /></Pressable>
           </View>
 
-          <View className="rounded-2xl border border-slate-200 bg-white p-2">
-              <View className="flex-row flex-wrap items-center gap-1">
-                <Text className="px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  Compare
-                </Text>
-                {(
-                  [
-                    ['none', 'Off'],
-                    ['previous_period', 'Previous period'],
-                    ['previous_month', 'Previous month'],
-                    ['previous_year', 'Previous year'],
-                  ] as Array<[Comparison, string]>
-                ).map(([id, label]) => (
-                  <Pressable
-                    key={id}
-                    onPress={() => setComparison(id)}
-                    className={`min-h-11 justify-center rounded-lg px-3 ${comparison === id ? 'bg-[#E8F5EE]' : 'bg-white'}`}
-                  >
-                    <Text
-                      className={`text-xs font-medium ${comparison === id ? 'text-brand-800' : 'text-slate-500'}`}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-          </View>
+          <Pressable onPress={() => setComparisonPickerVisible(true)} className="min-h-11 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"><Feather name="git-branch" size={15} color="#1A593B" /><View className="ml-2 flex-1"><Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Compare</Text><Text className="text-xs font-semibold text-slate-800">{comparison === 'none' ? 'No comparison' : comparison === 'previous_period' ? 'Previous period' : comparison === 'previous_month' ? 'Previous month' : 'Previous year'}</Text></View><Feather name="chevron-down" size={16} color="#64748B" /></Pressable>
 
           {query.data ? (
             <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-slate-50 px-3 py-2">
@@ -1305,6 +1289,10 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
 
       <Modal visible={periodPickerVisible} transparent animationType="fade" onRequestClose={() => setPeriodPickerVisible(false)}>
         <View className="flex-1 items-center justify-end bg-black/40 p-3 sm:justify-center"><Pressable className="absolute inset-0" onPress={() => setPeriodPickerVisible(false)} /><View className="z-10 w-full max-w-md rounded-3xl bg-white p-4 shadow-xl"><View className="mb-2 flex-row items-center justify-between"><Text className="text-base font-semibold text-slate-950">Date range</Text><Pressable onPress={() => setPeriodPickerVisible(false)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"><Feather name="x" size={18} color="#475569" /></Pressable></View><View className="gap-1">{([['today', 'Today'], ['yesterday', 'Yesterday'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days']] as Array<[Period, string]>).map(([id, label]) => <Pressable key={id} onPress={() => { setPeriod(id); setPeriodPickerVisible(false); }} className={`flex-row items-center justify-between rounded-2xl px-3 py-3 ${period === id ? 'bg-brand-50' : 'active:bg-slate-50'}`}><Text className={`text-sm ${period === id ? 'font-semibold text-brand-900' : 'font-medium text-slate-800'}`}>{label}</Text>{period === id ? <Feather name="check" size={17} color="#1A593B" /> : null}</Pressable>)}<Pressable onPress={() => { setDraftRange(customRange); setCalendarSession((value) => value + 1); setPeriodPickerVisible(false); setCustomVisible(true); }} className="mt-1 flex-row items-center rounded-2xl border border-slate-200 px-3 py-3"><Feather name="calendar" size={16} color="#1A593B" /><Text className="ml-3 flex-1 text-sm font-medium text-slate-800">Custom dates</Text><Feather name="chevron-right" size={17} color="#64748B" /></Pressable></View></View></View>
+      </Modal>
+
+      <Modal visible={comparisonPickerVisible} transparent animationType="fade" onRequestClose={() => setComparisonPickerVisible(false)}>
+        <View className="flex-1 items-center justify-end bg-black/40 p-3 sm:justify-center"><Pressable className="absolute inset-0" onPress={() => setComparisonPickerVisible(false)} /><View className="z-10 w-full max-w-md rounded-3xl bg-white p-4 shadow-xl"><View className="mb-2 flex-row items-center justify-between"><View><Text className="text-base font-semibold text-slate-950">Compare periods</Text><Text className="mt-0.5 text-xs text-slate-500">Add context to the selected date range.</Text></View><Pressable onPress={() => setComparisonPickerVisible(false)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"><Feather name="x" size={18} color="#475569" /></Pressable></View><View className="gap-1">{([['none', 'No comparison', 'Show the selected period only'], ['previous_period', 'Previous period', 'Compare with the preceding date range'], ['previous_month', 'Previous month', 'Compare with the same range last month'], ['previous_year', 'Previous year', 'Compare with the same range last year']] as Array<[Comparison, string, string]>).map(([id, label, note]) => { const selected = comparison === id; return <Pressable key={id} onPress={() => { setComparison(id); setComparisonPickerVisible(false); }} className={`rounded-2xl px-3 py-3 ${selected ? 'bg-brand-50' : 'active:bg-slate-50'}`}><View className="flex-row items-center justify-between"><View className="flex-1"><Text className={`text-sm ${selected ? 'font-semibold text-brand-900' : 'font-medium text-slate-800'}`}>{label}</Text><Text className="mt-0.5 text-xs text-slate-500">{note}</Text></View>{selected ? <Feather name="check" size={17} color="#1A593B" /> : null}</View></Pressable>; })}</View></View></View>
       </Modal>
 
       <Modal
