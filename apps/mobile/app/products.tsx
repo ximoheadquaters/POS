@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { appAlert } from '@/providers/ios-alert';
 import {
@@ -622,7 +623,7 @@ function ProductsContent() {
                   accessibilityRole="button"
                   accessibilityLabel="Manage Catalog"
                   className="items-center justify-center rounded-xl bg-brand-50 px-3 py-3"
-                  onPress={() => router.push('/catalogue')}
+                  onPress={() => navigateOnce('/catalogue')}
                 >
                   <Feather name="folder" size={18} color="#1A593B" />
                 </Pressable>
@@ -632,7 +633,7 @@ function ProductsContent() {
                   accessibilityRole="button"
                   accessibilityLabel="Scan New Product"
                   className={`${phone ? 'h-11 w-11 px-0' : 'px-3 py-3'} items-center justify-center rounded-xl bg-brand-50`}
-                  onPress={() => router.push('/product-scan')}
+                  onPress={() => navigateOnce('/product-scan')}
                 >
                   <Feather name="maximize" size={18} color="#1A593B" />
                 </Pressable>
@@ -641,7 +642,7 @@ function ProductsContent() {
                 accessibilityRole="button"
                 accessibilityLabel="Add New Product"
                 className={`${phone ? 'h-11 w-11 justify-center px-0' : 'min-h-11 px-4'} flex-row items-center rounded-xl bg-brand-700`}
-                onPress={() => router.push('/product-form')}
+                onPress={() => navigateOnce('/product-form')}
               >
                 <Feather name="plus" size={17} color="#FFFFFF" />
                 {!phone ? <Text className="ml-2 font-medium text-white">Add product</Text> : null}
@@ -785,7 +786,7 @@ function ProductsContent() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Add First Product"
-                  onPress={() => router.push('/product-form')}
+                  onPress={() => navigateOnce('/product-form')}
                   className="mt-5 min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:bg-brand-800"
                 >
                   <Feather name="plus" size={16} color="#FFFFFF" />
@@ -875,7 +876,7 @@ function ProductsContent() {
                       accessibilityRole="button"
                       accessibilityLabel={`Edit ${item.name}`}
                       onPress={() =>
-                        router.push({
+                        navigateOnce({
                           pathname: '/product-form',
                           params: { id: item.id },
                         })
@@ -937,7 +938,7 @@ function ProductsContent() {
                         <Pressable
                           accessibilityRole="button"
                           onPress={() =>
-                            router.push({
+                            navigateOnce({
                               pathname: '/product-variants',
                               params: {
                                 productId: item.id,
@@ -974,7 +975,7 @@ function ProductsContent() {
                             accessibilityRole="button"
                             accessibilityLabel={`Review suggested price for ${item.name}`}
                             onPress={() =>
-                              router.push({
+                              navigateOnce({
                                 pathname: '/product-form',
                                 params: {
                                   id: item.id,

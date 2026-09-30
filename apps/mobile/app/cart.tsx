@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { navigateOnce } from '@/lib/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { api } from '@/lib/api';
@@ -299,7 +300,7 @@ export default function CartScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Open parked sales${heldCount ? `, ${heldCount} parked` : ''}`}
-            onPress={() => router.push('/food/parked-sales')}
+            onPress={() => navigateOnce('/food/parked-sales')}
             className={`min-h-11 flex-row items-center justify-center rounded-xl border border-amber-200 bg-amber-50 active:bg-amber-100 ${narrow ? 'px-2' : 'px-3'}`}
           >
             <Feather name="pause-circle" size={16} color="#B45309" />
@@ -311,7 +312,7 @@ export default function CartScreen() {
             <Button
               title={narrow ? 'Pay' : 'Continue to payment'}
               disabled={!items.length || hasStockConflict}
-              onPress={() => router.push('/payment')}
+              onPress={() => navigateOnce('/payment')}
             />
           </View>
           {items.length > 0 ? (

@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
@@ -48,7 +49,7 @@ function UsersContent() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add Employee"
-                onPress={() => router.push('/employee-form' as Href)}
+                onPress={() => navigateOnce('/employee-form' as Href)}
                 className="min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:opacity-80"
               >
                 <Feather name="user-plus" size={16} color="#FFFFFF" />
@@ -133,7 +134,7 @@ function UsersContent() {
                       key={user.id}
                       accessibilityRole="button"
                       onPress={() =>
-                        router.push({
+                        navigateOnce({
                           pathname: '/user/[id]',
                           params: { id: user.id },
                         })
@@ -207,7 +208,7 @@ function UsersContent() {
                   key={role.id}
                   accessibilityRole="button"
                   onPress={() =>
-                    router.push({
+                    navigateOnce({
                       pathname: '/role/[id]',
                       params: { id: role.id },
                     })

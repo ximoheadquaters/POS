@@ -1,6 +1,8 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -327,6 +329,37 @@ function SoftCard({
   );
 }
 
+function NativeTrendChart({
+  points,
+  color = '#1A593B',
+}: {
+  points: Array<{ label: string; value: number }>;
+  color?: string;
+}) {
+  const sampled = points.length <= 14
+    ? points
+    : Array.from({ length: 14 }, (_, index) => points[Math.round(index * (points.length - 1) / 13)]!);
+  const maximum = Math.max(...sampled.map((point) => Number.isFinite(point.value) ? Math.abs(point.value) : 0), 1);
+  return (
+    <View className="w-full rounded-xl bg-slate-50 px-3 py-4">
+      <View className="h-36 flex-row items-end gap-1.5">
+        {sampled.map((point, index) => (
+          <View key={`${point.label}-${index}`} className="flex-1 items-center justify-end">
+            <View
+              className="w-full rounded-t-md"
+              style={{ height: Math.max(3, (Number.isFinite(point.value) ? Math.abs(point.value) : 0) / maximum * 128), backgroundColor: point.value < 0 ? '#DC6B64' : color }}
+            />
+          </View>
+        ))}
+      </View>
+      <View className="mt-2 flex-row justify-between">
+        <Text className="text-[10px] text-slate-500">{sampled[0]?.label ?? ''}</Text>
+        <Text className="text-[10px] text-slate-500">{sampled.at(-1)?.label ?? ''}</Text>
+      </View>
+    </View>
+  );
+}
+
 function DonutChart({
   total,
   totalLabel = 'Total',
@@ -365,6 +398,9 @@ function DonutChart({
         className="relative items-center justify-center"
         style={{ width: size, height: size, alignSelf: stacked ? 'center' : 'auto' }}
       >
+        {Platform.OS !== 'web' ? (
+          <View className="h-44 w-44 items-center justify-center rounded-full border-[20px] border-brand-100 bg-white" />
+        ) : (
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           <circle
             cx={size / 2}
@@ -398,6 +434,7 @@ function DonutChart({
             );
           })}
         </svg>
+        )}
         <View className="absolute items-center justify-center">
           <Text className="text-3xl font-semibold text-slate-900">{total}</Text>
           <Text className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
@@ -475,6 +512,13 @@ function RadialGauge({
   return (
     <View className="min-w-[120px] flex-1 items-center justify-center px-1 py-1">
       <View className="relative items-center justify-center" style={{ width: size, height: size / 2 + 12 }}>
+        {Platform.OS !== 'web' ? (
+          <View className="w-28 gap-2">
+            <View className="h-3 overflow-hidden rounded-full bg-slate-100">
+              <View className="h-3 rounded-full" style={{ width: `${clamped}%`, backgroundColor: color }} />
+            </View>
+          </View>
+        ) : (
         <svg width={size} height={size / 2 + 12} viewBox={`0 0 ${size} ${size / 2 + 12}`}>
           <path
             d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`}
@@ -492,6 +536,7 @@ function RadialGauge({
             strokeLinecap="round"
           />
         </svg>
+        )}
         <View className="absolute bottom-0 items-center">
           <Text className="text-xl font-semibold text-slate-900">{clamped}%</Text>
         </View>
@@ -954,6 +999,16 @@ function SalesLineChart({
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => maxSales * ratio);
   const lastActive = series.filter((item) => Number(item.sales) > 0).at(-1);
 
+  if (Platform.OS !== 'web') {
+    return (
+      <View className="w-full gap-2">
+        <Text className="text-right text-xs text-slate-500">Peak {formatMoney(maxSales.toFixed(2))}</Text>
+        <NativeTrendChart points={series.map((item) => ({ label: item.date, value: Number(item.sales) }))} />
+        {lastActive ? <Text className="text-right text-xs text-slate-600">Latest sale: {formatMoney(lastActive.sales)}</Text> : null}
+      </View>
+    );
+  }
+
   return (
     <View className="w-full">
       <View className="mb-1 flex-row items-center justify-end">
@@ -1126,6 +1181,24 @@ function ProductBarChart({
 
   if (!rows.length) {
     return <Text className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">{emptyLabel}</Text>;
+  }
+
+  if (Platform.OS !== 'web') {
+    return (
+      <View className="w-full gap-3 rounded-xl bg-slate-50 p-3">
+        {rows.map((row) => (
+          <View key={row.key} className="gap-1.5">
+            <View className="flex-row items-center justify-between gap-2">
+              <Text numberOfLines={1} className="min-w-0 flex-1 text-xs text-slate-700">{row.label}</Text>
+              <Text className="text-xs font-semibold text-slate-900">{row.display}</Text>
+            </View>
+            <View className="h-2 overflow-hidden rounded-full bg-slate-200">
+              <View className="h-2 rounded-full bg-brand-700" style={{ width: `${Math.max(0, Math.min(100, Math.abs(row.value) / maximum * 100))}%` }} />
+            </View>
+          </View>
+        ))}
+      </View>
+    );
   }
 
   return (
@@ -1386,6 +1459,16 @@ function ProfitTrendChart({
       <Text className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
         No profit activity for this period.
       </Text>
+    );
+  }
+
+  if (Platform.OS !== 'web') {
+    return (
+      <View className="w-full gap-2">
+        <Text className="text-xs text-slate-500">Daily Gross Profit — Selected Period</Text>
+        <NativeTrendChart points={series.map((item) => ({ label: item.date, value: Number(item.profit) }))} />
+        {lastActive ? <Text className="text-right text-xs text-slate-600">Latest profit: {formatMoney(lastActive.profit)}</Text> : null}
+      </View>
     );
   }
 
@@ -2245,7 +2328,7 @@ function MetricDrilldownView({
       item.sku || item.category || item.note || item.subValue || item.quantity != null,
     );
     if (item.actionHref && !hasDetail) {
-      router.push(item.actionHref as never);
+      navigateOnce(item.actionHref as never);
       return;
     }
     // Otherwise expand inline (catalog link, if any, appears in the detail panel).
@@ -2277,12 +2360,13 @@ function MetricDrilldownView({
         source,
         { rangeLabel, branchName },
       );
-      const { saveReportExport } = await import('@/lib/save-report-export');
-      await saveReportExport(output.bytes, output.fileName, 'csv');
+      const { reportSaveMessage, saveReportExport } = await import('@/lib/save-report-export');
+      const result = await saveReportExport(output.bytes, output.fileName, 'csv');
+      if (result.status === 'cancelled') return;
       showAlert({
         type: 'success',
         title: 'Export ready',
-        message: `${output.fileName} has been downloaded.`,
+        message: reportSaveMessage(result),
       });
     } catch (error) {
       showAlert({
@@ -2700,7 +2784,7 @@ function MetricDrilldownView({
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Open ${item.title} in catalog`}
-                            onPress={() => router.push(item.actionHref as never)}
+                            onPress={() => navigateOnce(item.actionHref as never)}
                             className="mt-2 min-h-10 flex-row items-center justify-center rounded-xl bg-brand-700 px-3 active:opacity-90"
                           >
                             <Feather name="external-link" size={14} color="#FFFFFF" />
@@ -4446,7 +4530,7 @@ function InventoryReport({
         </View>
 
         <Pressable
-          onPress={() => router.push('/(tabs)/inventory')}
+          onPress={() => navigateOnce('/(tabs)/inventory')}
           className="flex-row items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2"
         >
           <Text className="text-xs font-semibold text-brand-700">Manage Inventory</Text>
@@ -5259,7 +5343,7 @@ function PurchasingReport({
         </ResponsivePanel>
       </View>
       <Pressable
-        onPress={() => router.push('/purchasing')}
+        onPress={() => navigateOnce('/purchasing')}
         className="min-h-14 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:opacity-80"
       >
         <Feather name="truck" size={17} color="#FFFFFF" />
@@ -5597,7 +5681,7 @@ function CashReport({
         subtitle="Review each cashier shift, payment method, movement, expected cash, counted cash, and variance."
       >
         <Pressable
-          onPress={() => router.push('/shift-reports')}
+          onPress={() => navigateOnce('/shift-reports')}
           className="min-h-14 flex-row items-center justify-between rounded-xl bg-brand-700 px-5 active:opacity-80"
         >
           <View className="flex-row items-center">
@@ -5705,6 +5789,7 @@ function ReportsContent({
   const handleWorkspaceExport = async (format: 'xlsx' | 'pdf') => {
     if (!query.data || exporting) return;
     setExporting(true);
+    let stage: 'creating' | 'saving' = 'creating';
     try {
       const {
         buildInventoryExportExcel,
@@ -5725,19 +5810,21 @@ function ReportsContent({
             ? buildReportsExcel(query.data, exportMetadata, section)
             : await buildReportsPdf(query.data, exportMetadata);
       }
-      const { saveReportExport } = await import('@/lib/save-report-export');
-      await saveReportExport(output.bytes, output.fileName, format);
+      const { reportSaveMessage, saveReportExport } = await import('@/lib/save-report-export');
+      stage = 'saving';
+      const result = await saveReportExport(output.bytes, output.fileName, format);
+      if (result.status === 'cancelled') return;
       setExportMenuVisible(false);
       showAlert({
         type: 'success',
-        title: 'Export ready',
-        message: `${output.fileName} has been downloaded.`,
+        title: result.status === 'saved' ? 'Report saved' : 'Report ready',
+        message: reportSaveMessage(result),
       });
     } catch (error) {
       showAlert({
         type: 'error',
         title: 'Export failed',
-        message: error instanceof Error ? error.message : 'Could not export reports.',
+        message: `${stage === 'creating' ? 'Could not create the report' : 'Could not save the report'}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
     } finally {
       setExporting(false);
@@ -6101,8 +6188,13 @@ function ReportsContent({
               <View className="min-w-0 flex-1">
                 <Text className="text-lg font-semibold text-slate-900">Export Reports</Text>
                 <Text className="mt-1 text-xs text-slate-500">
-                  Download {rangeLabel} for {exportMetadata.branchName}.
+                  Export {rangeLabel} for {exportMetadata.branchName}.
                 </Text>
+                {Platform.OS === 'android' ? (
+                  <Text className="mt-1 text-xs leading-5 text-slate-600">
+                    Choose Downloads or Documents in the folder picker, then find the file in Files.
+                  </Text>
+                ) : null}
               </View>
               <Pressable
                 accessibilityRole="button"

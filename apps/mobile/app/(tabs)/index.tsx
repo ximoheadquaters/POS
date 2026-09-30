@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useMemo, useState, type ComponentProps } from 'react';
 import {
   Pressable,
@@ -458,7 +459,7 @@ export default function DashboardScreen() {
             })}
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push('/reports/overview')}
+              onPress={() => navigateOnce('/reports/overview')}
               className={`min-h-10 flex-row items-center rounded-xl border border-slate-200 bg-white ${phone ? 'px-3' : 'px-3.5'}`}
             >
               <Text className="text-[13px] font-medium text-slate-700">Reports</Text>
@@ -521,7 +522,7 @@ export default function DashboardScreen() {
             </View>
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push('/(tabs)/pos')}
+              onPress={() => navigateOnce('/(tabs)/pos')}
               className="min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:bg-brand-800"
             >
               <Text className="text-sm font-semibold text-white">Go to POS</Text>
@@ -568,7 +569,7 @@ export default function DashboardScreen() {
             >
               <View className="mb-4 flex-row items-center justify-between">
                 <Text className="text-[15px] font-semibold text-slate-900">Top products</Text>
-                <Pressable onPress={() => router.push('/reports/overview')}>
+                <Pressable onPress={() => navigateOnce('/reports/overview')}>
                   <Feather name="more-horizontal" size={18} color="#94A3B8" />
                 </Pressable>
               </View>
@@ -614,7 +615,7 @@ export default function DashboardScreen() {
                 <Text className="text-[15px] font-semibold text-slate-900">Needs attention</Text>
                 <Text className="mt-0.5 text-xs text-slate-500">Products running low</Text>
               </View>
-              <Pressable onPress={() => router.push('/(tabs)/inventory')}>
+              <Pressable onPress={() => navigateOnce('/(tabs)/inventory')}>
                 <Text className="text-sm font-medium text-brand-700">View All</Text>
               </Pressable>
             </View>

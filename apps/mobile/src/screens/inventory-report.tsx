@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Modal,
@@ -236,7 +237,7 @@ function InventoryReportTables({
         subtitle={`${filteredStock.length} of ${report.stock.length} tracked products shown.`}
         action={
           <Pressable
-            onPress={() => router.push('/(tabs)/inventory')}
+            onPress={() => navigateOnce('/(tabs)/inventory')}
             className="min-h-10 flex-row items-center rounded-xl bg-brand-50 px-3"
           >
             <Text className="text-xs font-medium text-brand-700">Open Inventory</Text>

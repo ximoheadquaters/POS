@@ -3,6 +3,19 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 export type ReportExportFormat = 'pdf' | 'xlsx' | 'csv';
+export type ReportSaveResult =
+  | { status: 'saved' | 'shared' | 'downloaded'; fileName: string }
+  | { status: 'cancelled' };
+
+export function reportSaveMessage(result: Exclude<ReportSaveResult, { status: 'cancelled' }>): string {
+  if (result.status === 'saved') {
+    return `${result.fileName} was saved in the folder you selected. Open Files and browse to that folder to find it.`;
+  }
+  if (result.status === 'downloaded') {
+    return `${result.fileName} was sent to your browser's Downloads. Check the browser's download list.`;
+  }
+  return `${result.fileName} was shared. If you chose Save to Files, open the folder you selected there.`;
+}
 
 function base64FromBytes(bytes: Uint8Array): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -24,12 +37,12 @@ export async function saveReportExport(
   bytes: Uint8Array,
   fileName: string,
   format: ReportExportFormat,
-): Promise<void> {
+): Promise<ReportSaveResult> {
   const mimeType =
     format === 'pdf'
       ? 'application/pdf'
       : format === 'csv'
-        ? 'text/csv;charset=utf-8'
+        ? 'text/csv'
         : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   if (Platform.OS === 'web') {
     const blob = new Blob([bytes.slice().buffer], { type: mimeType });
@@ -42,7 +55,22 @@ export async function saveReportExport(
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1_000);
-    return;
+    return { status: 'downloaded', fileName };
+  }
+
+  if (Platform.OS === 'android') {
+    const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!permission.granted) return { status: 'cancelled' };
+    const fileStem = fileName.replace(/\.(pdf|xlsx|csv)$/i, '');
+    const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+      permission.directoryUri,
+      fileStem,
+      mimeType,
+    );
+    await FileSystem.StorageAccessFramework.writeAsStringAsync(fileUri, base64FromBytes(bytes), {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return { status: 'saved', fileName };
   }
 
   if (!FileSystem.cacheDirectory) throw new Error('A writable export folder is unavailable.');
@@ -63,4 +91,5 @@ export async function saveReportExport(
           ? 'public.comma-separated-values-text'
           : 'org.openxmlformats.spreadsheetml.sheet',
   });
+  return { status: 'shared', fileName };
 }

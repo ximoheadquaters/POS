@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useEffect } from 'react';
 import { appAlert } from '@/providers/ios-alert';
 import { Platform, ScrollView, Text, View } from 'react-native';
@@ -114,11 +115,11 @@ function SaleDetailsContent() {
               variant="danger"
               onPress={() => {
                 if (Platform.OS === 'web' || typeof window !== 'undefined') {
-                  router.push(`/return/${sale.id}`);
+                  navigateOnce(`/return/${sale.id}`);
                 } else {
                   appAlert('Start return?', 'The original sale will be preserved.', [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Continue', onPress: () => router.push(`/return/${sale.id}`) },
+                    { text: 'Continue', onPress: () => navigateOnce(`/return/${sale.id}`) },
                   ]);
                 }
               }}

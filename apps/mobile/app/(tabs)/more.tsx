@@ -5,6 +5,7 @@ import type { Href } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import type { ModuleCode, Permission } from '@ximo/shared';
 import { api } from '@/lib/api';
+import { navigateOnce } from '@/lib/navigation';
 import { Button, Field, Header, Screen } from '@/components/ui';
 import Feather from '@expo/vector-icons/Feather';
 import { useSession } from '@/providers/session';
@@ -20,6 +21,22 @@ const links: Array<{
   module?: ModuleCode;
   permission?: Permission;
 }> = [
+  {
+    title: 'Reports',
+    subtitle: 'Sales, inventory, purchasing, profit and cash reports',
+    icon: 'file-text',
+    href: '/reports',
+    module: 'reports',
+    permission: 'reports:read',
+  },
+  {
+    title: 'Analytics',
+    subtitle: 'Charts and business trends',
+    icon: 'bar-chart-2',
+    href: '/analytics' as Href,
+    module: 'reports',
+    permission: 'reports:read',
+  },
   {
     title: 'Products',
     subtitle: 'Catalog, categories and prices',
@@ -69,13 +86,6 @@ const links: Array<{
     icon: 'tag',
     href: '/promotions' as Href,
     module: 'promotions',
-  },
-  {
-    title: 'Reports',
-    subtitle: 'KPIs, sales, inventory, purchasing, profit and cash',
-    icon: 'trending-up',
-    href: '/reports',
-    module: 'reports',
   },
   {
     title: 'Users & roles',
@@ -254,7 +264,7 @@ export default function MoreScreen() {
             <Pressable
               accessibilityRole="button"
               className="min-h-16 flex-row items-center rounded-2xl border border-slate-100 bg-white p-3.5 mb-2 active:bg-slate-50 shadow-xs"
-              onPress={() => router.push(item.href)}
+              onPress={() => navigateOnce(item.href)}
             >
               <View className="mr-3.5 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
                 <Feather name={item.icon as any} size={18} color="#1A593B" />

@@ -13,6 +13,15 @@ interface Customer {
   email?: string;
 }
 
+// Keep Android's text baseline and field dimensions unchanged on focus.
+const customerInputStyle = {
+  outline: 'none' as const,
+  textAlignVertical: 'center' as const,
+  includeFontPadding: false,
+  paddingVertical: 0,
+  height: 56,
+};
+
 import { AppSidebarProvider } from '@/components/app-sidebar';
 
 function CustomersContent() {
@@ -64,18 +73,19 @@ function CustomersContent() {
     <Screen>
       <Header title="Customers" showBack backLabel="More" fallbackHref="/(tabs)/more" />
       <View className="gap-3 border-b border-slate-200 bg-white p-4">
-        <View className="flex-row items-center rounded-xl bg-slate-100 px-4 border border-slate-200 focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-200">
+        <View className="h-14 flex-row items-center rounded-xl border border-slate-200 bg-slate-100 px-4 focus-within:border-brand-600">
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Search customers"
             placeholderTextColor="#81776E"
             selectionColor="#1A593B"
-            style={{ outline: 'none', textAlignVertical: 'center', paddingVertical: 0 }}
+            style={{ ...customerInputStyle, height: 54 }}
+            underlineColorAndroid="transparent"
             onSubmitEditing={(e: any) => {
               if (e && e.preventDefault) e.preventDefault();
             }}
-            className="flex-1 min-h-14 bg-transparent text-sm text-slate-900"
+            className="flex-1 bg-transparent text-sm text-slate-900"
           />
         </View>
         <View className="gap-2">
@@ -87,12 +97,13 @@ function CustomersContent() {
               placeholder="New Customer Name"
               placeholderTextColor="#81776E"
               selectionColor="#1A593B"
-              style={{ outline: 'none', textAlignVertical: 'center', paddingVertical: 0 }}
+              style={customerInputStyle}
+              underlineColorAndroid="transparent"
               onSubmitEditing={(e: any) => {
                 if (e && e.preventDefault) e.preventDefault();
                 if (name.trim()) create.mutate();
               }}
-              className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
+              className="h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600"
             />
             <Button
               title="Add"
@@ -108,8 +119,9 @@ function CustomersContent() {
               placeholderTextColor="#81776E"
               selectionColor="#1A593B"
               keyboardType="phone-pad"
-              style={{ outline: 'none', textAlignVertical: 'center', paddingVertical: 0 }}
-              className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
+              style={customerInputStyle}
+              underlineColorAndroid="transparent"
+              className="h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600"
             />
             <TextInput
               value={email}
@@ -120,8 +132,9 @@ function CustomersContent() {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-              style={{ outline: 'none', textAlignVertical: 'center', paddingVertical: 0 }}
-              className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
+              style={customerInputStyle}
+              underlineColorAndroid="transparent"
+              className="h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600"
             />
           </View>
         </View>

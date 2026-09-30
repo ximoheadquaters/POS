@@ -4,6 +4,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useVisibleNavigation, AppSidebarProvider } from './app-sidebar';
 import { ExpandableSection, Header } from './ui';
 import { QuickAccess, QuickActionBar } from './quick-access';
+import { navigateOnce } from '@/lib/navigation';
+import { router } from 'expo-router';
 
 let mockUser: any;
 jest.mock(
@@ -20,7 +22,7 @@ jest.mock(
   }),
   { virtual: true },
 );
-jest.mock('expo-router', () => ({ router: { push: jest.fn() }, usePathname: () => '/products' }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn(), navigate: jest.fn() }, usePathname: () => '/products' }));
 jest.mock('@expo/vector-icons/Feather', () => 'Feather');
 
 const destinations = (sections: ReturnType<typeof useVisibleNavigation>) =>
@@ -67,6 +69,19 @@ it('shows only permitted quick links and caps them at six', async () => {
   expect(screen.getAllByRole('button')).toHaveLength(6);
   expect(screen.getByText('New sale')).toBeTruthy();
   expect(screen.queryByText('Purchasing')).toBeNull();
+});
+
+it('ignores repeat navigation taps during a screen transition', () => {
+  const now = jest.spyOn(Date, 'now').mockReturnValue(10_000);
+  const navigate = router.navigate as jest.Mock;
+  navigate.mockClear();
+  navigateOnce('/payment');
+  navigateOnce('/payment');
+  expect(navigate).toHaveBeenCalledTimes(1);
+  now.mockReturnValue(11_000);
+  navigateOnce('/payment');
+  expect(navigate).toHaveBeenCalledTimes(2);
+  now.mockRestore();
 });
 
 it('mounts the quick-action bar on Android without browser keyboard events', async () => {

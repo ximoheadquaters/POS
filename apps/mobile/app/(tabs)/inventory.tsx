@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useMemo, useState, type ComponentProps } from 'react';
 import { FlatList, Modal, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Redirect, router } from 'expo-router';
@@ -193,7 +194,7 @@ export default function InventoryScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open Repack And Production"
-            onPress={() => router.push('/production')}
+            onPress={() => navigateOnce('/production')}
             className="w-full flex-row items-center rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5 active:bg-brand-100"
           >
             <View className="h-9 w-9 items-center justify-center rounded-lg bg-white">
@@ -315,7 +316,7 @@ export default function InventoryScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Receive Stock"
-                  onPress={() => router.push('/purchasing')}
+                  onPress={() => navigateOnce('/purchasing')}
                   className="mt-5 min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-5 active:bg-brand-800"
                 >
                   <Feather name="truck" size={16} color="#FFFFFF" />
@@ -336,7 +337,7 @@ export default function InventoryScreen() {
                   phone ? 'p-3' : 'p-4'
                 }`}
                 onPress={() =>
-                  router.push({
+                  navigateOnce({
                     pathname: '/stock-adjustment',
                     params: {
                       productId: item.productId,

@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib/cjs/index.js';
 import * as XLSX from 'xlsx-js-style';
 import { describe, expect, it } from 'vitest';
-import { buildReportsCsv, buildReportsExcel, buildReportsPdf } from './report-export';
+import { buildInventoryExportPdf, buildReportsCsv, buildReportsExcel, buildReportsPdf } from './report-export';
 import { buildReportDocument } from './report-table-model';
 import type { ReportExportMetadata, ReportsWorkspace } from './report-types';
 
@@ -188,5 +188,20 @@ describe('report exports', () => {
       branchName: 'Main – Branch',
     }, 'overview');
     expect(new TextDecoder().decode(output.bytes.slice(0, 8))).toContain('%PDF-');
+  });
+
+  it('encodes locale-generated narrow spaces in PDF footers on Android', async () => {
+    const generatedAt = new Date(metadata.generatedAt!);
+    generatedAt.toLocaleString = () => '8/2/2026, 10:00\u202fAM';
+    for (const section of [undefined, 'overview']) {
+      const output = await buildReportsPdf(report, { ...metadata, generatedAt }, section);
+      const document = await PDFDocument.load(output.bytes);
+      expect(document.getPageCount()).toBeGreaterThan(0);
+    }
+    const inventory = await buildInventoryExportPdf(
+      { stockItems: [], movements: [], conversions: [] },
+      { ...metadata, generatedAt },
+    );
+    expect((await PDFDocument.load(inventory.bytes)).getPageCount()).toBeGreaterThan(0);
   });
 });

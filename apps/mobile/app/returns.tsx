@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
@@ -27,7 +28,7 @@ function ReturnsContent() {
           <Text className="mb-6 max-w-sm text-center text-sm text-slate-600">
             Customer returns are disabled for your organization. You can still inspect receipts in sales history.
           </Text>
-          <Button title="View Sales History" onPress={() => router.push('/(tabs)/sales')} />
+          <Button title="View Sales History" onPress={() => navigateOnce('/(tabs)/sales')} />
         </View>
       </Screen>
     );
@@ -46,7 +47,7 @@ function ReturnsContent() {
         <Text className="mb-5 text-center text-slate-600">
           Find the receipt in sales history, open its details, then choose Return items.
         </Text>
-        <Button title="Find A Sale" onPress={() => router.push('/(tabs)/sales')} />
+        <Button title="Find A Sale" onPress={() => navigateOnce('/(tabs)/sales')} />
       </View>
     </Screen>
   );

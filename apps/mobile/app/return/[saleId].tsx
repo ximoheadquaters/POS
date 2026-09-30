@@ -1,7 +1,8 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { api, ApiError } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
@@ -34,6 +35,7 @@ import { AppSidebarProvider } from '@/components/app-sidebar';
 function ReturnFormContent() {
   const { currentUser } = useSession();
   const { showAlert } = useIosAlert();
+  const queryClient = useQueryClient();
   const { saleId } = useLocalSearchParams<{ saleId: string }>();
   const branch = useBranchStore((state) => state.activeBranch)!;
   const shift = useShiftStore((state) => state.activeShift);
@@ -69,6 +71,20 @@ function ReturnFormContent() {
         }),
       }),
     onSuccess: () => {
+      // Show the returned units immediately; refresh server totals and dependent views in the background.
+      queryClient.setQueryData<Sale>(['sale', saleId], (current) => current && ({
+        ...current,
+        items: current.items.map((item) => ({
+          ...item,
+          returnedQuantity: Number(item.returnedQuantity ?? 0) + Number((quantities[item.id] ?? '0').replace(',', '.')),
+        })),
+      }));
+      void queryClient.invalidateQueries({ queryKey: ['sale', saleId] });
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['pos-products'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      void queryClient.invalidateQueries({ queryKey: ['table-report'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports-workspace'] });
       setPinModalVisible(false);
       setManagerPin('');
       showAlert({
@@ -161,7 +177,7 @@ function ReturnFormContent() {
               Open a register shift to issue a cash refund.
             </Text>
             <Pressable
-              onPress={() => router.push('/registers')}
+              onPress={() => navigateOnce('/registers')}
               className="mt-3 min-h-10 items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800"
             >
               <Text className="text-sm font-semibold text-white">Open Registers & Shifts</Text>

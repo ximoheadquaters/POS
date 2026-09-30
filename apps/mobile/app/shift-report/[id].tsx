@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -136,7 +137,7 @@ function ShiftReportDetailContent() {
           shift.sales.map((sale) => (
             <Pressable
               key={sale.id}
-              onPress={() => router.push(`/sale/${sale.id}`)}
+              onPress={() => navigateOnce(`/sale/${sale.id}`)}
               className="mb-2 rounded-xl bg-white p-3.5 active:bg-brand-50"
             >
               <Text className="text-sm font-semibold text-slate-900">Invoice / Receipt</Text>

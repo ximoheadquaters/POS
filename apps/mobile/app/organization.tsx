@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useEffect, useState } from 'react';
 import { appAlert, confirmAppAction } from '@/providers/ios-alert';
 import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
@@ -585,7 +586,7 @@ function OrganizationContent() {
                   </Text>
                 </View>
                 <Pressable
-                  onPress={() => router.push('/branch-select')}
+                  onPress={() => navigateOnce('/branch-select')}
                   className="min-h-10 flex-row items-center rounded-xl bg-brand-50 px-3"
                 >
                   <Text className="text-xs font-medium text-brand-700">Switch Branch</Text>
@@ -628,7 +629,7 @@ function OrganizationContent() {
             <View className="gap-3 md:flex-row">
               {currentUser?.permissions?.includes('users:read') ? (
                 <Pressable
-                  onPress={() => router.push('/users')}
+                  onPress={() => navigateOnce('/users')}
                   className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-4"
                 >
                   <Feather name="users" size={16} color="#1A593B" />
@@ -637,7 +638,7 @@ function OrganizationContent() {
               ) : null}
               {currentUser?.permissions?.includes('settings:manage') ? (
                 <Pressable
-                  onPress={() => router.push('/settings')}
+                  onPress={() => navigateOnce('/settings')}
                   className="min-h-14 flex-1 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white px-4"
                 >
                   <Feather name="settings" size={16} color="#1A593B" />

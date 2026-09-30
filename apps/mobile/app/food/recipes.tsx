@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import React from 'react';
 import { View, Text, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -53,7 +54,7 @@ export default function RecipesOverviewScreen() {
                 </Text>
               </View>
               <Pressable
-                onPress={() => router.push(`/food/recipes/${item.id}` as any)}
+                onPress={() => navigateOnce(`/food/recipes/${item.id}` as any)}
                 className="flex-row items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg active:bg-slate-200"
               >
                 <Feather name="edit-3" size={14} color="#059669" />

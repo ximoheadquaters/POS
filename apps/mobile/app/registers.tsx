@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useEffect, useState } from 'react';
 import { appAlert } from '@/providers/ios-alert';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
@@ -258,7 +259,7 @@ function RegistersContent() {
             administrator or store owner to enable register management.
           </Text>
           <View className="mt-6 w-full max-w-xs">
-            <Button title="Return To POS" onPress={() => router.push('/(tabs)/pos')} />
+            <Button title="Return To POS" onPress={() => navigateOnce('/(tabs)/pos')} />
           </View>
         </View>
       </Screen>

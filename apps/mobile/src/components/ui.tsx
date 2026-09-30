@@ -1,5 +1,5 @@
 import { useState, type PropsWithChildren, type ReactNode } from 'react';
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Feather from '@expo/vector-icons/Feather';
 import { useAppSidebar } from './app-sidebar';
+import { goBackOnce, navigateOnce } from '@/lib/navigation';
 
 export function Screen({ children }: PropsWithChildren) {
   return <SafeAreaView className="flex-1 bg-[#F8F9FA]">{children}</SafeAreaView>;
@@ -36,10 +37,7 @@ export function Header({
   const sidebar = useAppSidebar();
   const { width } = useWindowDimensions();
   const phone = width < 640;
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(fallbackHref);
-  };
+  const goBack = () => goBackOnce(fallbackHref);
   return (
     <View
       className={`flex-row flex-wrap items-center gap-y-2 border-b border-slate-200 bg-white ${
@@ -265,7 +263,7 @@ export function ShiftTabs({ active }: { active: 'current' | 'history' }) {
           accessibilityRole="tab"
           accessibilityState={{ selected: active === tab.key }}
           onPress={() => {
-            if (active !== tab.key) router.push(tab.href);
+            if (active !== tab.key) navigateOnce(tab.href);
           }}
           className={`min-h-11 flex-1 items-center justify-center rounded-xl px-3 ${active === tab.key ? 'bg-brand-50' : 'hover:bg-slate-50'}`}
         >

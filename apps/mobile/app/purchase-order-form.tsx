@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
@@ -198,7 +199,7 @@ function PurchaseOrderFormContent() {
                   ))}
                 {!suppliers.data?.some((supplier) => supplier.isActive) ? (
                   <Pressable
-                    onPress={() => router.push('/supplier-form')}
+                    onPress={() => navigateOnce('/supplier-form')}
                     className="min-h-11 flex-row items-center px-2"
                   >
                     <Feather name="plus" size={16} color="#1A593B" />
@@ -220,7 +221,7 @@ function PurchaseOrderFormContent() {
                 {currentUser?.permissions.includes('products:manage') ? (
                   <Pressable
                     onPress={() =>
-                      router.push({ pathname: '/product-form', params: { incoming: '1' } })
+                      navigateOnce({ pathname: '/product-form', params: { incoming: '1' } })
                     }
                     className="min-h-11 flex-row items-center rounded-xl bg-brand-50 px-3"
                   >

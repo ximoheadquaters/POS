@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useMemo, useState } from 'react';
 import { appAlert } from '@/providers/ios-alert';
 import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
@@ -440,7 +441,7 @@ function BranchesContent() {
 
           {canViewUsers ? (
             <Pressable
-              onPress={() => router.push('/users')}
+              onPress={() => navigateOnce('/users')}
               className="min-h-14 flex-row items-center justify-center rounded-2xl border border-slate-200 bg-white px-4"
             >
               <Feather name="users" size={16} color="#1A593B" />

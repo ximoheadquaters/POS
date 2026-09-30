@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
@@ -95,7 +96,7 @@ function PurchasingContent() {
         action={
           section === 'orders' && currentUser?.permissions.includes('purchasing:manage') ? (
             <Pressable
-              onPress={() => router.push('/purchase-order-form')}
+              onPress={() => navigateOnce('/purchase-order-form')}
               className="min-h-11 flex-row items-center rounded-xl bg-brand-700 px-4"
             >
               <Feather name="plus" size={17} color="#fff" />
@@ -103,7 +104,7 @@ function PurchasingContent() {
             </Pressable>
           ) : section === 'suppliers' && currentUser?.permissions.includes('suppliers:manage') ? (
             <Pressable
-              onPress={() => router.push('/supplier-form')}
+              onPress={() => navigateOnce('/supplier-form')}
               className="min-h-11 flex-row items-center rounded-xl bg-brand-700 px-4"
             >
               <Feather name="plus" size={17} color="#fff" />
@@ -170,7 +171,7 @@ function PurchasingContent() {
                   <Pressable
                     key={item.id}
                     onPress={() =>
-                      router.push({ pathname: '/purchase-order/[id]', params: { id: item.id } })
+                      navigateOnce({ pathname: '/purchase-order/[id]', params: { id: item.id } })
                     }
                     className="flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-brand-50"
                   >
@@ -221,7 +222,7 @@ function PurchasingContent() {
                     key={item.id}
                     disabled={!currentUser?.permissions.includes('suppliers:manage')}
                     onPress={() =>
-                      router.push({
+                      navigateOnce({
                         pathname: '/supplier-form',
                         params: {
                           id: item.id,
@@ -308,7 +309,7 @@ function PurchasingContent() {
                           <Pressable
                             key={order.id}
                             onPress={() =>
-                              router.push({
+                              navigateOnce({
                                 pathname: '/purchase-order/[id]',
                                 params: { id: order.id, action: 'return' },
                               })
@@ -350,7 +351,7 @@ function PurchasingContent() {
                       <Pressable
                         key={item.id}
                         onPress={() =>
-                          router.push({
+                          navigateOnce({
                             pathname: '/purchase-order/[id]',
                             params: { id: item.purchaseOrderId },
                           })

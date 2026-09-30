@@ -14,6 +14,7 @@ import type { ModuleCode, Permission } from '@ximo/shared';
 import ximoIcon from '../../assets/ximo-icon-2.png';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
+import { navigateOnce } from '@/lib/navigation';
 
 interface SidebarContextValue {
   compact: boolean;
@@ -503,7 +504,7 @@ function SidebarMenu({ close }: { close(): void }) {
                           accessibilityLabel={`Open ${group.title}`}
                           onPress={() => {
                             close();
-                            router.push(group.href!);
+                            navigateOnce(group.href!);
                           }}
                           className={`min-h-11 flex-row items-center justify-between rounded-xl px-3 py-2.5 border ${
                             isDirectActive
@@ -589,7 +590,7 @@ function SidebarMenu({ close }: { close(): void }) {
                                     accessibilityState={{ selected: active }}
                                     onPress={() => {
                                       close();
-                                      router.push(subItem.href);
+                                      navigateOnce(subItem.href);
                                     }}
                                     className={`min-h-10 flex-1 flex-row items-center justify-between rounded-xl border px-3.5 py-2 ${
                                       active
@@ -638,7 +639,7 @@ function SidebarMenu({ close }: { close(): void }) {
             accessibilityRole="button"
             onPress={() => {
               close();
-              if (currentUser?.id) router.push(`/user/${currentUser.id}`);
+              if (currentUser?.id) navigateOnce(`/user/${currentUser.id}`);
             }}
             className="flex-1 flex-row items-center pr-2"
           >

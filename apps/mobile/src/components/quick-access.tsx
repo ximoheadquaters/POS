@@ -1,9 +1,10 @@
 import { Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
-import { router, type Href, usePathname } from 'expo-router';
+import { type Href, usePathname } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useEffect, type ComponentProps } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { isPathActive, useVisibleNavigation } from './app-sidebar';
+import { navigateOnce } from '@/lib/navigation';
 
 const destinations: Array<{
   href: Href;
@@ -62,7 +63,7 @@ export function QuickAccess({
             key={String(item.href)}
             accessibilityRole="button"
             accessibilityLabel={item.label}
-            onPress={() => router.push(item.href)}
+            onPress={() => navigateOnce(item.href)}
             style={{ flexBasis: width < 600 ? '48%' : 164, flexGrow: 0 }}
             className="min-h-11 flex-row items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 hover:border-slate-300 hover:bg-slate-50 active:bg-brand-50"
           >
@@ -114,7 +115,7 @@ export function QuickActionBar() {
         const focused = document.activeElement;
         if (focused instanceof HTMLElement) focused.blur();
       }
-      router.push(destination.href);
+      navigateOnce(destination.href);
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
@@ -137,7 +138,7 @@ export function QuickActionBar() {
               accessibilityState={{ selected: active }}
               accessibilityLabel={item.label}
               accessibilityHint={shortcut ? `Keyboard shortcut: ${shortcut}` : undefined}
-              onPress={() => router.push(item.href)}
+              onPress={() => { if (!active) navigateOnce(item.href); }}
               className={`min-h-12 items-center justify-center gap-1 rounded-xl border px-2 py-1.5 ${
                 active
                   ? 'border-brand-200 bg-brand-50'

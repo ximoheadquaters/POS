@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
+import { navigateOnce } from '@/lib/navigation';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
 import { minorToMoney, moneyToMinor, type POSBarcodeItem } from '@ximo/shared';
@@ -578,7 +579,7 @@ export default function PosScreen() {
             {
               text: 'Add product',
               onPress: () =>
-                router.push({
+                navigateOnce({
                   pathname: '/product-form',
                   params: { barcode, addToCart: '1' },
                 }),
@@ -690,7 +691,7 @@ export default function PosScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Scan product with camera"
-              onPress={() => router.push({ pathname: '/product-scan', params: { addToCart: '1' } })}
+              onPress={() => navigateOnce({ pathname: '/product-scan', params: { addToCart: '1' } })}
               className="min-h-11 flex-row items-center rounded-xl px-3 active:bg-brand-50"
             >
               <Feather name="camera" size={17} color="#1A593B" />
@@ -1006,13 +1007,13 @@ export default function PosScreen() {
                   <Button
                     title="Continue to Payment"
                     disabled={!items.length || hasStockConflict}
-                    onPress={() => router.push('/payment')}
+                    onPress={() => navigateOnce('/payment')}
                   />
                   <View className="flex-row gap-2">
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Open parked sales${heldCount ? `, ${heldCount} parked` : ''}`}
-                      onPress={() => router.push('/food/parked-sales')}
+                      onPress={() => navigateOnce('/food/parked-sales')}
                       className="min-h-11 flex-1 flex-row items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 active:bg-amber-100"
                     >
                       <Feather name="pause-circle" size={16} color="#B45309" />
@@ -1039,7 +1040,7 @@ export default function PosScreen() {
                   </View>
                 </View>
               ) : (
-                <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
+                <Button title="Open a shift to sell" onPress={() => navigateOnce('/registers')} />
               )}
               {items.length ? (
                 <Pressable
@@ -1134,7 +1135,7 @@ export default function PosScreen() {
           />
         </View>
         <Pressable
-          onPress={() => router.push('/food/parked-sales')}
+          onPress={() => navigateOnce('/food/parked-sales')}
           accessibilityLabel={`Open held carts${heldCount ? `, ${heldCount} saved` : ''}`}
           className={`flex-row items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-100 ${
             phone ? 'px-2.5 py-2' : 'px-3 py-2'
@@ -1182,7 +1183,7 @@ export default function PosScreen() {
               accessibilityRole="button"
               accessibilityLabel="Scan product with camera"
               onPress={() =>
-                router.push({
+                navigateOnce({
                   pathname: '/product-scan',
                   params: { addToCart: '1' },
                 })
@@ -1520,10 +1521,10 @@ export default function PosScreen() {
                 <Button
                   title="Continue to payment"
                   disabled={!items.length || hasStockConflict}
-                  onPress={() => router.push('/payment')}
+                  onPress={() => navigateOnce('/payment')}
                 />
               ) : (
-                <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
+                <Button title="Open a shift to sell" onPress={() => navigateOnce('/registers')} />
               )}
             </View>
           </View>
@@ -1558,7 +1559,7 @@ export default function PosScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Open cart"
-                    onPress={() => router.push('/cart')}
+                    onPress={() => navigateOnce('/cart')}
                     className={`${phone ? 'min-h-11' : 'min-h-12'} flex-row items-center justify-center rounded-xl bg-brand-700 px-3 active:bg-brand-800`}
                   >
                     <Text
@@ -1576,7 +1577,7 @@ export default function PosScreen() {
               </View>
             ) : null
           ) : (
-            <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
+            <Button title="Open a shift to sell" onPress={() => navigateOnce('/registers')} />
           )}
         </View>
       ) : null}

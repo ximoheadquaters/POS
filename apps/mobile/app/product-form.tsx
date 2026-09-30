@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
@@ -1563,7 +1564,7 @@ function ProductFormContent() {
                         </View>
                         <Pressable
                           accessibilityRole="button"
-                          onPress={() => router.push('/catalogue')}
+                          onPress={() => navigateOnce('/catalogue')}
                           className="min-h-10 flex-row items-center justify-center rounded-xl bg-brand-50 px-3"
                         >
                           <Feather name="settings" size={14} color="#1A593B" />
@@ -2104,7 +2105,7 @@ function ProductFormContent() {
                             <Pressable
                               accessibilityRole="button"
                               onPress={() =>
-                                router.push({
+                                navigateOnce({
                                   pathname: '/stock-adjustment',
                                   params: {
                                     productId,
@@ -2217,7 +2218,7 @@ function ProductFormContent() {
                               <Pressable
                                 accessibilityRole="button"
                                 onPress={() =>
-                                  router.push({
+                                  navigateOnce({
                                     pathname: '/product-variants',
                                     params: {
                                       productId,

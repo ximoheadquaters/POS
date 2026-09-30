@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import type { FeatureAvailability } from '@/lib/feature-lock';
@@ -30,7 +31,7 @@ export function LockedFeatureModal({
       actionText = 'Manage Modules';
       actionHandler = () => {
         onClose();
-        router.push('/organization');
+        navigateOnce('/organization');
       };
     }
   } else if (availability.state === 'plan_required') {
@@ -39,7 +40,7 @@ export function LockedFeatureModal({
       actionText = 'View Plan Options';
       actionHandler = () => {
         onClose();
-        router.push('/organization');
+        navigateOnce('/organization');
       };
     }
   } else if (availability.state === 'permission_denied') {

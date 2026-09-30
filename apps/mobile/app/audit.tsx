@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useMemo, useState, type ComponentProps } from 'react';
 import {
   Modal,
@@ -266,7 +267,7 @@ function AuditContent() {
             The Audit Logs module is disabled for your organization.
           </Text>
           <View className="mt-6 w-full max-w-xs">
-            <Button title="Return To POS" onPress={() => router.push('/(tabs)/pos')} />
+            <Button title="Return To POS" onPress={() => navigateOnce('/(tabs)/pos')} />
           </View>
         </View>
       </Screen>

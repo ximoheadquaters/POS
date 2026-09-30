@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useMemo, useState } from 'react';
 import {
   FlatList,
@@ -182,7 +183,7 @@ function ShiftReportsContent() {
             administrator or store owner to enable register management.
           </Text>
           <View className="mt-6 w-full max-w-xs">
-            <Button title="Return To POS" onPress={() => router.push('/(tabs)/pos')} />
+            <Button title="Return To POS" onPress={() => navigateOnce('/(tabs)/pos')} />
           </View>
         </View>
       </Screen>
@@ -284,7 +285,7 @@ function ShiftReportsContent() {
           renderItem={({ item }) => (
             <Pressable
               onPress={() =>
-                router.push({ pathname: '/shift-report/[id]', params: { id: item.id } })
+                navigateOnce({ pathname: '/shift-report/[id]', params: { id: item.id } })
               }
               className="flex-row items-center rounded-2xl border border-slate-100 bg-white p-4"
             >

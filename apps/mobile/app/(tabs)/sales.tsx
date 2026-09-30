@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
@@ -161,7 +162,7 @@ export default function SalesHistoryScreen() {
         buttons: [
           {
             text: 'Go to Checkout',
-            onPress: () => router.push('/(tabs)/pos'),
+            onPress: () => navigateOnce('/(tabs)/pos'),
           },
         ],
       });
@@ -357,7 +358,7 @@ export default function SalesHistoryScreen() {
                 className={`rounded-2xl border border-slate-100 bg-white active:border-brand-300 active:bg-brand-50 ${
                   phone ? 'p-3' : 'p-4'
                 }`}
-                onPress={() => router.push(`/sale/${item.id}`)}
+                onPress={() => navigateOnce(`/sale/${item.id}`)}
               >
                 <View className="flex-row justify-between">
                   <Text className="font-bold text-slate-900">{item.receiptNumber}</Text>
@@ -494,7 +495,7 @@ export default function SalesHistoryScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`View ${actionLabel.toLowerCase()} order ${item.receiptNumber}`}
-                onPress={() => router.push(`/sale/${item.id}`)}
+                onPress={() => navigateOnce(`/sale/${item.id}`)}
                 className={`rounded-2xl border border-slate-200 bg-white active:bg-slate-50 ${
                   phone ? 'p-3' : 'p-4'
                 }`}

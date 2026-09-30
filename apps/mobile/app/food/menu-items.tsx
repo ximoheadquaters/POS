@@ -1,3 +1,4 @@
+import { navigateOnce } from '@/lib/navigation';
 import React from 'react';
 import { View, Text, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -30,7 +31,7 @@ export default function MenuItemsScreen() {
           </Text>
         </View>
         <Pressable
-          onPress={() => router.push('/food/menu-items/new' as any)}
+          onPress={() => navigateOnce('/food/menu-items/new' as any)}
           className="flex-row items-center gap-2 bg-emerald-600 px-4 py-2.5 rounded-xl active:bg-emerald-700 shadow-sm"
         >
           <Feather name="plus" size={16} color="#fff" />
@@ -50,7 +51,7 @@ export default function MenuItemsScreen() {
           onRefresh={refetch}
           renderItem={({ item }) => (
             <Pressable
-              onPress={() => router.push(`/food/menu-items/${item.id}` as any)}
+              onPress={() => navigateOnce(`/food/menu-items/${item.id}` as any)}
               className="mb-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex-row items-center justify-between"
             >
               <View className="gap-1 flex-1">

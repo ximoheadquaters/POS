@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { navigateOnce } from '@/lib/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -522,6 +524,7 @@ function CompactReportTable({
 }
 
 function ReportTable({ table, compact }: { table: ReportTableDefinition; compact: boolean }) {
+  const [visibleLimit, setVisibleLimit] = useState(50);
   const initialSortColumn = defaultSortColumnForTable(table);
   const [sortColumn, setSortColumn] = useState(initialSortColumn);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(
@@ -596,6 +599,8 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
     table.rows,
   ]);
   const filteredRows = filteredEntries.map((entry) => entry.row);
+  useEffect(() => setVisibleLimit(50), [filteredEntries]);
+  const displayedEntries = Platform.OS === 'web' ? filteredEntries : filteredEntries.slice(0, visibleLimit);
   const activeFilterCount =
     Object.values(columnFilters).filter((value) => value.trim()).length +
     brandFilters.length +
@@ -802,7 +807,7 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
           </View>
           <CompactReportTable
             table={table}
-            entries={filteredEntries}
+            entries={displayedEntries}
             expandedRowKey={expandedRowKey}
             onToggleRow={toggleRow}
           />
@@ -920,7 +925,7 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
               );
             })}
           </View>
-          {filteredEntries.map((entry, rowIndex) => {
+          {displayedEntries.map((entry, rowIndex) => {
             const row = entry.row;
             const transactionId = transactionIdForRow(table, entry.rowIndex);
             const expanded = expandedRowKey === entry.key;
@@ -979,6 +984,17 @@ function ReportTable({ table, compact }: { table: ReportTableDefinition; compact
           })}
         </View>
       )}
+      {displayedEntries.length < filteredEntries.length ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setVisibleLimit((limit) => limit + 50)}
+          className="min-h-11 items-center justify-center border-t border-slate-100 bg-white px-4"
+        >
+          <Text className="text-sm font-semibold text-brand-700">
+            Show more records ({displayedEntries.length} of {filteredEntries.length})
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -1059,7 +1075,10 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
       )),
     staleTime: 60_000,
   });
-  const document = query.data ? buildReportDocument(query.data, section, previousQuery.data) : null;
+  const document = useMemo(
+    () => query.data ? buildReportDocument(query.data, section, previousQuery.data) : null,
+    [query.data, section, previousQuery.data],
+  );
   const metadata = {
     organizationName: currentUser?.organization.name ?? 'Ximo POS',
     branchName: branch?.name ?? 'Current branch',
@@ -1081,24 +1100,27 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
       return;
     }
     setExporting(true);
+    let stage: 'creating' | 'saving' = 'creating';
     try {
       // Keep the PDF/Excel libraries out of the report screen's startup path.
       const { buildReportsCsv, buildReportsExcel, buildReportsPdf } = await import('@/lib/report-export');
-      const { saveReportExport } = await import('@/lib/save-report-export');
+      const { reportSaveMessage, saveReportExport } = await import('@/lib/save-report-export');
       const output =
         format === 'csv'
           ? buildReportsCsv(query.data, metadata, section)
           : format === 'xlsx'
             ? buildReportsExcel(query.data, metadata, section)
             : await buildReportsPdf(query.data, metadata, section);
-      await saveReportExport(output.bytes, output.fileName, format);
+      stage = 'saving';
+      const result = await saveReportExport(output.bytes, output.fileName, format);
+      if (result.status === 'cancelled') return;
       setExportVisible(false);
-      showAlert({ type: 'success', title: 'Report exported', message: output.fileName });
+      showAlert({ type: 'success', title: result.status === 'saved' ? 'Report saved' : 'Report ready', message: reportSaveMessage(result) });
     } catch (error) {
       showAlert({
         type: 'error',
         title: 'Export failed',
-        message: error instanceof Error ? error.message : 'The report could not be exported.',
+        message: `${stage === 'creating' ? 'Could not create the report' : 'Could not save the report'}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
     } finally {
       setExporting(false);
@@ -1194,7 +1216,7 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
             <View className="min-h-72 rounded-2xl bg-white">
               <ErrorState
                 message="Select a branch before opening reports."
-                retry={() => router.push('/branches' as never)}
+                retry={() => navigateOnce('/branches' as never)}
               />
             </View>
           ) : query.isLoading ? (
@@ -1313,6 +1335,11 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
               Only {document?.title ?? 'the current report'} Will Be Exported For{' '}
               {displayRange(dateRange)}.
             </Text>
+            {Platform.OS === 'android' ? (
+              <Text className="mt-2 text-xs leading-5 text-slate-600">
+                Choose a folder such as Downloads or Documents. The report will be saved there and can be found in Files.
+              </Text>
+            ) : null}
             <View className="mt-4 gap-2">
               {(['csv', 'xlsx', 'pdf'] as ReportExportFormat[]).map((format) => (
                 <Pressable
