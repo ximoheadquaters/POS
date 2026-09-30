@@ -56,7 +56,7 @@ interface VoidedHeldSale {
   cashierName: string;
   customerName?: string | null;
   itemCount: number;
-  action?: 'sale.resumed' | 'sale.discarded' | null;
+  action?: 'sale.resumed' | 'sale.discarded' | 'sale.cleared' | null;
   closedAt?: string | null;
   closedBy?: string | null;
 }
@@ -64,7 +64,8 @@ interface VoidedHeldSale {
 function voidedActionLabel(action: VoidedHeldSale['action']): string {
   if (action === 'sale.discarded') return 'Discarded';
   if (action === 'sale.resumed') return 'Resumed to cart';
-  return 'Closed';
+  if (action === 'sale.cleared') return 'Cleared at POS';
+  return 'Cleared at POS';
 }
 
 interface ResumedHeldSale {
@@ -211,13 +212,13 @@ export default function SalesHistoryScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerClassName={`min-w-full ${phone ? 'px-3' : 'px-4'}`}
+          contentContainerClassName={phone ? 'px-3' : 'px-4'}
         >
-          <View className="min-w-full flex-row rounded-2xl bg-slate-100 p-1">
+          <View className="flex-row gap-1 rounded-2xl bg-slate-100 p-1">
             <Pressable
               accessibilityRole="button"
               onPress={() => setActiveTab('completed')}
-              className={`min-h-11 ${phone ? 'min-w-0 px-2' : 'min-w-36 px-3'} flex-1 flex-row items-center justify-center rounded-xl ${
+              className={`min-h-11 ${phone ? 'min-w-28 px-2' : 'min-w-36 px-3'} flex-row items-center justify-center rounded-xl ${
                 activeTab === 'completed' ? 'bg-white' : 'active:bg-slate-200/50'
               }`}
             >
@@ -237,7 +238,7 @@ export default function SalesHistoryScreen() {
             <Pressable
               accessibilityRole="button"
               onPress={() => setActiveTab('held')}
-              className={`min-h-11 ${phone ? 'min-w-0 px-2' : 'min-w-36 px-3'} flex-1 flex-row items-center justify-center rounded-xl ${
+              className={`min-h-11 ${phone ? 'min-w-28 px-2' : 'min-w-36 px-3'} flex-row items-center justify-center rounded-xl ${
                 activeTab === 'held' ? 'bg-white' : 'active:bg-slate-200/50'
               }`}
             >
@@ -257,7 +258,7 @@ export default function SalesHistoryScreen() {
             <Pressable
               accessibilityRole="button"
               onPress={() => setActiveTab('voided')}
-              className={`min-h-11 ${phone ? 'min-w-0 px-2' : 'min-w-40 px-3'} flex-1 flex-row items-center justify-center rounded-xl ${
+              className={`min-h-11 ${phone ? 'min-w-28 px-2' : 'min-w-40 px-3'} flex-row items-center justify-center rounded-xl ${
                 activeTab === 'voided' ? 'bg-white' : 'active:bg-slate-200/50'
               }`}
             >
@@ -371,7 +372,7 @@ export default function SalesHistoryScreen() {
                   <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     {completedSaleMeta(item)}
                   </Text>
-                  <Text className="text-xs font-bold text-brand-700">View Receipt ›</Text>
+                  <Text className="text-xs font-bold text-brand-700">View receipt ›</Text>
                 </View>
               </Pressable>
             )}
@@ -380,12 +381,12 @@ export default function SalesHistoryScreen() {
       ) : activeTab === 'held' ? (
         /* Held Sales (Parked Carts) Feed */
         heldQuery.isLoading ? (
-          <LoadingState label="Loading Held Sales…" />
+          <LoadingState label="Loading held sales…" />
         ) : heldQuery.isError ? (
           <ErrorState message={heldQuery.error.message} retry={() => void heldQuery.refetch()} />
         ) : heldSales.length === 0 ? (
           <EmptyState
-            title="No Held Sales"
+            title="No held sales"
             message="Parked orders will appear here when a cashier holds a sale at POS checkout."
           />
         ) : (
@@ -416,7 +417,7 @@ export default function SalesHistoryScreen() {
                     ) : null}
 
                     <Text className="mt-1.5 text-xs font-medium text-slate-500">
-                      {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} · Parked By{' '}
+                      {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} · Parked by{' '}
                       {item.cashierName}
                       {item.customerName ? ` for ${item.customerName}` : ''}
                     </Text>
@@ -467,7 +468,7 @@ export default function SalesHistoryScreen() {
           />
         )
       ) : voidedQuery.isLoading ? (
-        <LoadingState label="Loading Voided History…" />
+        <LoadingState label="Loading voided history…" />
       ) : voidedQuery.isError ? (
         <ErrorState message={voidedQuery.error.message} retry={() => void voidedQuery.refetch()} />
       ) : (
@@ -478,17 +479,21 @@ export default function SalesHistoryScreen() {
           onEndReached={() => voidedQuery.hasNextPage && void voidedQuery.fetchNextPage()}
           ListEmptyComponent={
             <EmptyState
-              title="No Voided Held Sales"
+              title="No voided held sales"
               message="Discarded and resumed parked orders will appear here for reference."
             />
           }
           renderItem={({ item }) => {
-            const discarded = item.action === 'sale.discarded';
+            const isResumed = item.action === 'sale.resumed';
             const actionLabel = voidedActionLabel(item.action);
+            const badgeBg = isResumed ? 'bg-blue-50' : 'bg-red-50';
+            const badgeText = isResumed ? 'text-blue-700' : 'text-red-700';
+            const iconName = isResumed ? 'rotate-ccw' : item.action === 'sale.cleared' ? 'trash-2' : 'x-circle';
+            const iconColor = isResumed ? '#1D4ED8' : '#B91C1C';
             return (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`View ${actionLabel.toLowerCase()} parked order ${item.receiptNumber}`}
+                accessibilityLabel={`View ${actionLabel.toLowerCase()} order ${item.receiptNumber}`}
                 onPress={() => router.push(`/sale/${item.id}`)}
                 className={`rounded-2xl border border-slate-200 bg-white active:bg-slate-50 ${
                   phone ? 'p-3' : 'p-4'
@@ -497,17 +502,9 @@ export default function SalesHistoryScreen() {
                 <View className="flex-row items-start justify-between gap-3">
                   <View className="flex-1">
                     <View className="flex-row flex-wrap items-center gap-2">
-                      <View
-                        className={`flex-row items-center gap-1 rounded-full px-2.5 py-1 ${discarded ? 'bg-red-50' : 'bg-blue-50'}`}
-                      >
-                        <Feather
-                          name={discarded ? 'trash-2' : 'rotate-ccw'}
-                          size={12}
-                          color={discarded ? '#B91C1C' : '#1D4ED8'}
-                        />
-                        <Text
-                          className={`text-xs font-bold ${discarded ? 'text-red-700' : 'text-blue-700'}`}
-                        >
+                      <View className={`flex-row items-center gap-1 rounded-full px-2.5 py-1 ${badgeBg}`}>
+                        <Feather name={iconName} size={12} color={iconColor} />
+                        <Text className={`text-xs font-bold ${badgeText}`}>
                           {actionLabel.toUpperCase()}
                         </Text>
                       </View>
@@ -519,17 +516,14 @@ export default function SalesHistoryScreen() {
                     ) : null}
 
                     <Text className="mt-2 text-xs font-medium text-slate-500">
-                      {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} · Parked By{' '}
+                      {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} · Punched by{' '}
                       {item.cashierName}
                       {item.customerName ? ` for ${item.customerName}` : ''}
-                    </Text>
-                    <Text className="mt-1 text-xs text-slate-400">
-                      Parked {formatDate(item.createdAt)}
                     </Text>
                     <Text className="mt-1 text-xs font-medium text-slate-500">
                       {actionLabel}
                       {item.closedBy ? ` by ${item.closedBy}` : ''}
-                      {item.closedAt ? ` · ${formatDate(item.closedAt)}` : ''}
+                      {item.closedAt ? ` · ${formatDate(item.closedAt)}` : ` · ${formatDate(item.createdAt)}`}
                     </Text>
                   </View>
 
@@ -537,7 +531,7 @@ export default function SalesHistoryScreen() {
                     <Text className="text-lg font-semibold text-slate-700">
                       {formatMoney(item.total)}
                     </Text>
-                    <Text className="mt-3 text-xs font-bold text-brand-700">View Details ›</Text>
+                    <Text className="mt-3 text-xs font-bold text-brand-700">View details ›</Text>
                   </View>
                 </View>
               </Pressable>

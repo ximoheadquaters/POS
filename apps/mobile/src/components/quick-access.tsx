@@ -1,4 +1,4 @@
-import { Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { router, type Href, usePathname } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useEffect, type ComponentProps } from 'react';
@@ -94,7 +94,8 @@ export function QuickActionBar() {
   const phone = width < 640;
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    // React Native also defines `window`, but it has no browser event API.
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.ctrlKey || event.altKey || event.metaKey || event.defaultPrevented) return;
       const shortcutIndex = Number(event.key) - 1;

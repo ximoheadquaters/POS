@@ -1,0 +1,27 @@
+# Keep the native build upload limited to the POS app and shared package.
+node_modules/
+dist/
+dist-web/
+.expo/
+.git/
+.codex/
+.agents/
+.codex-worktrees/
+.deployment-src/
+.pnpm-store/
+.tmp/
+scratch/
+artifacts/
+docs/
+supabase/
+apps/api/
+coverage/
+*.log
+*.tsbuildinfo
+.env
+.env.*
+**/.env
+**/.env.*
+*.keystore
+*.jks
+credentials.json

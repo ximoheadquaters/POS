@@ -514,16 +514,31 @@ interface PdfContext {
   metadata: ReportExportMetadata;
 }
 
+// Standard PDF fonts cannot encode the peso sign and several symbols used by
+// report formulas or user-entered names. Transliterate before measuring too.
+function pdfSafeText(value: string): string {
+  return value
+    .replaceAll('₱', 'PHP ')
+    .replaceAll('×', ' x ')
+    .replaceAll('±', '+/-')
+    .replaceAll('−', '-')
+    .replaceAll('—', '-')
+    .replaceAll('–', '-')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]/g, '?');
+}
+
 function drawPageHeader(context: PdfContext): void {
   const { page, bold, regular, metadata, pageNumber } = context;
-  page.drawText(metadata.organizationName || 'Ximo POS', {
+  page.drawText(pdfSafeText(metadata.organizationName || 'Ximo POS'), {
     x: 40,
     y: 804,
     size: 15,
     font: bold,
     color: BRAND,
   });
-  page.drawText(`${metadata.rangeLabel} | ${metadata.branchName}`, {
+  page.drawText(pdfSafeText(`${metadata.rangeLabel} | ${metadata.branchName}`), {
     x: 40,
     y: 786,
     size: 9,
@@ -559,10 +574,10 @@ function ensureSpace(context: PdfContext, height: number): void {
 function sectionTitle(context: PdfContext, title: string, subtitle?: string): void {
   // Keep a section heading with its table header and at least a few rows.
   ensureSpace(context, subtitle ? 138 : 116);
-  context.page.drawText(title, { x: 40, y: context.y, size: 16, font: context.bold, color: TEXT });
+  context.page.drawText(pdfSafeText(title), { x: 40, y: context.y, size: 16, font: context.bold, color: TEXT });
   context.y -= 19;
   if (subtitle) {
-    context.page.drawText(subtitle, {
+    context.page.drawText(pdfSafeText(subtitle), {
       x: 40,
       y: context.y,
       size: 8.5,
@@ -574,6 +589,7 @@ function sectionTitle(context: PdfContext, title: string, subtitle?: string): vo
 }
 
 function truncate(font: PDFFont, value: string, size: number, width: number): string {
+  value = pdfSafeText(value);
   if (font.widthOfTextAtSize(value, size) <= width) return value;
   let result = value;
   while (result.length > 1 && font.widthOfTextAtSize(`${result}...`, size) > width) {

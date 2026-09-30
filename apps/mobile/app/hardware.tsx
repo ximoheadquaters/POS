@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HardwareModuleCode } from '@ximo/shared';
 import { Button, ExpandableSection, Header, LoadingState, Screen } from '@/components/ui';
@@ -84,7 +85,13 @@ function HardwareContent() {
   const test = useMutation({
     mutationFn: async (code: HardwareModuleCode) => {
       if (code === 'receipt_printer') {
+        if (!organizationId) {
+          throw new Error('Sign in again, then retry testing the printer.');
+        }
         await getHardwareDriver('receipt_printer').test(printerSettings);
+        // A successful test must use the same persisted selection as sale receipts.
+        const saved = await saveReceiptPrinterSettings(printerSettings, organizationId, branchId);
+        queryClient.setQueryData(['receipt-printer-settings', organizationId, branchId], saved);
       } else {
         await getHardwareDriver(code).test();
       }
@@ -98,7 +105,9 @@ function HardwareContent() {
         message:
           code === 'barcode_scanner'
             ? 'Open Point of sale, scan a barcode into the search field, and send Enter.'
-            : 'The device test completed successfully.',
+            : code === 'receipt_printer'
+              ? 'Test receipt printed. This printer is saved for future sales.'
+              : 'The device test completed successfully.',
       });
     },
     onError: (error) =>
@@ -126,7 +135,7 @@ function HardwareContent() {
             {/* Informational banner */}
             <View className="flex-row items-center rounded-2xl border border-brand-200 bg-brand-50/80 p-4">
               <View className="mr-3.5 h-10 w-10 items-center justify-center rounded-xl bg-brand-100">
-                <Text className="text-base font-black text-brand-800">⚡</Text>
+                <Feather name="cpu" size={18} color="#1A593B" />
               </View>
               <View className="flex-1">
                 <Text className="text-xs font-bold text-brand-950">

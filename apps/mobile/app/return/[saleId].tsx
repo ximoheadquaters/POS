@@ -3,9 +3,9 @@ import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'r
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
-import { minorToMoney, moneyToMinor } from '@ximo/shared';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { calculateReturnRefund } from '@/lib/return-refund';
 import { Button, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { useBranchStore } from '@/store/branch';
 import { useShiftStore } from '@/store/shift';
@@ -19,6 +19,7 @@ interface SaleItem {
   quantity: number;
   unitPrice: string;
   lineTotal: string;
+  taxTotal: string;
   returnedQuantity: number;
 }
 
@@ -48,16 +49,17 @@ function ReturnFormContent() {
   });
 
   const mutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (pin: string) =>
       api(`/returns/sales/${saleId}`, {
         method: 'POST',
         body: JSON.stringify({
           branchId: branch.id,
           registerId: shift!.registerId,
           shiftId: shift!.id,
-          reason,
+          reason: reason.trim() || 'Customer return request',
           restock,
           refundMethod: 'cash',
+          managerPin: pin.trim(),
           items: Object.entries(quantities)
             .filter(([, value]) => Number(value.replace(',', '.')) > 0)
             .map(([saleItemId, value]) => ({
@@ -67,6 +69,8 @@ function ReturnFormContent() {
         }),
       }),
     onSuccess: () => {
+      setPinModalVisible(false);
+      setManagerPin('');
       showAlert({
         title: 'Return Completed',
         message: 'Inventory and refund records were saved successfully.',
@@ -82,7 +86,9 @@ function ReturnFormContent() {
     onError: (error) =>
       showAlert({
         title: 'Return Failed',
-        message: error.message,
+        message: error instanceof ApiError && error.code === 'INTERNAL_ERROR'
+          ? `The server could not complete this return. Check return history before retrying. Reference: ${error.requestId ?? 'unavailable'}. Please contact support with this reference.`
+          : error.message,
         type: 'error',
       }),
   });
@@ -95,23 +101,8 @@ function ReturnFormContent() {
     }));
   };
 
-  const calculateTotalRefund = (): string => {
-    if (!query.data) return '0.00';
-    let totalMinor = 0n;
-    for (const item of query.data.items) {
-      const qtyStr = quantities[item.id] ?? '0';
-      const qty = parseFloat(qtyStr.replace(',', '.')) || 0;
-      if (qty > 0) {
-        const lineTotalMinor = moneyToMinor(item.lineTotal);
-        const quantityMinor = BigInt(Math.round(qty * 1_000));
-        const soldQuantityMinor = BigInt(Math.round(item.quantity * 1_000));
-        totalMinor += (lineTotalMinor * quantityMinor) / soldQuantityMinor;
-      }
-    }
-    return minorToMoney(totalMinor);
-  };
-
-  const totalRefund = calculateTotalRefund();
+  const refund = calculateReturnRefund(query.data?.items ?? [], quantities);
+  const totalRefund = refund.refundTotal;
   const hasItemsToReturn = Object.values(quantities).some(
     (val) => (parseFloat(val.replace(',', '.')) || 0) > 0,
   );
@@ -122,14 +113,8 @@ function ReturnFormContent() {
     currentUser?.role === 'manager';
   const isCashier = !isManagerOrOwner;
   const refundNum = parseFloat(totalRefund) || 0;
-  const requiresManagerAuth = true;
-
   const handleRefundPress = () => {
-    if (requiresManagerAuth) {
-      setPinModalVisible(true);
-    } else {
-      mutation.mutate();
-    }
+    setPinModalVisible(true);
   };
 
   const isReturnsModuleEnabled = currentUser?.modules.includes('returns');
@@ -307,7 +292,12 @@ function ReturnFormContent() {
         <View className="mt-5 rounded-2xl bg-brand-50 p-4">
           <View className="flex-row items-center justify-between">
             <Text className="text-base font-medium text-brand-900">Total Refund Amount</Text>
-            <Text className="text-2xl font-bold text-brand-700">{formatMoney(totalRefund)}</Text>
+            <View className="items-end">
+              <Text className="text-2xl font-bold text-brand-700">{formatMoney(totalRefund)}</Text>
+              <Text className="mt-1 text-xs text-slate-500">
+                Includes {formatMoney(refund.taxRefundTotal)} tax refund
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -329,7 +319,7 @@ function ReturnFormContent() {
 
         {!hasItemsToReturn ? (
           <Text className="mt-3 text-center text-xs font-semibold text-slate-500">
-            💡 Tap + or Max above to select item quantity to return.
+            Tap + or Max above to select item quantity to return.
           </Text>
         ) : null}
 
@@ -338,16 +328,11 @@ function ReturnFormContent() {
             title={
               mutation.isPending
                 ? 'Processing Refund…'
-                : requiresManagerAuth
-                  ? `Authorize & Refund ${formatMoney(totalRefund)}`
-                  : `Refund ${formatMoney(totalRefund)} to cash`
+                : `Authorize & Refund ${formatMoney(totalRefund)}`
             }
             variant="danger"
             disabled={!shift || mutation.isPending || !hasItemsToReturn}
             onPress={() => {
-              if (!reason.trim()) {
-                setReason('Customer return request');
-              }
               handleRefundPress();
             }}
           />
@@ -398,9 +383,7 @@ function ReturnFormContent() {
                   title={mutation.isPending ? 'Verifying…' : 'Approve'}
                   disabled={managerPin.length < 4 || mutation.isPending}
                   onPress={() => {
-                    setPinModalVisible(false);
-                    setManagerPin('');
-                    mutation.mutate();
+                    mutation.mutate(managerPin);
                   }}
                 />
               </View>

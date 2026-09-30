@@ -52,8 +52,9 @@ export function QuantityInput({
       selectTextOnFocus
       keyboardType="decimal-pad"
       returnKeyType="done"
-      className={`rounded-lg border border-slate-200 bg-white text-center font-medium text-slate-900 ${
-        compact ? 'h-8 w-14 text-sm' : 'h-10 w-20 text-base'
+      style={{ textAlignVertical: 'center', paddingVertical: 0 }}
+      className={`rounded-lg border border-slate-300 bg-white text-center font-bold text-slate-900 ${
+        compact ? 'h-10 w-20 text-lg' : 'h-12 w-24 text-lg'
       }`}
     />
   );

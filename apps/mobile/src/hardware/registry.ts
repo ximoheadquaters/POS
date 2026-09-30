@@ -8,6 +8,8 @@ import type {
   PaymentTerminalDriver,
 } from './types';
 import { browserReceiptPrinter } from './web-receipt-printer';
+import { androidBluetoothReceiptPrinter } from './android-bluetooth-receipt-printer';
+import { Platform } from 'react-native';
 
 export class HardwareUnavailableError extends Error {
   constructor(
@@ -72,7 +74,7 @@ const unavailableCustomerDisplay: CustomerDisplayDriver = {
 
 const defaultDrivers: HardwareDriverMap = {
   barcode_scanner: keyboardScanner,
-  receipt_printer: browserReceiptPrinter,
+  receipt_printer: Platform.OS === 'android' ? androidBluetoothReceiptPrinter : browserReceiptPrinter,
   cash_drawer: unavailableCashDrawer,
   payment_terminal: unavailablePaymentTerminal,
   customer_display: unavailableCustomerDisplay,

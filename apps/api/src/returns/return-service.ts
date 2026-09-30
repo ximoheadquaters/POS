@@ -15,6 +15,7 @@ interface SaleItemRow {
   quantity: number;
   returned_quantity: number;
   line_total: string;
+  tax_total: string;
   unit_cost: string;
   track_inventory: boolean;
   units_per_base: number;
@@ -37,17 +38,24 @@ export class ReturnService {
       );
       if (!sale.rows[0]) throw notFound('Completed sale');
       const shift = await tx.query<{
-        opening_cash: string;
+        starting_cash: string;
         cash_sales: string;
         cash_refunds: string;
         cash_in: string;
         cash_out: string;
       }>(
-        `select opening_cash::text, cash_sales::text, cash_refunds::text,
-           cash_in::text, cash_out::text
-         from register_shifts
-         where id=$1 and register_id=$2 and branch_id=$3 and organization_id=$4
-           and cashier_id=$5 and status='open' for update`,
+        `select rs.starting_cash::text, rs.cash_sales::text, rs.cash_refunds::text,
+           coalesce((
+             select sum(cm.amount) from cash_movements cm
+             where cm.shift_id=rs.id and cm.type='cash_in'
+           ),0)::text as cash_in,
+           coalesce((
+             select sum(cm.amount) from cash_movements cm
+             where cm.shift_id=rs.id and cm.type='cash_out'
+           ),0)::text as cash_out
+         from register_shifts rs
+         where rs.id=$1 and rs.register_id=$2 and rs.branch_id=$3 and rs.organization_id=$4
+           and rs.cashier_id=$5 and rs.status='open' for update of rs`,
         [input.shiftId, input.registerId, input.branchId, actor.organizationId, actor.userId],
       );
       if (!shift.rowCount) {
@@ -64,10 +72,12 @@ export class ReturnService {
         restock: boolean;
       }> = [];
       let refundTotal = 0n;
+      let taxRefundTotal = 0n;
       for (const requested of input.items) {
         const found = await tx.query<SaleItemRow>(
           `select si.id, si.product_id, si.variant_id, si.quantity::float8 as quantity,
             si.returned_quantity::float8 as returned_quantity, si.line_total::text,
+            si.tax_total::text,
             si.unit_cost::text,
             p.track_inventory,coalesce(si.units_per_base, v.units_per_base, 1)::float8 as units_per_base,
             portioning.id as portioning_variant_id
@@ -91,7 +101,11 @@ export class ReturnService {
         const refund =
           (moneyToMinor(source.line_total) * quantityToThousandths(requested.quantity)) /
           quantityToThousandths(source.quantity);
+        const taxRefund =
+          (moneyToMinor(source.tax_total) * quantityToThousandths(requested.quantity)) /
+          quantityToThousandths(source.quantity);
         refundTotal += refund;
+        taxRefundTotal += taxRefund;
         const restock = requested.restock ?? input.restock ?? true;
         items.push({ source, quantity: requested.quantity, refund, restock });
       }
@@ -99,7 +113,7 @@ export class ReturnService {
       if (input.refundMethod === 'cash') {
         const s = shift.rows[0]!;
         const availableCashMinor =
-          moneyToMinor(s.opening_cash) +
+          moneyToMinor(s.starting_cash) +
           moneyToMinor(s.cash_sales) +
           moneyToMinor(s.cash_in) -
           moneyToMinor(s.cash_out) -
@@ -175,8 +189,8 @@ export class ReturnService {
                    then round((inventory_value + $5::numeric * $6::numeric) / (quantity + $4), 4)
                    else average_cost
                  end,
-                 sealed_quantity=sealed_quantity+$8,
-                 opened_quantity=opened_quantity+$9,
+                 sealed_quantity=sealed_quantity+$7,
+                 opened_quantity=opened_quantity+$8,
                  updated_at = now()
                where organization_id = $1 and branch_id = $2 and product_id = $3
                  and variant_id is null
@@ -190,7 +204,6 @@ export class ReturnService {
                 inventoryQuantity,
                 item.quantity,
                 item.source.unit_cost,
-                item.source.variant_id,
                 sealedQuantity,
                 openedQuantity,
               ],
@@ -295,13 +308,18 @@ export class ReturnService {
           input.branchId,
           actor.userId,
           returnId,
-          JSON.stringify({ refundTotal: minorToMoney(refundTotal), reason: input.reason }),
+          JSON.stringify({
+            refundTotal: minorToMoney(refundTotal),
+            taxRefundTotal: minorToMoney(taxRefundTotal),
+            reason: input.reason,
+          }),
         ],
       );
       return {
         id: returnId,
         returnNumber: created.rows[0]!.return_number,
         refundTotal: minorToMoney(refundTotal),
+        taxRefundTotal: minorToMoney(taxRefundTotal),
       };
     });
   }

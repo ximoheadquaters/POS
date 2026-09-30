@@ -13,10 +13,10 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { REPORT_PERMISSION_MATRIX, type ReportAccessLevel } from '@ximo/shared';
 import { AppSidebarProvider } from '@/components/app-sidebar';
+import { ReportErrorBoundary } from '@/components/report-error-boundary';
 import { DateRangeCalendar } from '@/components/date-range-calendar';
 import { Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { buildReportsCsv, buildReportsExcel, buildReportsPdf } from '@/lib/report-export';
 import {
   buildReportDocument,
   reportDocumentRowCount,
@@ -25,7 +25,8 @@ import {
   type ReportTableDefinition,
 } from '@/lib/report-table-model';
 import type { ReportsWorkspace } from '@/lib/report-types';
-import { saveReportExport, type ReportExportFormat } from '@/lib/save-report-export';
+import { requireReportsWorkspace } from '@/lib/reports-workspace-guard';
+import type { ReportExportFormat } from '@/lib/save-report-export';
 import { useIosAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
@@ -1040,8 +1041,8 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
   const query = useQuery({
     queryKey: ['table-report', branch?.id, dateRange.from, dateRange.to, session?.user.id],
     enabled,
-    queryFn: () => api<ReportsWorkspace>(path),
-    refetchInterval: section === 'purchasing' ? 300_000 : section === 'profit' ? false : 60_000,
+    queryFn: async () => requireReportsWorkspace(await api<ReportsWorkspace>(path)),
+    staleTime: 120_000,
   });
   const previousQuery = useQuery({
     queryKey: [
@@ -1052,10 +1053,10 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
       session?.user.id,
     ],
     enabled: enabled && Boolean(previousDateRange),
-    queryFn: () =>
-      api<ReportsWorkspace>(
+    queryFn: async () =>
+      requireReportsWorkspace(await api<ReportsWorkspace>(
         `/reports/workspace?from=${encodeURIComponent(previousDateRange!.from)}&to=${encodeURIComponent(previousDateRange!.to)}&branchId=${branch!.id}`,
-      ),
+      )),
     staleTime: 60_000,
   });
   const document = query.data ? buildReportDocument(query.data, section, previousQuery.data) : null;
@@ -1081,6 +1082,9 @@ function ReportsTableContent({ initialSection }: { initialSection: ReportSection
     }
     setExporting(true);
     try {
+      // Keep the PDF/Excel libraries out of the report screen's startup path.
+      const { buildReportsCsv, buildReportsExcel, buildReportsPdf } = await import('@/lib/report-export');
+      const { saveReportExport } = await import('@/lib/save-report-export');
       const output =
         format === 'csv'
           ? buildReportsCsv(query.data, metadata, section)
@@ -1343,7 +1347,9 @@ export function ReportsTableWorkspaceScreen({
 }) {
   return (
     <AppSidebarProvider>
-      <ReportsTableContent initialSection={initialSection} />
+      <ReportErrorBoundary>
+        <ReportsTableContent initialSection={initialSection} />
+      </ReportErrorBoundary>
     </AppSidebarProvider>
   );
 }

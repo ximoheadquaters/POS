@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import {
   FlatList,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -106,7 +107,7 @@ function SellingUnitModal({
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Close Unit Selection"
+              accessibilityLabel="Close unit selection"
               onPress={onClose}
               className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
             >
@@ -139,7 +140,7 @@ function SellingUnitModal({
                     </Text>
                     {typeof available === 'number' ? (
                       <Text className="mt-1 text-xs text-slate-400">
-                        {available} {selected.unit} Available
+                        {available} {selected.unit} available
                       </Text>
                     ) : null}
                   </View>
@@ -264,7 +265,44 @@ export default function PosScreen() {
       }),
   });
 
+  const voidCartMutation = useMutation({
+    mutationFn: (itemsToVoid: typeof items) =>
+      api<{ receiptNumber: string }>('/sales/void-cart', {
+        method: 'POST',
+        idempotencyKey: `void-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        body: JSON.stringify({
+          branchId: branch?.id,
+          registerId: activeShift?.registerId,
+          shiftId: activeShift?.id,
+          customerId: useCartStore.getState().customerId,
+          note: 'Cart cleared at POS',
+          items: expandCartItemsForApi(itemsToVoid).map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId ?? undefined,
+            quantity: item.quantity,
+            ...(item.unitPrice ? { unitPrice: item.unitPrice } : {}),
+          })),
+        }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['voided-held-sales'] });
+    },
+  });
+
+  const handleClearCart = () => {
+    if (items.length > 0 && branch?.id) {
+      voidCartMutation.mutate(items);
+    }
+    clearCart();
+    focusInput();
+  };
+
   const focusInput = () => {
+    if (Platform.OS !== 'web') {
+      inputRef.current?.blur();
+      Keyboard.dismiss();
+      return;
+    }
     setTimeout(() => {
       inputRef.current?.focus();
     }, 50);
@@ -431,10 +469,21 @@ export default function PosScreen() {
 
       const cartItem = selectSellingUnit(cartProduct, sellingUnit);
       add(cartItem);
+
+      showAlert({
+        title: 'Item Added',
+        message: `${item.productName} — 1 ${item.sellingUnitName} added to cart.`,
+        type: 'success',
+      });
     } catch (error: any) {
       const fallback = findExactScannedProduct(availableProducts, barcode);
       if (fallback) {
         add(fallback);
+        showAlert({
+          title: 'Item Added',
+          message: `${fallback.name} added to cart.`,
+          type: 'success',
+        });
         return;
       }
 
@@ -524,7 +573,7 @@ export default function PosScreen() {
 
       if (!exact) {
         if (currentUser?.permissions.includes('products:manage')) {
-          appAlert('New Product', `Barcode ${barcode} is not in the catalog. Add it now?`, [
+          appAlert('New product', `Barcode ${barcode} is not in the catalogue. Add it now?`, [
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Add product',
@@ -604,7 +653,7 @@ export default function PosScreen() {
           {sidebar?.compact ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Open Navigation Menu"
+              accessibilityLabel="Open navigation menu"
               onPress={sidebar.openMenu}
               className="mr-3 h-11 w-11 items-center justify-center rounded-xl bg-brand-50"
             >
@@ -612,7 +661,7 @@ export default function PosScreen() {
             </Pressable>
           ) : null}
           <View className="w-32 lg:w-48">
-            <Text className="text-lg font-semibold text-slate-900">Point of sale</Text>
+            <Text className="text-lg font-semibold text-slate-900">Point of Sale</Text>
             <Text className="text-xs text-slate-500">
               {activeShift ? activeShift.registerName : branch?.name}
             </Text>
@@ -640,12 +689,12 @@ export default function PosScreen() {
           {scannerEnabled ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Scan Product With Camera"
+              accessibilityLabel="Scan product with camera"
               onPress={() => router.push({ pathname: '/product-scan', params: { addToCart: '1' } })}
               className="min-h-11 flex-row items-center rounded-xl px-3 active:bg-brand-50"
             >
               <Feather name="camera" size={17} color="#1A593B" />
-              <Text className="text-sm font-medium text-brand-700">Use Camera</Text>
+              <Text className="text-sm font-medium text-brand-700">Use camera</Text>
             </Pressable>
           ) : null}
         </View>
@@ -669,6 +718,7 @@ export default function PosScreen() {
                       setCategory(name);
                       focusInput();
                     }}
+                    style={{ flexShrink: 0 }}
                     className={`min-h-9 items-center justify-center rounded-full px-4 ${
                       selected ? 'bg-brand-700' : 'border border-slate-200 bg-white'
                     }`}
@@ -682,6 +732,7 @@ export default function PosScreen() {
                         />
                       ) : null}
                       <Text
+                        numberOfLines={1}
                         className={`text-xs font-medium ${
                           selected ? 'text-white' : 'text-slate-600'
                         }`}
@@ -698,7 +749,7 @@ export default function PosScreen() {
             </Text>
             <View className="flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white">
               {query.isLoading ? (
-                <LoadingState label="Loading Products…" />
+                <LoadingState label="Loading products…" />
               ) : query.isError ? (
                 <ErrorState message={query.error.message} retry={() => void query.refetch()} />
               ) : (
@@ -717,7 +768,7 @@ export default function PosScreen() {
                       />
                     ) : (
                       <EmptyState
-                        title={category === 'Combos' ? 'No Combos' : 'No Products'}
+                        title={category === 'Combos' ? 'No combos' : 'No products'}
                         message={
                           category === 'Combos'
                             ? 'Create an active combo bundle with products in Promotions, then refresh POS.'
@@ -846,7 +897,7 @@ export default function PosScreen() {
             <ScrollView className="flex-1" contentContainerClassName="p-3 gap-2">
               {!items.length ? (
                 <View className="items-center p-8">
-                  <Text className="font-medium text-slate-700">No Items Yet</Text>
+                  <Text className="font-medium text-slate-700">No items yet</Text>
                   <Text className="mt-2 text-center text-xs text-slate-400">
                     Choose a product from the list to start an order.
                   </Text>
@@ -883,7 +934,7 @@ export default function PosScreen() {
                         {formatMoney(minorToMoney(moneyToMinor(cartLineTotal(item))))}
                       </Text>
                     </View>
-                    <View className="mt-3 flex-row items-center">
+                    <View className="mt-3 flex-row items-center gap-2">
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Decrease ${item.product.name}`}
@@ -952,25 +1003,11 @@ export default function PosScreen() {
               ) : null}
               {activeShift ? (
                 <View className="gap-2">
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Continue To Payment"
+                  <Button
+                    title="Continue to Payment"
                     disabled={!items.length || hasStockConflict}
                     onPress={() => router.push('/payment')}
-                    className={`min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800 ${
-                      !items.length || hasStockConflict ? 'opacity-40' : ''
-                    }`}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      className="shrink text-center text-sm font-bold text-white"
-                    >
-                      Continue To Payment
-                    </Text>
-                    <View className="ml-2">
-                      <Feather name="arrow-right" size={16} color="#FFFFFF" />
-                    </View>
-                  </Pressable>
+                  />
                   <View className="flex-row gap-2">
                     <Pressable
                       accessibilityRole="button"
@@ -986,7 +1023,7 @@ export default function PosScreen() {
                     {items.length ? (
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Hold Sale"
+                        accessibilityLabel="Hold sale"
                         disabled={holdMutation.isPending}
                         onPress={() => setHoldModalVisible(true)}
                         className={`min-h-11 flex-1 flex-row items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 ${
@@ -1002,21 +1039,18 @@ export default function PosScreen() {
                   </View>
                 </View>
               ) : (
-                <Button title="Open A Shift To Sell" onPress={() => router.push('/registers')} />
+                <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
               )}
               {items.length ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Clear Order"
-                  onPress={() => {
-                    clearCart();
-                    focusInput();
-                  }}
+                  accessibilityLabel="Clear order"
+                  onPress={handleClearCart}
                   className="mt-3 min-h-10 items-center justify-center"
                 >
                   <View className="flex-row items-center gap-1">
                     <Feather name="trash-2" size={13} color="#DC2626" />
-                    <Text className="text-xs font-medium text-red-600">Clear Order</Text>
+                    <Text className="text-xs font-medium text-red-600">Clear order</Text>
                   </View>
                 </Pressable>
               ) : null}
@@ -1146,7 +1180,7 @@ export default function PosScreen() {
             </Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Scan Product With Camera"
+              accessibilityLabel="Scan product with camera"
               onPress={() =>
                 router.push({
                   pathname: '/product-scan',
@@ -1181,6 +1215,7 @@ export default function PosScreen() {
                   setCategory(name);
                   focusInput();
                 }}
+                style={{ flexShrink: 0 }}
                 className={`h-9 items-center justify-center rounded-full px-4 ${
                   selected ? 'bg-brand-700' : 'border border-slate-200 bg-slate-50'
                 }`}
@@ -1194,6 +1229,7 @@ export default function PosScreen() {
                     />
                   ) : null}
                   <Text
+                    numberOfLines={1}
                     className={`text-xs font-semibold ${
                       selected ? 'text-white' : 'text-slate-600'
                     }`}
@@ -1209,7 +1245,7 @@ export default function PosScreen() {
       <View className="flex-1 flex-row">
         <View className="flex-1">
           {query.isLoading ? (
-            <LoadingState label="Loading Products…" />
+            <LoadingState label="Loading products…" />
           ) : query.isError ? (
             <ErrorState message={query.error.message} retry={() => void query.refetch()} />
           ) : (
@@ -1231,7 +1267,7 @@ export default function PosScreen() {
                   />
                 ) : (
                   <EmptyState
-                    title={category === 'Combos' ? 'No Combos' : 'No Products'}
+                    title={category === 'Combos' ? 'No combos' : 'No products'}
                     message={
                       category === 'Combos'
                         ? 'Create an active combo bundle in Promotions, then it will appear here.'
@@ -1340,15 +1376,15 @@ export default function PosScreen() {
         {isTablet ? (
           <View className="w-[360px] border-l border-brand-100 bg-white">
             <View className="border-b border-slate-100 px-5 py-4">
-              <Text className="text-xl font-semibold text-brand-900">Current Order</Text>
+              <Text className="text-xl font-semibold text-brand-900">Current order</Text>
               <Text className="mt-1 text-sm text-slate-500">
-                {items.reduce((sum, item) => sum + item.quantity, 0)} Items
+                {items.reduce((sum, item) => sum + item.quantity, 0)} items
               </Text>
             </View>
             <ScrollView className="flex-1" contentContainerClassName="p-4 gap-3">
               {!items.length ? (
                 <View className="items-center rounded-2xl bg-slate-50 p-8">
-                  <Text className="font-medium text-slate-700">Your Order Is Empty</Text>
+                  <Text className="font-medium text-slate-700">Your order is empty</Text>
                   <Text className="mt-2 text-center text-sm text-slate-500">
                     Select a product on the left or scan its barcode.
                   </Text>
@@ -1481,27 +1517,13 @@ export default function PosScreen() {
                 </Text>
               ) : null}
               {activeShift ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Continue To Payment"
+                <Button
+                  title="Continue to payment"
                   disabled={!items.length || hasStockConflict}
                   onPress={() => router.push('/payment')}
-                  className={`min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:bg-brand-800 ${
-                    !items.length || hasStockConflict ? 'opacity-40' : ''
-                  }`}
-                >
-                  <Text
-                    numberOfLines={1}
-                    className="shrink text-center text-sm font-bold text-white"
-                  >
-                    Continue To Payment
-                  </Text>
-                  <View className="ml-2">
-                    <Feather name="arrow-right" size={16} color="#FFFFFF" />
-                  </View>
-                </Pressable>
+                />
               ) : (
-                <Button title="Open A Shift To Sell" onPress={() => router.push('/registers')} />
+                <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
               )}
             </View>
           </View>
@@ -1513,12 +1535,9 @@ export default function PosScreen() {
             items.length > 0 ? (
               <View className="flex-row items-center gap-2">
                 <Pressable
-                  onPress={() => {
-                    clearCart();
-                    focusInput();
-                  }}
+                  onPress={handleClearCart}
                   className={`${phone ? 'h-11 w-11' : 'h-12 w-12'} items-center justify-center rounded-xl bg-rose-500 active:bg-rose-600`}
-                  accessibilityLabel="Clear Cart Items"
+                  accessibilityLabel="Clear cart items"
                 >
                   <Feather name="trash-2" size={18} color="#FFFFFF" />
                 </Pressable>
@@ -1529,7 +1548,7 @@ export default function PosScreen() {
                   className={`${phone ? 'h-11 px-3' : 'h-12 px-3.5'} flex-row items-center justify-center rounded-xl bg-amber-600 ${
                     holdMutation.isPending ? 'opacity-50' : 'active:bg-amber-700'
                   }`}
-                  accessibilityLabel="Hold Sale"
+                  accessibilityLabel="Hold sale"
                 >
                   <Feather name="pause-circle" size={18} color="#FFFFFF" />
                   <Text className="ml-1.5 font-bold text-white text-xs">Hold</Text>
@@ -1538,7 +1557,7 @@ export default function PosScreen() {
                 <View className="flex-1">
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Open Cart"
+                    accessibilityLabel="Open cart"
                     onPress={() => router.push('/cart')}
                     className={`${phone ? 'min-h-11' : 'min-h-12'} flex-row items-center justify-center rounded-xl bg-brand-700 px-3 active:bg-brand-800`}
                   >
@@ -1551,13 +1570,13 @@ export default function PosScreen() {
                     </Text>
                     <View className="ml-2">
                       <Feather name="arrow-right" size={16} color="#FFFFFF" />
-                    </View>
-                  </Pressable>
+                      </View>
+                    </Pressable>
                 </View>
               </View>
             ) : null
           ) : (
-            <Button title="Open A Shift To Sell" onPress={() => router.push('/registers')} />
+            <Button title="Open a shift to sell" onPress={() => router.push('/registers')} />
           )}
         </View>
       ) : null}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { appAlert } from '@/providers/ios-alert';
 import { FlatList, Text, TextInput, View } from 'react-native';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +22,11 @@ function CustomersContent() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const client = useQueryClient();
-  const trimmedSearch = search.trim();
+  const [trimmedSearch, setTrimmedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setTrimmedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const query = useInfiniteQuery({
     queryKey: ['customers', branch?.id, trimmedSearch],
     enabled: Boolean(branch),
@@ -67,7 +71,7 @@ function CustomersContent() {
             placeholder="Search customers"
             placeholderTextColor="#81776E"
             selectionColor="#1A593B"
-            style={{ outline: 'none' }}
+            style={{ outline: 'none', textAlignVertical: 'center', paddingVertical: 0 }}
             onSubmitEditing={(e: any) => {
               if (e && e.preventDefault) e.preventDefault();
             }}
@@ -75,6 +79,7 @@ function CustomersContent() {
           />
         </View>
         <View className="gap-2">
+          <Text className="text-sm font-semibold text-slate-800">New customer details</Text>
           <View className="flex-row gap-2">
             <TextInput
               value={name}
@@ -82,7 +87,7 @@ function CustomersContent() {
               placeholder="New Customer Name"
               placeholderTextColor="#81776E"
               selectionColor="#1A593B"
-              style={{ outline: 'none' }}
+              style={{ outline: 'none', textAlignVertical: 'center', paddingVertical: 0 }}
               onSubmitEditing={(e: any) => {
                 if (e && e.preventDefault) e.preventDefault();
                 if (name.trim()) create.mutate();
@@ -95,7 +100,7 @@ function CustomersContent() {
               onPress={() => create.mutate()}
             />
           </View>
-          <View className="flex-row gap-2">
+          <View className="gap-2 sm:flex-row">
             <TextInput
               value={phone}
               onChangeText={setPhone}
@@ -103,7 +108,7 @@ function CustomersContent() {
               placeholderTextColor="#81776E"
               selectionColor="#1A593B"
               keyboardType="phone-pad"
-              style={{ outline: 'none' }}
+              style={{ outline: 'none', textAlignVertical: 'center', paddingVertical: 0 }}
               className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
             />
             <TextInput
@@ -115,7 +120,7 @@ function CustomersContent() {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-              style={{ outline: 'none' }}
+              style={{ outline: 'none', textAlignVertical: 'center', paddingVertical: 0 }}
               className="min-h-14 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200"
             />
           </View>

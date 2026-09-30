@@ -1,6 +1,7 @@
 import { useMemo, useState, type ComponentProps } from 'react';
 import {
   Pressable,
+  Platform,
   RefreshControl,
   ScrollView,
   Text,
@@ -156,6 +157,30 @@ function SummaryChart({
     return (
       <View className="items-center justify-center rounded-xl bg-slate-50 py-16">
         <Text className="text-sm text-slate-500">No sales activity for this period.</Text>
+      </View>
+    );
+  }
+
+  if (Platform.OS !== 'web') {
+    return (
+      <View className="flex-row items-end justify-between gap-2" style={{ height: 220 }}>
+        {series.map((item, index) => (
+          <View key={`${item.date}-${index}`} className="min-w-0 flex-1 items-center justify-end gap-2">
+            <Text className="text-[10px] text-slate-500" numberOfLines={1}>
+              {formatMoney(item.sales)}
+            </Text>
+            <View
+              className="w-full rounded-t bg-brand-700"
+              style={{ height: Math.max(3, (Number(item.sales) / maxSales) * 150) }}
+            />
+            <Text className="text-[10px] text-slate-500" numberOfLines={1}>
+              {new Date(`${item.date}T12:00:00`).toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+              })}
+            </Text>
+          </View>
+        ))}
       </View>
     );
   }

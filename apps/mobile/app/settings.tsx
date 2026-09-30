@@ -599,7 +599,7 @@ function SettingsContent() {
             {/* Simulated Printed Receipt Live Preview */}
             <View className="rounded-2xl border border-dashed border-slate-300 bg-slate-100 p-5">
               <Text className="mb-3 text-center text-xs font-bold uppercase tracking-widest text-slate-500">
-                🧾 Thermal Receipt Live Print Preview
+                Thermal Receipt Live Print Preview
               </Text>
 
               <View className="mx-auto max-w-sm w-full rounded-lg bg-white p-4 shadow-sm border border-slate-200 font-mono">

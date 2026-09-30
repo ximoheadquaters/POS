@@ -206,7 +206,7 @@ export default function MoreScreen() {
                 onPress={() => setPinModalVisible(true)}
                 className="flex-1 min-h-11 items-center justify-center rounded-xl bg-brand-800 px-4 active:opacity-80 border border-brand-500"
               >
-                <Text className="font-bold text-white">🔑 Change PIN</Text>
+                <Text className="font-bold text-white">Change PIN</Text>
               </Pressable>
             </View>
           </View>

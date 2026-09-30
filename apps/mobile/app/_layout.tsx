@@ -1,6 +1,6 @@
 import '../src/global.css';
 import { useEffect, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, View, useWindowDimensions } from 'react-native';
 import { Stack, usePathname } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ import { useSession } from '@/providers/session';
 import { ApiError } from '@/lib/api';
 
 function WorkspaceNavigator() {
+  const { width } = useWindowDimensions();
   const pathname = usePathname();
   const { session, currentUser } = useSession();
   const activeBranch = useBranchStore((state) => state.activeBranch);
@@ -48,7 +49,7 @@ function WorkspaceNavigator() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: '#F8F7F5' },
-          animation: Platform.OS === 'web' ? 'none' : 'slide_from_right',
+          animation: Platform.OS === 'web' || width >= 768 ? 'none' : 'slide_from_right',
         }}
       >
         <Stack.Screen name="index" />

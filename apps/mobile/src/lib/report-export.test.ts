@@ -180,4 +180,13 @@ describe('report exports', () => {
     const document = await PDFDocument.load(output.bytes);
     expect(document.getPageCount()).toBeGreaterThan(0);
   });
+
+  it('exports PDF when report labels and business names contain peso and formula symbols', async () => {
+    const output = await buildReportsPdf(report, {
+      ...metadata,
+      organizationName: 'Niño ₱ Store',
+      branchName: 'Main – Branch',
+    }, 'overview');
+    expect(new TextDecoder().decode(output.bytes.slice(0, 8))).toContain('%PDF-');
+  });
 });

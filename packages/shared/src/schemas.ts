@@ -465,6 +465,7 @@ export const returnSchema = z.object({
   branchId: uuidSchema,
   registerId: uuidSchema,
   shiftId: uuidSchema,
+  managerPin: z.string().trim().min(4).max(8),
   restock: z.boolean().default(true).optional(),
   items: z
     .array(

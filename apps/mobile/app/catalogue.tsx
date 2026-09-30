@@ -2,7 +2,7 @@ import Feather from '@expo/vector-icons/Feather';
 import { appAlert } from '@/providers/ios-alert';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from 'react-native';
 import { AppSidebarProvider } from '@/components/app-sidebar';
 import { Button, ErrorState, Field, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -51,6 +51,7 @@ const sections: SectionDefinition[] = [
 ];
 
 function CatalogueContent() {
+  const { height: windowHeight } = useWindowDimensions();
   const branch = useBranchStore((state) => state.activeBranch);
   const { currentUser } = useSession();
   const editable = currentUser?.permissions.includes('products:manage') ?? false;
@@ -126,7 +127,7 @@ function CatalogueContent() {
     onSuccess: async () => {
       closeForm();
       await Promise.all([
-        client.invalidateQueries({ queryKey: ['catalogue', section] }),
+        client.invalidateQueries({ queryKey: ['catalogue', branch?.id, section] }),
         client.invalidateQueries({ queryKey: [section] }),
       ]);
     },
@@ -139,8 +140,22 @@ function CatalogueContent() {
         method: 'PATCH',
         body: JSON.stringify({ isActive: !item.isActive }),
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['catalogue', section] }),
-    onError: (error) => appAlert('Could not update', error.message),
+    onMutate: async (item: MasterItem) => {
+      const queryKey = ['catalogue', branch?.id, section];
+      await client.cancelQueries({ queryKey });
+      const previous = client.getQueryData<MasterItem[]>(queryKey);
+      client.setQueryData<MasterItem[]>(queryKey, (items) =>
+        items?.map((entry) => entry.id === item.id ? { ...entry, isActive: !item.isActive } : entry),
+      );
+      return { previous, queryKey };
+    },
+    onError: (error, _item, context) => {
+      if (context?.previous) client.setQueryData(context.queryKey, context.previous);
+      appAlert('Could not update', error.message);
+    },
+    onSettled: (_data, _error, _item, context) => {
+      if (context) void client.invalidateQueries({ queryKey: context.queryKey });
+    },
   });
 
   const data = useMemo(() => query.data ?? [], [query.data]);
@@ -359,14 +374,14 @@ function CatalogueContent() {
         animationType="fade"
         onRequestClose={closeForm}
       >
-        <View className="flex-1 items-center justify-end bg-black/45 p-0 sm:justify-center sm:p-6">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 items-center justify-end bg-black/45 p-0 sm:justify-center sm:p-6">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close Form"
             onPress={closeForm}
             className="absolute inset-0"
           />
-          <View className="max-h-[92%] w-full max-w-lg overflow-hidden rounded-t-3xl bg-white sm:rounded-3xl">
+          <View style={{ maxHeight: Math.min(windowHeight * 0.86, 680) }} className="w-full max-w-lg overflow-hidden rounded-t-3xl bg-white sm:rounded-3xl">
             <View className="flex-row items-center border-b border-slate-100 p-5">
               <View className="h-11 w-11 items-center justify-center rounded-xl bg-brand-50">
                 <Feather name={selected.icon} size={19} color="#1A593B" />
@@ -471,7 +486,7 @@ function CatalogueContent() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   );

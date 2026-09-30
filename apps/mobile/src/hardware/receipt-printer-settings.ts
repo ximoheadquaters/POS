@@ -1,12 +1,13 @@
 import { appStorage } from '../lib/storage';
+import { Platform } from 'react-native';
 import type { ReceiptPrintJob, ReceiptPrinterSettings } from './types';
 
 const STORAGE_PREFIX = 'ximo.hardware.receipt-printer.v1';
 
 export const DEFAULT_RECEIPT_PRINTER_SETTINGS: ReceiptPrinterSettings = {
   version: 1,
-  printingMethod: 'system_dialog',
-  paperSize: '80mm',
+  printingMethod: Platform.OS === 'android' ? 'bluetooth' : 'system_dialog',
+  paperSize: Platform.OS === 'android' ? '58mm' : '80mm',
   autoPrintAfterSale: false,
   includeBranchAddress: true,
   includeCashierName: true,
@@ -30,8 +31,11 @@ function normalizeSettings(value: unknown): ReceiptPrinterSettings {
     ...DEFAULT_RECEIPT_PRINTER_SETTINGS,
     ...candidate,
     version: 1,
-    printingMethod: 'system_dialog',
-    paperSize,
+    printingMethod: Platform.OS === 'android' ? 'bluetooth' : 'system_dialog',
+    paperSize: Platform.OS === 'android' ? '58mm' : paperSize,
+    bluetoothDeviceAddress: typeof candidate.bluetoothDeviceAddress === 'string'
+      ? candidate.bluetoothDeviceAddress
+      : undefined,
   };
 }
 
@@ -64,6 +68,7 @@ export function applyReceiptPrinterSettings(
 ): Pick<
   ReceiptPrintJob,
   | 'paperSize'
+  | 'bluetoothDeviceAddress'
   | 'includeBranchAddress'
   | 'includeCashierName'
   | 'includeTaxBreakdown'
@@ -71,6 +76,7 @@ export function applyReceiptPrinterSettings(
 > {
   return {
     paperSize: settings.paperSize,
+    bluetoothDeviceAddress: settings.bluetoothDeviceAddress,
     includeBranchAddress: settings.includeBranchAddress,
     includeCashierName: settings.includeCashierName,
     includeTaxBreakdown: settings.includeTaxBreakdown,

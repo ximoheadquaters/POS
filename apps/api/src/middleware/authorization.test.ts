@@ -94,6 +94,72 @@ class RoleManagementDatabase extends AuthorizationDatabase {
   }
 }
 
+class PromotionToggleDatabase extends AuthorizationDatabase {
+  readonly promotionId = '88888888-8888-4888-8888-888888888888';
+  readonly promotionBranchId = '22222222-2222-4222-8222-222222222222';
+  readonly otherBranchId = '33333333-3333-4333-8333-333333333333';
+
+  constructor() {
+    super(
+      testUser({
+        modules: ['products', 'pos', 'promotions'],
+        permissions: ['promotions:read', 'promotions:manage'],
+        branches: [
+          { id: '22222222-2222-4222-8222-222222222222', name: 'Main', code: 'MAIN' },
+          { id: '33333333-3333-4333-8333-333333333333', name: 'Second', code: 'SECOND' },
+        ],
+      }),
+    );
+  }
+
+  override async query<T extends QueryResultRow>(text: string, values?: readonly unknown[]) {
+    if (text.includes('update promotions set is_active')) {
+      this.calls.push(values ? { text, values } : { text });
+      return result(
+        values?.[2] === this.promotionBranchId
+          ? ([{ id: this.promotionId, isActive: false }] as unknown as T[])
+          : [],
+      );
+    }
+    return super.query<T>(text, values);
+  }
+}
+
+class PromotionUpdateDatabase extends AuthorizationDatabase {
+  readonly promotionId = '88888888-8888-4888-8888-888888888888';
+  readonly branchId = '22222222-2222-4222-8222-222222222222';
+  readonly retainedProductId = '55555555-5555-4555-8555-555555555555';
+
+  constructor() {
+    super(
+      testUser({
+        modules: ['products', 'pos', 'promotions'],
+        permissions: ['promotions:read', 'promotions:manage'],
+      }),
+    );
+  }
+
+  override async query<T extends QueryResultRow>(text: string, values?: readonly unknown[]) {
+    if (text.includes('select id,branch_id as "branchId" from promotions')) {
+      this.calls.push(values ? { text, values } : { text });
+      return result([{ id: this.promotionId, branchId: this.branchId } as unknown as T]);
+    }
+    if (
+      text.includes('update promotions set') ||
+      text.includes('delete from promotion_items') ||
+      text.includes('insert into promotion_items')
+    ) {
+      this.calls.push(values ? { text, values } : { text });
+      return result([]);
+    }
+    if (text.includes('select 1 from products') && text.includes('union all')) {
+      this.calls.push(values ? { text, values } : { text });
+      return result([{ existingComponent: true } as unknown as T]);
+    }
+    return super.query<T>(text, values);
+  }
+}
+
 describe('API authorization boundaries', () => {
   it('derives organization scope from the authenticated profile', async () => {
     const database = new AuthorizationDatabase();
@@ -169,6 +235,92 @@ describe('API authorization boundaries', () => {
     );
     expect(productCall?.text).toContain("$8::text is distinct from 'pos'");
     expect(productCall?.text).toContain('branch_stock.quantity>0');
+  });
+
+  it('matches POS catalogue barcodes when the search is contained anywhere in the code', async () => {
+    const database = new AuthorizationDatabase();
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    await request(app)
+      .get(`/api/v1/products?usage=pos&branchId=${database.user.branches[0]!.id}&search=099`)
+      .set('authorization', 'Bearer valid-token')
+      .expect(200);
+
+    const productCall = database.calls.find(
+      (call) => call.text.includes('from products p') && call.values?.includes('099'),
+    );
+    expect(productCall?.text).toContain("pb.barcode ilike '%'||$2||'%'");
+  });
+
+  it('allows an existing combo component to remain while another item is removed', async () => {
+    const database = new PromotionUpdateDatabase();
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    await request(app)
+      .put(`/api/v1/promotions/${database.promotionId}`)
+      .set('authorization', 'Bearer valid-token')
+      .send({
+        branchId: database.branchId,
+        name: 'Updated combo',
+        type: 'combo_bundle',
+        comboPrice: '50.00',
+        isActive: true,
+        items: [
+          {
+            productId: database.retainedProductId,
+            role: 'combo_component',
+            requiredQuantity: 1,
+          },
+        ],
+      })
+      .expect(200);
+
+    const validationIndex = database.calls.findIndex((call) => call.text.includes('union all'));
+    const deleteIndex = database.calls.findIndex((call) =>
+      call.text.includes('delete from promotion_items'),
+    );
+    expect(validationIndex).toBeGreaterThan(-1);
+    expect(deleteIndex).toBeGreaterThan(validationIndex);
+    expect(database.calls[validationIndex]?.values?.[3]).toBe(database.promotionId);
+  });
+
+  it('toggles a promotion only in the explicitly selected branch', async () => {
+    const database = new PromotionToggleDatabase();
+    const app = createApp({
+      database,
+      verifyToken: async () => ({ id: database.user.id, email: database.user.email }),
+      authActions,
+    });
+
+    await request(app)
+      .post(
+        `/api/v1/promotions/${database.promotionId}/toggle?branchId=${database.promotionBranchId}`,
+      )
+      .set('authorization', 'Bearer valid-token')
+      .expect(200);
+
+    const toggleCall = database.calls.find((call) =>
+      call.text.includes('update promotions set is_active'),
+    );
+    expect(toggleCall?.text).toContain('branch_id = $3');
+    expect(toggleCall?.values).toEqual([
+      database.promotionId,
+      database.user.organization.id,
+      database.promotionBranchId,
+    ]);
+
+    await request(app)
+      .post(`/api/v1/promotions/${database.promotionId}/toggle?branchId=${database.otherBranchId}`)
+      .set('authorization', 'Bearer valid-token')
+      .expect(404);
   });
 
   it('limits combo promotions to branches with enough component stock', async () => {

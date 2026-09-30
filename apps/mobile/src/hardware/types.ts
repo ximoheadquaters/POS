@@ -22,7 +22,8 @@ export type ReceiptPaperSize = '58mm' | '80mm' | 'full_page';
 
 export interface ReceiptPrinterSettings {
   version: 1;
-  printingMethod: 'system_dialog';
+  printingMethod: 'system_dialog' | 'bluetooth';
+  bluetoothDeviceAddress?: string;
   paperSize: ReceiptPaperSize;
   autoPrintAfterSale: boolean;
   includeBranchAddress: boolean;
@@ -35,6 +36,7 @@ export interface ReceiptPrintJob {
   saleId: string;
   receiptNumber: string;
   paperSize?: ReceiptPaperSize;
+  bluetoothDeviceAddress?: string;
   includeBranchAddress?: boolean;
   includeCashierName?: boolean;
   includeTaxBreakdown?: boolean;

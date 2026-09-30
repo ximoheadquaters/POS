@@ -1,4 +1,5 @@
 import type { ReportsWorkspace } from './report-types';
+import { formatMoney } from './format';
 
 export type ReportSectionId =
   | 'overview'
@@ -39,12 +40,7 @@ function number(value: string | number | null | undefined): number {
 }
 
 function money(value: string | number | null | undefined, currency = 'PHP'): string {
-  return new Intl.NumberFormat('en-PH', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(number(value));
+  return formatMoney(number(value), currency);
 }
 
 function quantity(value: string | number | null | undefined): string {

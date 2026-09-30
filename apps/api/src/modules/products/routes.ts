@@ -373,7 +373,8 @@ export function productsRouter(database: Database): Router {
             ))
           and ($2::text is null or
            p.name ilike '%'||$2||'%' or p.sku ilike '%'||$2||'%' or exists (
-             select 1 from product_barcodes pb where pb.product_id=p.id and pb.barcode=$2
+             select 1 from product_barcodes pb
+             where pb.product_id=p.id and pb.barcode ilike '%'||$2||'%'
            ))
           and ($9::text[] is null or coalesce(p.inventory_role, 'sellable') = any($9::text[]))
           and ($10::text[] is null or coalesce(p.preparation_behavior, 'standard') = any($10::text[]))

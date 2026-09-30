@@ -49,6 +49,16 @@ export class HeldSaleService {
       const sale = saleResult.rows[0];
       if (!sale) throw notFound('Held sale');
 
+      const resumedResult = await transaction.query(
+        `select 1
+         from audit_logs
+         where organization_id = $1 and entity_type = 'sale' and entity_id = $2
+           and action = 'sale.resumed'
+         limit 1`,
+        [organizationId, id],
+      );
+      if (resumedResult.rows.length > 0) throw notFound('Held sale');
+
       const itemsResult = await transaction.query<ResumedHeldSaleItem>(
         `select si.product_id as "productId", si.variant_id as "variantId",
            si.product_name as "productName", si.unit_price::text as "unitPrice",
@@ -65,12 +75,6 @@ export class HeldSaleService {
         [id, organizationId],
       );
 
-      await transaction.query(
-        `update sales
-         set status = 'voided'
-         where id = $1 and organization_id = $2 and status = 'held'`,
-        [id, organizationId],
-      );
       await transaction.query(
         `insert into audit_logs (
            organization_id, actor_id, branch_id, action, entity_type, entity_id, after_data
@@ -109,6 +113,16 @@ export class HeldSaleService {
       );
       const sale = saleResult.rows[0];
       if (!sale) throw notFound('Held sale');
+
+      const resumedResult = await transaction.query(
+        `select 1
+         from audit_logs
+         where organization_id = $1 and entity_type = 'sale' and entity_id = $2
+           and action = 'sale.resumed'
+         limit 1`,
+        [organizationId, id],
+      );
+      if (resumedResult.rows.length > 0) throw notFound('Held sale');
 
       await transaction.query(
         `update sales

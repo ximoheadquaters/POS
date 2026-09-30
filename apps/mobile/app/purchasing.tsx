@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
@@ -35,12 +35,16 @@ interface SupplierReturn {
 function PurchasingContent() {
   const [section, setSection] = useState<Section>('orders');
   const [search, setSearch] = useState('');
-  const trimmedSearch = search.trim();
+  const [trimmedSearch, setTrimmedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setTrimmedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const branch = useBranchStore((state) => state.activeBranch);
   const { currentUser } = useSession();
   const orders = useQuery({
     queryKey: ['purchase-orders', branch?.id, trimmedSearch],
-    enabled: Boolean(branch),
+    enabled: Boolean(branch) && section === 'orders',
     queryFn: () =>
       api<PurchaseOrderSummary[]>(
         `/purchase-orders?branchId=${branch!.id}&page=1&pageSize=100${
@@ -50,17 +54,17 @@ function PurchasingContent() {
   });
   const suppliers = useQuery({
     queryKey: ['suppliers', branch?.id],
-    enabled: Boolean(branch),
+    enabled: Boolean(branch) && section === 'suppliers',
     queryFn: () => api<Supplier[]>(`/suppliers?branchId=${branch!.id}`),
   });
   const returns = useQuery({
     queryKey: ['purchase-returns', branch?.id],
-    enabled: Boolean(branch),
+    enabled: Boolean(branch) && section === 'returns',
     queryFn: () => api<SupplierReturn[]>(`/purchase-orders/returns?branchId=${branch!.id}`),
   });
   const returnable = useQuery({
     queryKey: ['returnable-purchase-orders', branch?.id],
-    enabled: Boolean(branch),
+    enabled: Boolean(branch) && section === 'returns',
     queryFn: () =>
       api<PurchaseOrderSummary[]>(
         `/purchase-orders?branchId=${branch!.id}&returnable=true&page=1&pageSize=100`,
@@ -122,13 +126,14 @@ function PurchasingContent() {
               accessibilityRole="tab"
               accessibilityState={{ selected: section === key }}
               onPress={() => setSection(key)}
-              className={`min-h-11 min-w-[100px] flex-1 flex-row flex-wrap items-center justify-center rounded-t-xl px-2 ${
+              className={`min-h-14 min-w-0 flex-1 items-center justify-center rounded-t-xl px-1 py-1 ${
                 section === key ? 'border-b-2 border-brand-700 bg-brand-50' : ''
               }`}
             >
               <Feather name={icon} size={16} color={section === key ? '#1A593B' : '#81776E'} />
               <Text
-                className={`ml-2 text-sm font-medium ${
+                numberOfLines={2}
+                className={`mt-1 text-center text-xs font-medium ${
                   section === key ? 'text-brand-800' : 'text-slate-500'
                 }`}
               >

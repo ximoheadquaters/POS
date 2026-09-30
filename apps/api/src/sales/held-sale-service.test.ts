@@ -12,8 +12,9 @@ const heldSaleId = '66666666-6666-4666-8666-666666666666';
 
 class HeldSaleDatabase implements Database {
   hasSale = true;
+  hasResumeAudit = false;
   itemSelectSql = '';
-  voidedSales = 0;
+  closedSaleStatuses: string[] = [];
   audits = 0;
 
   async query<T extends QueryResultRow>(text: string) {
@@ -32,6 +33,9 @@ class HeldSaleDatabase implements Database {
             ] as unknown as T[])
           : [],
       );
+    }
+    if (sql.startsWith('select 1 from audit_logs')) {
+      return result(this.hasResumeAudit ? ([{ exists: 1 }] as unknown as T[]) : []);
     }
     if (sql.startsWith('select si.product_id')) {
       this.itemSelectSql = sql;
@@ -52,7 +56,7 @@ class HeldSaleDatabase implements Database {
       ]);
     }
     if (sql.startsWith('update sales')) {
-      this.voidedSales += 1;
+      this.closedSaleStatuses.push(sql.includes("set status = 'resumed'") ? 'resumed' : 'voided');
       return result([]);
     }
     if (sql.startsWith('insert into audit_logs')) {
@@ -95,7 +99,7 @@ describe('held sale lifecycle', () => {
     });
     expect(database.itemSelectSql).toContain('p.image_path as image');
     expect(database.itemSelectSql).not.toContain('primary_image_url');
-    expect(database.voidedSales).toBe(1);
+    expect(database.closedSaleStatuses).toEqual([]);
     expect(database.audits).toBe(1);
   });
 
@@ -106,14 +110,25 @@ describe('held sale lifecycle', () => {
     await expect(
       new HeldSaleService(database).resume(organizationId, userId, branchId, heldSaleId),
     ).rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' } satisfies Partial<AppError>);
-    expect(database.voidedSales).toBe(0);
+    expect(database.closedSaleStatuses).toEqual([]);
+    expect(database.audits).toBe(0);
+  });
+
+  it('does not resume the same held sale twice', async () => {
+    const database = new HeldSaleDatabase();
+    database.hasResumeAudit = true;
+
+    await expect(
+      new HeldSaleService(database).resume(organizationId, userId, branchId, heldSaleId),
+    ).rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' } satisfies Partial<AppError>);
+    expect(database.closedSaleStatuses).toEqual([]);
     expect(database.audits).toBe(0);
   });
 
   it('discards by closing the parked record and preserving its items', async () => {
     const database = new HeldSaleDatabase();
     await new HeldSaleService(database).discard(organizationId, userId, branchId, heldSaleId);
-    expect(database.voidedSales).toBe(1);
+    expect(database.closedSaleStatuses).toEqual(['voided']);
     expect(database.audits).toBe(1);
   });
 });

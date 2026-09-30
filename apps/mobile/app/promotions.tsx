@@ -9,6 +9,8 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -40,14 +42,12 @@ interface ProductItem {
   name: string;
   sku?: string;
   sellingPrice?: string;
-  status?: string;
 }
 
 interface InventoryLookupRow {
   productId: string;
   name: string;
   sku: string;
-  status?: string;
   inventoryRole?: 'sellable' | 'ingredient' | 'both';
 }
 
@@ -111,6 +111,7 @@ const PROMO_TYPES: Array<{
 ];
 
 function PromotionsContent() {
+  const { height: windowHeight } = useWindowDimensions();
   const { currentUser } = useSession();
   const { showAlert } = useIosAlert();
   const activeBranch = useBranchStore((state) => state.activeBranch);
@@ -120,6 +121,7 @@ function PromotionsContent() {
   const client = useQueryClient();
 
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingIsActive, setEditingIsActive] = useState(true);
@@ -155,6 +157,11 @@ function PromotionsContent() {
     const timer = setTimeout(() => setDebouncedProductSearch(productSearch.trim()), 250);
     return () => clearTimeout(timer);
   }, [productSearch]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -226,15 +233,14 @@ function PromotionsContent() {
     }
   };
 
-  const trimmedSearch = search.trim();
   const query = useInfiniteQuery({
-    queryKey: ['promotions', branch?.id, trimmedSearch],
-    enabled: hasModule,
+    queryKey: ['promotions', branch?.id, debouncedSearch],
+    enabled: hasModule && Boolean(branch?.id),
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
       api<PromotionSummary[]>(
         `/promotions?branchId=${branch!.id}&page=${pageParam}&pageSize=30${
-          trimmedSearch ? `&search=${encodeURIComponent(trimmedSearch)}` : ''
+          debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : ''
         }`,
       ),
     getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
@@ -263,10 +269,9 @@ function PromotionsContent() {
         const fromInventory: ProductItem[] = [];
         for (const row of inventoryRows) {
           if (!row.productId || seen.has(row.productId)) continue;
-          if (row.status && row.status !== 'active') continue;
           if (row.inventoryRole === 'ingredient') continue;
           seen.add(row.productId);
-          fromInventory.push({ id: row.productId, name: row.name, sku: row.sku, status: row.status });
+          fromInventory.push({ id: row.productId, name: row.name, sku: row.sku });
         }
         if (fromInventory.length > 0) return fromInventory;
       } catch {
@@ -367,10 +372,26 @@ function PromotionsContent() {
             body: JSON.stringify(payload),
           });
         } catch {
-          return await api(`/promotions/${editingId}`, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-          });
+          try {
+            return await api(`/promotions/${editingId}`, {
+              method: 'POST',
+              body: JSON.stringify(payload),
+            });
+          } catch {
+            const created = await api<{ id?: string }>('/promotions', {
+              method: 'POST',
+              body: JSON.stringify(payload),
+            });
+            try {
+              await api(`/promotions/${editingId}/toggle`, {
+                method: 'POST',
+                body: JSON.stringify({ branchId: payload.branchId }),
+              });
+            } catch {
+              // ignore
+            }
+            return created;
+          }
         }
       }
       return api('/promotions', {
@@ -428,9 +449,7 @@ function PromotionsContent() {
   const availableProducts = useMemo(() => {
     const selectedIds = new Set(selectedProducts.map((item) => item.productId));
     const rows = productsQuery.data ?? [];
-    return rows
-      .filter((product) => !selectedIds.has(product.id) && (!product.status || product.status === 'active'))
-      .slice(0, 12);
+    return rows.filter((product) => !selectedIds.has(product.id)).slice(0, 12);
   }, [productsQuery.data, selectedProducts]);
 
   const addProductToCombo = (prod: ProductItem) => {
@@ -479,7 +498,7 @@ function PromotionsContent() {
             administrator to upgrade your plan tier or enable this feature.
           </Text>
           <View className="mt-6">
-            <Button title="Back To More" variant="secondary" onPress={() => router.back()} />
+            <Button title="Back to More" variant="secondary" onPress={() => router.back()} />
           </View>
         </View>
       </Screen>
@@ -494,7 +513,7 @@ function PromotionsContent() {
         action={
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Create New Promotion"
+            accessibilityLabel="Create new promotion"
             onPress={openCreateModal}
             className="min-h-11 flex-row items-center rounded-xl bg-brand-700 px-4 active:bg-brand-800"
           >
@@ -517,7 +536,7 @@ function PromotionsContent() {
             className="ml-2 flex-1 min-h-11 bg-transparent text-sm text-slate-900"
           />
           {search ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Clear Search" onPress={() => setSearch('')}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearch('')}>
               <Feather name="x" size={16} color="#81776E" />
             </Pressable>
           ) : null}
@@ -531,10 +550,10 @@ function PromotionsContent() {
         contentContainerClassName="p-4 gap-3 grow"
         ListEmptyComponent={
           query.isLoading ? (
-            <LoadingState label="Loading Promotions…" />
+            <LoadingState label="Loading promotions…" />
           ) : (
             <EmptyState
-              title="No Promotions Yet"
+              title="No promotions yet"
               message="Create a combo, BOGO, or discount to get started."
             />
           )
@@ -566,13 +585,7 @@ function PromotionsContent() {
                   </View>
                 </View>
 
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={item.isActive ? 'Disable Promotion' : 'Enable Promotion'}
-                  onPress={(event) => {
-                    event.stopPropagation?.();
-                    toggleMutation.mutate(item.id);
-                  }}
+                <View
                   className={`rounded-full px-3 py-1.5 ${
                     item.isActive ? 'bg-emerald-100' : 'bg-slate-100'
                   }`}
@@ -584,31 +597,60 @@ function PromotionsContent() {
                   >
                     {item.isActive ? 'Active' : 'Off'}
                   </Text>
-                </Pressable>
+                </View>
               </View>
 
               <View className="mt-3 flex-row flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3">
                 {item.comboPrice ? (
                   <Text className="text-sm font-semibold text-emerald-700">
-                    {formatMoney(item.comboPrice)} Combo
+                    {formatMoney(item.comboPrice)} combo
                   </Text>
                 ) : null}
                 {item.discountPercentage ? (
                   <Text className="text-sm font-semibold text-emerald-700">
-                    {item.discountPercentage}% Off
+                    {item.discountPercentage}% off
                   </Text>
                 ) : null}
                 {item.discountAmount ? (
                   <Text className="text-sm font-semibold text-emerald-700">
-                    {formatMoney(item.discountAmount)} Off
+                    {formatMoney(item.discountAmount)} off
                   </Text>
                 ) : null}
                 <Text className="text-xs text-slate-500">
-                  {item.itemCount} Product{item.itemCount === 1 ? '' : 's'}
+                  {item.itemCount} product{item.itemCount === 1 ? '' : 's'}
                 </Text>
-                <View className="ml-auto min-h-9 flex-row items-center rounded-xl border border-brand-200 bg-brand-50 px-3">
-                  <Feather name="edit-2" size={13} color="#0D5C3A" />
-                  <Text className="ml-1.5 text-xs font-semibold text-brand-800">Edit</Text>
+                <View className="ml-auto flex-row items-center gap-2">
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={item.isActive ? 'Turn off promotion' : 'Turn on promotion'}
+                    disabled={toggleMutation.isPending}
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      toggleMutation.mutate(item.id);
+                    }}
+                    className={`min-h-9 flex-row items-center rounded-xl border px-3 ${
+                      item.isActive
+                        ? 'border-red-200 bg-red-50 active:bg-red-100'
+                        : 'border-emerald-200 bg-emerald-50 active:bg-emerald-100'
+                    }`}
+                  >
+                    <Feather
+                      name="power"
+                      size={13}
+                      color={item.isActive ? '#DC2626' : '#047857'}
+                    />
+                    <Text
+                      className={`ml-1.5 text-xs font-semibold ${
+                        item.isActive ? 'text-red-700' : 'text-emerald-700'
+                      }`}
+                    >
+                      {item.isActive ? 'Turn off' : 'Turn on'}
+                    </Text>
+                  </Pressable>
+                  <View className="min-h-9 flex-row items-center rounded-xl border border-brand-200 bg-brand-50 px-3">
+                    <Feather name="edit-2" size={13} color="#0D5C3A" />
+                    <Text className="ml-1.5 text-xs font-semibold text-brand-800">Edit</Text>
+                  </View>
                 </View>
               </View>
             </Pressable>
@@ -624,7 +666,8 @@ function PromotionsContent() {
         presentationStyle="overFullScreen"
         onRequestClose={closeModal}
       >
-        <View
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           pointerEvents="box-none"
           style={[
             StyleSheet.absoluteFillObject,
@@ -636,7 +679,7 @@ function PromotionsContent() {
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close Create Promotion"
+            accessibilityLabel="Close create promotion"
             onPress={closeModal}
             style={[StyleSheet.absoluteFillObject, { zIndex: 0 }]}
             className="bg-black/50"
@@ -644,8 +687,8 @@ function PromotionsContent() {
 
           <View
             pointerEvents="auto"
-            style={{ zIndex: 1, elevation: 20 }}
-            className="max-h-[92%] w-full max-w-lg overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
+            style={{ zIndex: 1, elevation: 20, height: Math.min(windowHeight * 0.86, 720) }}
+            className="w-full max-w-lg overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
           >
             <View className="flex-row items-center justify-between border-b border-slate-100 px-5 py-4">
               <View className="flex-1 pr-3">
@@ -675,7 +718,7 @@ function PromotionsContent() {
               contentContainerClassName="gap-5 p-5 pb-6"
             >
               <Field
-                label="Promotion Name"
+                label="Promotion name"
                 value={name}
                 onChangeText={setName}
                 placeholder="e.g. Lunch Combo"
@@ -719,7 +762,7 @@ function PromotionsContent() {
 
               {type === 'combo_bundle' ? (
                 <Field
-                  label="Combo Price (₱)"
+                  label="Combo price (₱)"
                   value={comboPrice}
                   onChangeText={setComboPrice}
                   keyboardType="decimal-pad"
@@ -739,7 +782,7 @@ function PromotionsContent() {
 
               {type === 'fixed_discount' ? (
                 <Field
-                  label="Discount Amount (₱)"
+                  label="Discount amount (₱)"
                   value={discountAmount}
                   onChangeText={setDiscountAmount}
                   keyboardType="decimal-pad"
@@ -750,21 +793,21 @@ function PromotionsContent() {
               {type === 'tiered_quantity' ? (
                 <View className="gap-3">
                   <Field
-                    label="Minimum Quantity To Qualify"
+                    label="Minimum quantity to qualify"
                     value={minOrderQuantity}
                     onChangeText={setMinOrderQuantity}
                     keyboardType="number-pad"
                     placeholder="e.g. 5 (Buy 5 or more packs)"
                   />
                   <Field
-                    label="Discount Percentage (% Off)"
+                    label="Discount percentage (% off)"
                     value={discountPercentage}
                     onChangeText={setDiscountPercentage}
                     keyboardType="decimal-pad"
                     placeholder="e.g. 10 for 10% off"
                   />
                   <Field
-                    label="OR Fixed Discount Amount Per Item/Order (₱)"
+                    label="OR Fixed discount amount per item/order (₱)"
                     value={discountAmount}
                     onChangeText={setDiscountAmount}
                     keyboardType="decimal-pad"
@@ -778,7 +821,7 @@ function PromotionsContent() {
                   <View className="flex-row items-end justify-between">
                     <Text className="text-xs font-semibold text-slate-700">Products</Text>
                     <Text className="text-xs text-slate-400">
-                      {selectedProducts.length} Selected
+                      {selectedProducts.length} selected
                     </Text>
                   </View>
 
@@ -799,7 +842,7 @@ function PromotionsContent() {
                     {productSearch ? (
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Clear Product Search"
+                        accessibilityLabel="Clear product search"
                         onPress={() => setProductSearch('')}
                         hitSlop={8}
                       >
@@ -811,7 +854,7 @@ function PromotionsContent() {
                   {!branch?.id ? (
                     <Text className="text-xs text-amber-700">Select a branch before adding products.</Text>
                   ) : productsQuery.isLoading ? (
-                    <Text className="text-xs text-slate-500">Loading Products…</Text>
+                    <Text className="text-xs text-slate-500">Loading products…</Text>
                   ) : productsQuery.isError ? (
                     <View className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5">
                       <Text className="text-xs font-medium text-red-700">
@@ -922,7 +965,7 @@ function PromotionsContent() {
               ) : null}
 
               <Field
-                label="Notes (Optional)"
+                label="Notes (optional)"
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Cashier note or terms"
@@ -941,7 +984,7 @@ function PromotionsContent() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Save Promotion"
+                accessibilityLabel="Save promotion"
                 disabled={saveMutation.isPending || name.trim().length < 2}
                 onPress={savePromotion}
                 className={`min-h-12 flex-[1.4] items-center justify-center rounded-xl bg-brand-700 ${
@@ -960,7 +1003,7 @@ function PromotionsContent() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   );

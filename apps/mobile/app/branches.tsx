@@ -21,6 +21,7 @@ import {
 import { api } from '@/lib/api';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
+import { useShiftStore } from '@/store/shift';
 
 interface BranchRecord extends BranchInput {
   id: string;
@@ -47,6 +48,8 @@ function BranchesContent() {
   const { currentUser, refreshUser } = useSession();
   const activeBranch = useBranchStore((state) => state.activeBranch);
   const selectBranch = useBranchStore((state) => state.select);
+  const clearBranch = useBranchStore((state) => state.clear);
+  const activeShift = useShiftStore((state) => state.activeShift);
   const client = useQueryClient();
   const canManage = currentUser?.permissions?.includes('branches:manage') ?? false;
   const canManageRegisters =
@@ -112,6 +115,17 @@ function BranchesContent() {
       isActive: branch.isActive,
     });
     setFormVisible(true);
+  }
+
+  function switchBranch() {
+    if (activeShift) {
+      appAlert(
+        'Close your shift first',
+        'Finish and close the active register shift before changing branches.',
+      );
+      return;
+    }
+    void clearBranch().then(() => router.replace('/branch-select'));
   }
 
   async function refreshBranchContext(updated?: BranchRecord) {
@@ -211,6 +225,7 @@ function BranchesContent() {
   const activeCount = branches.filter((branch) => branch.isActive).length;
   const staffAssignments = branches.reduce((total, branch) => total + branch.staffCount, 0);
   const compact = width < 640;
+  const stackFilters = width < 1200;
 
   return (
     <Screen>
@@ -220,7 +235,12 @@ function BranchesContent() {
         showBack
         backLabel="More"
         fallbackHref="/(tabs)/more"
-        action={canManage ? <Button title="+ New Branch" onPress={openCreate} /> : null}
+        action={
+          <View className="flex-row items-center gap-2">
+            <Button title="Switch branch" variant="secondary" onPress={switchBranch} />
+            {canManage ? <Button title="+ New branch" onPress={openCreate} /> : null}
+          </View>
+        }
       />
       <ScrollView contentContainerClassName="items-center p-4 pb-12">
         <View className="w-full max-w-5xl gap-5">
@@ -230,21 +250,20 @@ function BranchesContent() {
               ['Active', String(activeCount), 'check-circle' as const],
               ['Staff assignments', String(staffAssignments), 'users' as const],
             ].map(([label, value, icon]) => (
-              <View
-                key={label}
-                className="min-h-28 flex-1 rounded-2xl border border-slate-200 bg-white p-4"
-              >
-                <View className="h-9 w-9 items-center justify-center rounded-xl bg-brand-50">
-                  <Feather name={icon as keyof typeof Feather.glyphMap} size={16} color="#1A593B" />
+              <View key={label} className="min-h-24 flex-1 rounded-2xl border border-slate-200 bg-white p-4">
+                <View className="flex-row items-center gap-2">
+                  <View className="h-9 w-9 items-center justify-center rounded-xl bg-brand-50">
+                    <Feather name={icon as keyof typeof Feather.glyphMap} size={16} color="#1A593B" />
+                  </View>
+                  <Text className="flex-1 text-xs text-slate-500">{label}</Text>
                 </View>
-                <Text className="mt-3 text-xl font-semibold text-slate-950">{value}</Text>
-                <Text className="mt-1 text-xs text-slate-500">{label}</Text>
+                <Text className="mt-2 text-xl font-semibold text-slate-950">{value}</Text>
               </View>
             ))}
           </View>
 
           <View className="rounded-2xl border border-slate-200 bg-white p-3">
-            <View className={`gap-3 ${compact ? '' : 'flex-row items-center'}`}>
+            <View className={`gap-3 ${stackFilters ? '' : 'flex-row items-center'}`}>
               <View className="min-h-12 flex-1 flex-row items-center rounded-xl bg-slate-100 px-4">
                 <Feather name="search" size={16} color="#81776E" />
                 <TextInput
@@ -255,16 +274,16 @@ function BranchesContent() {
                   className="ml-2 flex-1 text-sm text-slate-900 outline-none"
                 />
               </View>
-              <View className="flex-row gap-2">
+              <View className={`flex-row gap-2 ${stackFilters ? 'w-full' : 'min-w-[250px]'}`}>
                 {(['all', 'active', 'inactive'] as const).map((value) => (
                   <Pressable
                     key={value}
                     onPress={() => setStatus(value)}
-                    className={`min-h-10 flex-1 items-center justify-center rounded-xl px-4 ${
+                    className={`min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl px-2 ${
                       status === value ? 'bg-brand-700' : 'bg-slate-100'
                     }`}
                   >
-                    <Text
+                    <Text numberOfLines={1}
                       className={`text-xs font-medium capitalize ${
                         status === value ? 'text-white' : 'text-slate-600'
                       }`}
@@ -279,7 +298,7 @@ function BranchesContent() {
 
           {query.isLoading ? (
             <View className="min-h-72 rounded-3xl border border-slate-200 bg-white">
-              <LoadingState label="Loading Branches…" />
+              <LoadingState label="Loading branches…" />
             </View>
           ) : query.isError ? (
             <View className="min-h-72 rounded-3xl border border-slate-200 bg-white">
@@ -288,7 +307,7 @@ function BranchesContent() {
           ) : filtered.length === 0 ? (
             <View className="min-h-72 rounded-3xl border border-slate-200 bg-white">
               <EmptyState
-                title={branches.length ? 'No Matching Branches' : 'No Branches Yet'}
+                title={branches.length ? 'No matching branches' : 'No branches yet'}
                 message={
                   branches.length
                     ? 'Try a different search or status filter.'
@@ -426,7 +445,7 @@ function BranchesContent() {
             >
               <Feather name="users" size={16} color="#1A593B" />
               <Text className="ml-2 text-sm font-medium text-brand-700">
-                Manage Staff Branch Assignments
+                Manage staff branch assignments
               </Text>
             </Pressable>
           ) : null}
@@ -463,7 +482,7 @@ function BranchesContent() {
                 name="name"
                 render={({ field, fieldState }) => (
                   <Field
-                    label="Branch Name"
+                    label="Branch name"
                     value={field.value}
                     placeholder="e.g. Main Branch"
                     onChangeText={field.onChange}
@@ -477,7 +496,7 @@ function BranchesContent() {
                 name="code"
                 render={({ field, fieldState }) => (
                   <Field
-                    label="Branch Code"
+                    label="Branch code"
                     value={field.value}
                     placeholder="e.g. MAIN"
                     autoCapitalize="characters"
@@ -492,7 +511,7 @@ function BranchesContent() {
                 name="address"
                 render={({ field, fieldState }) => (
                   <Field
-                    label="Address (Optional)"
+                    label="Address (optional)"
                     value={field.value ?? ''}
                     placeholder="Street, barangay, city"
                     onChangeText={field.onChange}
@@ -506,7 +525,7 @@ function BranchesContent() {
                 name="phone"
                 render={({ field, fieldState }) => (
                   <Field
-                    label="Phone (Optional)"
+                    label="Phone (optional)"
                     value={field.value ?? ''}
                     placeholder="Branch contact number"
                     keyboardType="phone-pad"
@@ -522,7 +541,7 @@ function BranchesContent() {
                 render={({ field }) => (
                   <View className="flex-row items-center rounded-2xl border border-slate-200 p-4">
                     <View className="flex-1">
-                      <Text className="font-medium text-slate-900">Active Branch</Text>
+                      <Text className="font-medium text-slate-900">Active branch</Text>
                       <Text className="mt-1 text-xs text-slate-500">
                         Active branches can be selected for sales and inventory operations.
                       </Text>
@@ -546,7 +565,7 @@ function BranchesContent() {
                 </View>
                 <View className="flex-1">
                   <Button
-                    title={save.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Create Branch'}
+                    title={save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Create branch'}
                     disabled={save.isPending}
                     onPress={form.handleSubmit((value) => save.mutate(value))}
                   />
@@ -576,7 +595,7 @@ function BranchesContent() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close Modal"
+                accessibilityLabel="Close modal"
                 disabled={addCounter.isPending}
                 onPress={() => setCounterBranch(null)}
                 className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"

@@ -613,8 +613,9 @@ export function purchasingRouter(database: Database): Router {
             variant_id: string | null;
             portioning_variant_id: string | null;
           }>(
-            `select id,product_id,units_per_base::float8,ordered_quantity::float8,
-              received_quantity::float8,unit_cost::text,product_name,poi.variant_id,
+            `select poi.id,poi.product_id,poi.units_per_base::float8,
+              poi.ordered_quantity::float8,poi.received_quantity::float8,
+              poi.unit_cost::text,poi.product_name,poi.variant_id,
               portioning.id as portioning_variant_id
              from purchase_order_items poi
              left join product_variants portioning
@@ -832,8 +833,9 @@ export function purchasingRouter(database: Database): Router {
             variant_id: string | null;
             portioning_variant_id: string | null;
           }>(
-            `select id,product_id,units_per_base::float8,received_quantity::float8,
-              returned_quantity::float8,unit_cost::text,product_name,poi.variant_id,
+            `select poi.id,poi.product_id,poi.units_per_base::float8,
+              poi.received_quantity::float8,poi.returned_quantity::float8,
+              poi.unit_cost::text,poi.product_name,poi.variant_id,
               portioning.id as portioning_variant_id
              from purchase_order_items poi
              left join product_variants portioning

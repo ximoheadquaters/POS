@@ -67,10 +67,15 @@ export default function ReceiptScreen() {
       if (status.state !== 'ready') {
         throw new HardwareUnavailableError('receipt_printer', status.detail);
       }
+      // Read device storage at print time so a cached query cannot use an old printer.
+      const savedPrinterSettings = await getReceiptPrinterSettings(
+        currentUser?.organization.id,
+        branch?.id,
+      );
       await printer.print({
         saleId: params.id,
         receiptNumber: params.number,
-        ...applyReceiptPrinterSettings(printerSettings),
+        ...applyReceiptPrinterSettings(savedPrinterSettings),
         businessName: currentUser?.organization.name,
         branchName: sale.data?.branchName,
         branchAddress: sale.data?.branchAddress,

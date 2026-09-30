@@ -12,19 +12,14 @@ import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useQuery } from '@tanstack/react-query';
 import { AppSidebarProvider } from '@/components/app-sidebar';
+import { ReportErrorBoundary } from '@/components/report-error-boundary';
 import { DateRangeCalendar } from '@/components/date-range-calendar';
 import { Button, ErrorState, Header, LoadingState, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
-import {
-  buildInventoryExportExcel,
-  buildInventoryExportPdf,
-  buildReportsExcel,
-  buildReportsPdf,
-  type InventoryExportData,
-} from '@/lib/report-export';
+import type { InventoryExportData } from '@/lib/report-export';
 import type { ReportsWorkspace } from '@/lib/report-types';
-import { saveReportExport } from '@/lib/save-report-export';
+import { requireReportsWorkspace } from '@/lib/reports-workspace-guard';
 import { useIosAlert } from '@/providers/ios-alert';
 import { useSession } from '@/providers/session';
 import { useBranchStore } from '@/store/branch';
@@ -2282,6 +2277,7 @@ function MetricDrilldownView({
         source,
         { rangeLabel, branchName },
       );
+      const { saveReportExport } = await import('@/lib/save-report-export');
       await saveReportExport(output.bytes, output.fileName, 'csv');
       showAlert({
         type: 'success',
@@ -5625,7 +5621,7 @@ function ReportsContent({
   const { width } = useWindowDimensions();
   const phone = width < 640;
   // Account for desktop sidebar so the report stays centered in the content pane.
-  const sidebarOffset = width >= 1100 ? 272 : 0;
+  const sidebarOffset = width >= 768 ? 272 : 0;
   const workspaceMaxWidth = Math.min(1480, Math.max(phone ? width - 24 : 720, width - sidebarOffset - 48));
   const branch = useBranchStore((state) => state.activeBranch);
   const { currentUser, session, loading: sessionLoading } = useSession();
@@ -5696,12 +5692,12 @@ function ReportsContent({
   const query = useQuery({
     queryKey: ['reports-workspace', period, branch?.id, range.from, range.to, session?.user?.id],
     enabled: !sessionLoading && Boolean(session?.access_token),
-    queryFn: () =>
-      api<ReportsWorkspace>(
+    queryFn: async () =>
+      requireReportsWorkspace(await api<ReportsWorkspace>(
         `/reports/workspace?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(
           range.to,
         )}${branch?.id ? `&branchId=${branch.id}` : ''}`,
-      ),
+      )),
   });
 
   const inventoryExportRef = useRef<(() => InventoryExportData) | null>(null);
@@ -5710,6 +5706,12 @@ function ReportsContent({
     if (!query.data || exporting) return;
     setExporting(true);
     try {
+      const {
+        buildInventoryExportExcel,
+        buildInventoryExportPdf,
+        buildReportsExcel,
+        buildReportsPdf,
+      } = await import('@/lib/report-export');
       let output: { bytes: Uint8Array; fileName: string };
       if (section === 'inventory' && inventoryExportRef.current) {
         const invData = inventoryExportRef.current();
@@ -5723,6 +5725,7 @@ function ReportsContent({
             ? buildReportsExcel(query.data, exportMetadata, section)
             : await buildReportsPdf(query.data, exportMetadata);
       }
+      const { saveReportExport } = await import('@/lib/save-report-export');
       await saveReportExport(output.bytes, output.fileName, format);
       setExportMenuVisible(false);
       showAlert({
@@ -6277,7 +6280,9 @@ export function ReportsWorkspaceScreen({
 }) {
   return (
     <AppSidebarProvider>
-      <ReportsContent initialSection={initialSection} workspaceTitle={workspaceTitle} />
+      <ReportErrorBoundary>
+        <ReportsContent initialSection={initialSection} workspaceTitle={workspaceTitle} />
+      </ReportErrorBoundary>
     </AppSidebarProvider>
   );
 }

@@ -99,6 +99,14 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
     setOptions(null);
   };
 
+  const dismissAlert = () => {
+    if (confirmResolver.current) {
+      confirmResolver.current(false);
+      confirmResolver.current = null;
+    }
+    hideAlert();
+  };
+
   const showAlert = (opts: AlertOptions) => {
     if (confirmResolver.current) {
       confirmResolver.current(false);
@@ -179,13 +187,7 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
         animationType="fade"
         statusBarTranslucent
         presentationStyle="overFullScreen"
-        onRequestClose={() => {
-          if (confirmResolver.current) {
-            confirmResolver.current(false);
-            confirmResolver.current = null;
-          }
-          hideAlert();
-        }}
+        onRequestClose={dismissAlert}
       >
         <View
           style={[
@@ -194,9 +196,24 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
               ? ({ zIndex: 2_000_000, position: 'fixed' } as object)
               : { zIndex: 2_000_000, elevation: 2_000_000 },
           ]}
-          className="items-center justify-center bg-black/45 p-5"
+          className="items-center justify-center p-5"
         >
-          <View className="w-full max-w-[310px] overflow-hidden rounded-[24px] border border-slate-100/50 bg-white/95 shadow-2xl backdrop-blur-xl">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss message"
+            onPress={dismissAlert}
+            style={StyleSheet.absoluteFillObject}
+            className="bg-black/45"
+          />
+          <View className="w-full max-w-[340px] overflow-hidden rounded-[24px] border border-slate-100/50 bg-white/95 shadow-2xl backdrop-blur-xl">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close message"
+              onPress={dismissAlert}
+              className="absolute right-3 top-3 z-10 h-9 w-9 items-center justify-center rounded-full bg-slate-100"
+            >
+              <Feather name="x" size={18} color="#475569" />
+            </Pressable>
             <View className="items-center px-6 pb-5 pt-6">
               <View
                 className={`mb-3 h-12 w-12 items-center justify-center rounded-2xl ${iconDetails.bg}`}
@@ -228,7 +245,9 @@ export function IosAlertProvider({ children }: { children: ReactNode }) {
                     key={`${btn.text}-${index}`}
                     accessibilityRole="button"
                     onPress={() => handleButtonPress(btn)}
-                    className={`min-h-[48px] flex-1 items-center justify-center px-4 py-3 active:bg-slate-100/80 ${
+                    className={`min-h-[52px] items-center justify-center px-4 py-3 active:bg-slate-100/80 ${
+                      buttons.length === 2 ? 'flex-1' : ''
+                    } ${
                       buttons.length === 2 && index === 0 ? 'border-r border-slate-200/80' : ''
                     } ${buttons.length > 2 && !isLast ? 'border-b border-slate-200/80' : ''}`}
                   >

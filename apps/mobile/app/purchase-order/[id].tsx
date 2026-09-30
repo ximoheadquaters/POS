@@ -67,7 +67,8 @@ function QuantityField({
         value={value}
         onChangeText={onChange}
         keyboardType="decimal-pad"
-        className="min-h-11 w-28 rounded-xl bg-slate-100 px-3 text-right text-slate-900"
+        style={{ textAlignVertical: 'center', paddingVertical: 0 }}
+        className="min-h-11 w-28 rounded-xl bg-slate-100 px-3 text-center text-slate-900"
       />
       <Pressable
         onPress={() => onChange(String(maximum))}

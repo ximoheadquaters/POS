@@ -1,5 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import { Platform, Pressable, Switch, Text, View } from 'react-native';
+import { useState } from 'react';
+import { getPairedBluetoothPrinters, type PairedPrinter } from '@/hardware/android-bluetooth-receipt-printer';
 import type { ReceiptPaperSize, ReceiptPrinterSettings } from '@/hardware/types';
 
 const PAPER_OPTIONS: ReadonlyArray<{
@@ -57,6 +59,21 @@ export function ReceiptPrinterSetup({
   testing: boolean;
   saveLabel?: string;
 }) {
+  const [pairedPrinters, setPairedPrinters] = useState<PairedPrinter[]>([]);
+  const [loadingPrinters, setLoadingPrinters] = useState(false);
+  const [printerError, setPrinterError] = useState<string | null>(null);
+  const isAndroid = Platform.OS === 'android';
+  const loadPrinters = async () => {
+    setLoadingPrinters(true);
+    setPrinterError(null);
+    try {
+      setPairedPrinters(await getPairedBluetoothPrinters());
+    } catch (error) {
+      setPrinterError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingPrinters(false);
+    }
+  };
   const update = <K extends keyof ReceiptPrinterSettings>(
     key: K,
     nextValue: ReceiptPrinterSettings[K],
@@ -73,12 +90,14 @@ export function ReceiptPrinterSetup({
         </Text>
         <View className="flex-row items-center rounded-xl border border-brand-200 bg-brand-50/80 p-3.5">
           <View className="h-9 w-9 items-center justify-center rounded-lg bg-brand-100">
-            <Feather name="monitor" size={16} color="#1A593B" />
+            <Feather name={isAndroid ? 'bluetooth' : 'monitor'} size={16} color="#1A593B" />
           </View>
           <View className="ml-3 flex-1">
-            <Text className="text-xs font-bold text-brand-950">System Print Dialog</Text>
+            <Text className="text-xs font-bold text-brand-950">{isAndroid ? 'Bluetooth Thermal Printer' : 'System Print Dialog'}</Text>
             <Text className="mt-0.5 text-[11px] text-slate-600">
-              Uses system print dialog. Supports any thermal, USB, network, or desktop printer.
+              {isAndroid
+                ? 'Print directly to a paired 58 mm ESC/POS printer such as the PT-210.'
+                : 'Uses system print dialog. Supports any thermal, USB, network, or desktop printer.'}
             </Text>
           </View>
           <View className="flex-row items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5">
@@ -88,13 +107,48 @@ export function ReceiptPrinterSetup({
         </View>
       </View>
 
+      {isAndroid ? (
+        <View>
+          <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Paired Printer</Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={loadingPrinters}
+            onPress={loadPrinters}
+            className="min-h-11 self-start justify-center rounded-xl border border-brand-200 bg-brand-50 px-4"
+          >
+            <Text className="text-xs font-bold text-brand-900">{loadingPrinters ? 'Loading paired devices…' : 'Show paired Bluetooth devices'}</Text>
+          </Pressable>
+          {printerError ? <Text className="mt-2 text-xs text-red-700">{printerError}</Text> : null}
+          {!pairedPrinters.length && !printerError ? (
+            <Text className="mt-2 text-xs text-slate-500">
+              {value.bluetoothDeviceAddress ? `Selected device: ${value.bluetoothDeviceAddress}` : 'Pair the PT-210 in Android Bluetooth settings first, then tap the button above.'}
+            </Text>
+          ) : null}
+          {pairedPrinters.map((printer) => {
+            const selected = value.bluetoothDeviceAddress === printer.address;
+            return (
+              <Pressable
+                key={printer.address}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+                onPress={() => update('bluetoothDeviceAddress', printer.address)}
+                className={`mt-2 min-h-12 justify-center rounded-xl border px-4 ${selected ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-white'}`}
+              >
+                <Text className="text-xs font-bold text-slate-900">{printer.name}{selected ? '  ✓' : ''}</Text>
+                <Text className="text-[11px] text-slate-500">{printer.address}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
       {/* Paper Size */}
       <View>
         <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
           Paper Width / Size
         </Text>
         <View className="flex-row flex-wrap gap-2.5">
-          {PAPER_OPTIONS.map((option) => {
+          {PAPER_OPTIONS.filter((option) => !isAndroid || option.value === '58mm').map((option) => {
             const selected = value.paperSize === option.value;
             return (
               <Pressable
@@ -153,7 +207,7 @@ export function ReceiptPrinterSetup({
           />
           <ToggleCard
             label="Auto-Print On Checkout"
-            detail="Open print dialog automatically after payment"
+            detail={isAndroid ? 'Print directly after payment' : 'Open print dialog automatically after payment'}
             value={value.autoPrintAfterSale}
             onChange={(next) => update('autoPrintAfterSale', next)}
           />
@@ -174,7 +228,7 @@ export function ReceiptPrinterSetup({
         >
           <Feather name="printer" size={15} color="#1A593B" />
           <Text className="ml-2 text-xs font-bold text-brand-800">
-            {testing ? 'Opening Print…' : 'Print Test Receipt'}
+            {testing ? 'Printing…' : 'Print Test Receipt'}
           </Text>
         </Pressable>
 

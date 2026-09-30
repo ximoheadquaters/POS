@@ -39,23 +39,23 @@ function UsersContent() {
         showBack
         backLabel="More"
         fallbackHref="/(tabs)/more"
-        action={
-          canManage ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add Employee"
-              onPress={() => router.push('/employee-form' as Href)}
-              className="min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:opacity-80"
-            >
-              <Feather name="user-plus" size={16} color="#FFFFFF" />
-              <Text className="ml-2 font-medium text-white">Add Employee</Text>
-            </Pressable>
-          ) : null
-        }
       />
 
       <ScrollView contentContainerClassName="px-4 py-6 pb-12">
         <View className="w-full max-w-4xl self-center">
+          {canManage ? (
+            <View className="mb-4 flex-row justify-end">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add Employee"
+                onPress={() => router.push('/employee-form' as Href)}
+                className="min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-4 active:opacity-80"
+              >
+                <Feather name="user-plus" size={16} color="#FFFFFF" />
+                <Text className="ml-2 font-medium text-white">Add Employee</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <View className="mb-6 flex-row gap-3">
             {[
               ['Employees', String(users.length), 'users' as const],
@@ -66,13 +66,15 @@ function UsersContent() {
                 key={label}
                 className="min-h-24 flex-1 rounded-2xl border border-slate-200 bg-white p-4"
               >
-                <Feather
-                  name={icon as 'users' | 'user-check' | 'shield'}
-                  size={17}
-                  color="#1A593B"
-                />
+                <View className="flex-row items-center gap-2">
+                  <Feather
+                    name={icon as 'users' | 'user-check' | 'shield'}
+                    size={17}
+                    color="#1A593B"
+                  />
+                  <Text className="flex-1 text-xs text-slate-500">{label}</Text>
+                </View>
                 <Text className="mt-2 text-xl font-semibold text-slate-950">{value}</Text>
-                <Text className="mt-1 text-xs text-slate-500">{label}</Text>
               </View>
             ))}
           </View>

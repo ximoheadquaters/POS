@@ -146,12 +146,12 @@ export default function ParkedSalesScreen() {
             renderItem={({ item }) => (
               <View className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <View className="flex-row items-start justify-between">
-                  <View className="flex-1 pr-3">
-                    <View className="flex-row items-center gap-2">
-                      <Text className="text-base font-bold text-slate-900">
+                  <View className="min-w-0 flex-1 pr-3">
+                    <View>
+                      <Text className="text-base font-bold text-slate-900" style={{ flexShrink: 1 }}>
                         Order #{item.receiptNumber || item.id.substring(0, 8)}
                       </Text>
-                      <View className="rounded-full bg-amber-100 px-2.5 py-0.5">
+                      <View className="mt-1 self-start rounded-full bg-amber-100 px-2.5 py-0.5">
                         <Text className="text-[10px] font-bold uppercase text-amber-800">
                           Parked
                         </Text>
@@ -171,7 +171,7 @@ export default function ParkedSalesScreen() {
                     </Text>
                   </View>
 
-                  <View className="items-end">
+                  <View className="shrink-0 items-end">
                     <Text className="text-lg font-black text-brand-700">
                       {formatMoney(item.total)}
                     </Text>

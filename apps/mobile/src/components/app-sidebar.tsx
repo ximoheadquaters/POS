@@ -83,7 +83,7 @@ const sidebarSections: SidebarSection[] = [
     groups: [
       {
         id: 'products',
-        title: 'Catalog',
+        title: 'Product Catalogue',
         icon: 'box',
         permission: 'products:read',
         children: [
@@ -191,9 +191,19 @@ const sidebarSections: SidebarSection[] = [
         id: 'reports',
         title: 'Income & Reports',
         icon: 'trending-up',
-        href: '/reports' as Href,
         module: 'reports',
         permission: 'reports:read',
+        children: [
+          { title: 'Overview', href: '/reports/overview', module: 'reports', permission: 'reports:read' },
+          { title: 'Sales', href: '/reports/sales', module: 'reports', permission: 'reports:read' },
+          { title: 'Products', href: '/reports/products', module: 'reports', permission: 'reports:read' },
+          { title: 'Inventory', href: '/reports/inventory' as Href, module: 'reports', permission: 'reports:read' },
+          { title: 'Purchasing', href: '/reports/purchasing' as Href, module: 'reports', permission: 'purchasing:read' },
+          { title: 'Profit', href: '/reports/profit' as Href, module: 'reports', permission: 'reports:view_profit' },
+          { title: 'Cash & shifts', href: '/reports/cash' as Href, module: 'reports', permission: 'reports:read' },
+          { title: 'Audit', href: '/reports/audit' as Href, module: 'audit', permission: 'audit:read' },
+          { title: 'Repacking', href: '/reports/repacking' as Href, module: 'reports', permission: 'reports:read' },
+        ],
       },
       {
         id: 'analytics',
@@ -389,11 +399,9 @@ function compactNavigation(sections: SidebarSection[]): SidebarSection[] {
 
 function SidebarMenu({ close }: { close(): void }) {
   const pathname = usePathname();
-  const { currentUser, refreshUser, signOut } = useSession();
+  const { currentUser, signOut } = useSession();
   const branch = useBranchStore((state) => state.activeBranch);
   const branchLabel = branch?.name ?? currentUser?.branches?.[0]?.name ?? 'No branch selected';
-  const [refreshing, setRefreshing] = useState(false);
-
   const visibleSections = compactNavigation(useVisibleNavigation());
 
   const getActiveGroupId = (currentPath: string) => {
@@ -446,12 +454,12 @@ function SidebarMenu({ close }: { close(): void }) {
     <View className="h-full w-64 border-r border-slate-200/80 bg-[#F8F9FA] px-3 pb-4 pt-4">
       {/* Brand Header */}
       <View className="mb-4 flex-row items-center px-2">
-        <View className="mr-3 h-10 w-10 overflow-hidden rounded-xl bg-brand-700">
+        <View className="mr-3 h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-brand-700">
           <Image
             source={ximoIcon}
-            resizeMode="cover"
-            style={{ width: 40, height: 40 }}
-            accessibilityLabel="Ximo Logo"
+            resizeMode="contain"
+            style={{ width: 36, height: 36 }}
+            accessibilityLabel="Ximo logo"
           />
         </View>
         <View className="flex-1">
@@ -654,36 +662,20 @@ function SidebarMenu({ close }: { close(): void }) {
             </View>
           </Pressable>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Refresh Modules And Permissions"
-            disabled={refreshing}
-            onPress={() => {
-              setRefreshing(true);
-              void refreshUser()
-                .catch(() => undefined)
-                .finally(() => setRefreshing(false));
-            }}
-            className={`h-8 w-8 items-center justify-center rounded-xl bg-slate-100 ${
-              refreshing ? 'opacity-50' : 'active:bg-slate-200'
-            }`}
-          >
-            <Feather name="refresh-cw" size={14} color={refreshing ? '#94A3B8' : '#475569'} />
-          </Pressable>
         </View>
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Sign Out Of Account"
+          accessibilityLabel="Sign out of account"
           onPress={async () => {
             close();
             await signOut();
             router.replace('/(auth)/login');
           }}
-          className="flex-row items-center justify-center rounded-xl border border-red-200/80 bg-red-50/80 py-2.5 px-3 active:bg-red-100"
+          className="min-h-11 w-full flex-row items-center justify-center rounded-xl border border-red-200/80 bg-red-50/80 px-3 py-2.5 active:bg-red-100"
         >
           <Feather name="log-out" size={15} color="#DC2626" />
-          <Text className="ml-2 text-sm font-bold text-red-700">Sign Out</Text>
+          <Text numberOfLines={1} className="ml-2 text-sm font-bold text-red-700">Sign Out</Text>
         </Pressable>
       </View>
     </View>
@@ -699,7 +691,7 @@ export function AppSidebarProvider({ children }: PropsWithChildren) {
   const navigationVisible =
     hasWorkspace &&
     !['/branch-select', '/login', '/accept-invitation', '/change-password'].includes(pathname);
-  const compact = navigationVisible && width < 1100;
+  const compact = navigationVisible && width < 768;
   const [open, setOpen] = useState(false);
   const value = useMemo(
     () => ({
@@ -725,7 +717,7 @@ export function AppSidebarProvider({ children }: PropsWithChildren) {
             <SidebarMenu close={() => setOpen(false)} />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Close Navigation Menu"
+              accessibilityLabel="Close navigation menu"
               onPress={() => setOpen(false)}
               className="flex-1 bg-black/40"
             />

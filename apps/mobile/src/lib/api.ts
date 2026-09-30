@@ -198,6 +198,7 @@ export class ApiError extends Error {
     public readonly code: string,
     public readonly status: number,
     public readonly details?: unknown,
+    public readonly requestId?: string,
   ) {
     super(message);
   }
@@ -278,6 +279,7 @@ export async function api<T>(
           body.error.code,
           response.status,
           body.error.details,
+          body.error.requestId,
         );
       }
 

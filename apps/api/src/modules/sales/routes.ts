@@ -64,6 +64,11 @@ export function salesRouter(database: Database): Router {
          join profiles p on p.id = s.cashier_id
          left join customers c on c.id = s.customer_id
          where s.organization_id = $1 and s.branch_id = $2 and s.status = 'held'
+           and not exists (
+             select 1 from audit_logs al
+             where al.organization_id = s.organization_id and al.entity_type = 'sale'
+               and al.entity_id = s.id and al.action = 'sale.resumed'
+           )
          order by s.created_at desc`,
         [organizationId, branchId],
       );
@@ -72,7 +77,30 @@ export function salesRouter(database: Database): Router {
     },
   );
 
-  // GET /sales/voided-holds -> Read-only lifecycle history for parked orders.
+  // POST /sales/void-cart -> Record a cleared/voided cart from POS
+  router.post(
+    '/void-cart',
+    requirePermission('sales:create'),
+    requireBranchAccess('body'),
+    validateBody(holdSaleSchema),
+    async (request, response) => {
+      const input = request.body;
+      const idempotencyKey =
+        request.header('idempotency-key')?.trim() ?? `void-${crypto.randomUUID()}`;
+      const result = await heldSales.voidCart(
+        {
+          organizationId: request.authUser!.organization.id,
+          userId: request.authUser!.id,
+        },
+        input,
+        idempotencyKey,
+      );
+
+      sendData(response, result, 201);
+    },
+  );
+
+  // GET /sales/voided-holds -> Read-only lifecycle history for parked & voided orders.
   router.get(
     '/voided-holds',
     requirePermission('sales:read_branch', 'sales:read_all'),
@@ -97,16 +125,16 @@ export function salesRouter(database: Database): Router {
            from audit_logs al
            where al.organization_id=s.organization_id and al.branch_id=s.branch_id
              and al.entity_type='sale' and al.entity_id=s.id
-             and al.action in ('sale.resumed','sale.discarded')
+             and al.action in ('sale.resumed','sale.discarded','sale.cleared')
            order by al.created_at desc
            limit 1
          ) lifecycle on true
          left join profiles lifecycle_actor
            on lifecycle_actor.id=lifecycle.actor_id
           and lifecycle_actor.organization_id=s.organization_id
-         where s.organization_id=$1 and s.branch_id=$2 and s.status='voided'
-           and s.receipt_number like 'HOLD-%'
-         order by lifecycle.created_at desc nulls last,s.created_at desc
+         where s.organization_id=$1 and s.branch_id=$2
+           and (s.status='voided' or (s.status='held' and lifecycle.action='sale.resumed'))
+         order by coalesce(lifecycle.created_at, s.created_at) desc, s.created_at desc
          limit $3 offset $4`,
         [
           request.authUser!.organization.id,

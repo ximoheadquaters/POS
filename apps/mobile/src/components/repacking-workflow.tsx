@@ -393,7 +393,7 @@ export function RepackingWorkflow({ isRetailProfile = true }: RepackingWorkflowP
                               sufficient ? 'text-emerald-800' : 'text-amber-900'
                             }`}
                           >
-                            {sufficient ? '✓ Stock Available' : '⚠ Low Stock'}
+                            {sufficient ? 'Stock Available' : 'Low Stock'}
                           </Text>
                         </View>
                       </View>

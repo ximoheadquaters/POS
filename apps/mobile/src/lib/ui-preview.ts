@@ -1,9 +1,10 @@
 import type { CurrentUser } from '@ximo/shared';
+import { Platform } from 'react-native';
 
 const previewStorageKey = 'ximo.ui-preview';
 
 function browserWindow(): (Window & typeof globalThis) | undefined {
-  return typeof window === 'undefined' ? undefined : window;
+  return Platform.OS === 'web' && typeof window !== 'undefined' ? window : undefined;
 }
 
 /**

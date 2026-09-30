@@ -72,13 +72,15 @@ function Metric({
 }) {
   return (
     <View className="min-w-40 flex-1 rounded-2xl border border-slate-200 bg-white p-4">
-      <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
-        <Feather name={icon} size={17} color="#1A593B" />
+      <View className="flex-row items-center gap-2">
+        <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
+          <Feather name={icon} size={17} color="#1A593B" />
+        </View>
+        <Text className="flex-1 text-xs font-medium uppercase tracking-wider text-slate-500">
+          {label}
+        </Text>
       </View>
-      <Text className="mt-3 text-xs font-medium uppercase tracking-wider text-slate-500">
-        {label}
-      </Text>
-      <Text className="mt-1 text-xl font-semibold text-slate-950">{value}</Text>
+      <Text className="mt-2 text-xl font-semibold text-slate-950">{value}</Text>
       <Text className="mt-1 text-xs text-slate-500">{note}</Text>
     </View>
   );

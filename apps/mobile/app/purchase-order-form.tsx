@@ -400,14 +400,14 @@ function PurchaseOrderFormContent() {
             </View>
 
             <View className="rounded-2xl bg-brand-50 p-5">
-              <View className="flex-row items-center justify-between">
-                <View>
+              <View className="flex-row flex-wrap items-start gap-3">
+                <View className="min-w-36 flex-1">
                   <Text className="text-sm text-slate-500">Order Total</Text>
                   <Text className="mt-1 text-2xl font-semibold text-brand-900">
                     {formatMoney(String(subtotal))}
                   </Text>
                 </View>
-                <Text className="max-w-72 text-right text-xs leading-5 text-slate-500">
+                <Text className="min-w-40 flex-1 text-xs leading-5 text-slate-500">
                   Saving creates a draft. Inventory changes only when stock is physically received.
                 </Text>
               </View>

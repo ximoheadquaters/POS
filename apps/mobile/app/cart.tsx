@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
@@ -23,6 +24,9 @@ import {
 } from '@/store/cart';
 
 export default function CartScreen() {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const narrow = width < 420;
   const queryClient = useQueryClient();
   const branch = useBranchStore((state) => state.activeBranch);
   const activeShift = useShiftStore((state) => state.activeShift);
@@ -108,6 +112,38 @@ export default function CartScreen() {
       }),
   });
 
+  const voidCartMutation = useMutation({
+    mutationFn: (itemsToVoid: typeof items) =>
+      api<{ receiptNumber: string }>('/sales/void-cart', {
+        method: 'POST',
+        idempotencyKey: `void-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        body: JSON.stringify({
+          branchId: branch?.id,
+          registerId: activeShift?.registerId,
+          shiftId: activeShift?.id,
+          customerId: useCartStore.getState().customerId,
+          note: 'Cart cleared at POS',
+          items: expandCartItemsForApi(itemsToVoid).map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId ?? undefined,
+            quantity: item.quantity,
+            ...(item.unitPrice ? { unitPrice: item.unitPrice } : {}),
+          })),
+        }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['voided-held-sales'] });
+    },
+  });
+
+  const handleClearCart = () => {
+    if (items.length > 0 && branch?.id) {
+      voidCartMutation.mutate(items);
+    }
+    clearCart();
+    router.back();
+  };
+
   return (
     <Screen>
       <Header
@@ -118,11 +154,12 @@ export default function CartScreen() {
         fallbackHref="/(tabs)/pos"
       />
       <FlatList
+        className="flex-1"
         data={items}
         keyExtractor={(item) => cartProductKey(item.product)}
-        contentContainerClassName="p-4 gap-3 pb-64"
+        contentContainerClassName="p-4 gap-3 pb-6"
         ListEmptyComponent={
-          <EmptyState title="Cart Is Empty" message="Add products from the POS screen." />
+          <EmptyState title="Cart is empty" message="Add products from the POS screen." />
         }
         renderItem={({ item }) => {
           const hasPromo = activePromo?.appliedProductIds.has(item.product.id);
@@ -165,13 +202,13 @@ export default function CartScreen() {
                           : 'text-brand-500'
                       }`}
                     >
-                      {item.product.availableQuantity} Currently In Stock
+                      {item.product.availableQuantity} currently in stock
                     </Text>
                   ) : null}
                 </View>
                 <Text className="font-bold text-slate-900">{formatMoney(cartLineTotal(item))}</Text>
               </View>
-              <View className="mt-4 flex-row items-center gap-3">
+              <View className="mt-4 flex-row flex-wrap items-center gap-2">
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Decrease ${item.product.name} quantity`}
@@ -190,6 +227,9 @@ export default function CartScreen() {
                   quantity={item.quantity}
                   onChange={(quantity) => setQuantity(cartProductKey(item.product), quantity)}
                 />
+                <Text className="text-xs font-semibold text-slate-600" numberOfLines={1}>
+                  {item.product.unit ?? 'units'}
+                </Text>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Increase ${item.product.name} quantity`}
@@ -228,7 +268,10 @@ export default function CartScreen() {
           );
         }}
       />
-      <View className="absolute bottom-0 left-0 right-0 border-t border-brand-100 bg-white p-3 gap-2 shadow-lg">
+      <View
+        className="border-t border-brand-100 bg-white p-3 gap-2 shadow-lg"
+        style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+      >
         {hasStockConflict ? (
           <Text className="rounded-xl bg-red-50 p-2 text-xs font-bold text-red-700">
             Stock changed on another register. Reduce highlighted quantities.
@@ -257,61 +300,30 @@ export default function CartScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Open parked sales${heldCount ? `, ${heldCount} parked` : ''}`}
             onPress={() => router.push('/food/parked-sales')}
-            className="min-h-11 flex-row items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 active:bg-amber-100"
+            className={`min-h-11 flex-row items-center justify-center rounded-xl border border-amber-200 bg-amber-50 active:bg-amber-100 ${narrow ? 'px-2' : 'px-3'}`}
           >
             <Feather name="pause-circle" size={16} color="#B45309" />
             <Text className="ml-1 text-xs font-bold text-amber-900">
-              Parked{heldCount > 0 ? ` (${heldCount})` : ''}
+              {narrow ? 'Held' : 'Parked'}{heldCount > 0 ? ` (${heldCount})` : ''}
             </Text>
           </Pressable>
           <View className="flex-1">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Continue To Payment"
+            <Button
+              title={narrow ? 'Pay' : 'Continue to payment'}
               disabled={!items.length || hasStockConflict}
               onPress={() => router.push('/payment')}
-              className={`min-h-11 flex-row items-center justify-center rounded-xl bg-brand-700 px-3 active:bg-brand-800 ${
-                !items.length || hasStockConflict ? 'opacity-40' : ''
-              }`}
-            >
-              <Text numberOfLines={1} className="shrink text-center text-sm font-bold text-white">
-                Continue To Payment
-              </Text>
-              <View className="ml-2">
-                <Feather name="arrow-right" size={16} color="#FFFFFF" />
-              </View>
-            </Pressable>
+            />
           </View>
-
+          {items.length > 0 ? (
+            <Pressable
+              accessibilityLabel="Clear current order"
+              onPress={handleClearCart}
+              className="h-11 w-11 items-center justify-center rounded-xl border border-red-200 bg-red-50 active:bg-red-100"
+            >
+              <Feather name="trash-2" size={16} color="#DC2626" />
+            </Pressable>
+          ) : null}
         </View>
-
-        {items.length > 0 ? (
-          <View className="flex-row items-center gap-2">
-            <Pressable
-              onPress={() => setHoldModalVisible(true)}
-              disabled={holdMutation.isPending}
-              className={`min-h-10 flex-1 flex-row items-center justify-center rounded-xl bg-amber-600 px-3.5 ${
-                holdMutation.isPending ? 'opacity-50' : 'active:bg-amber-700'
-              }`}
-            >
-              <Feather name="pause-circle" size={15} color="#FFFFFF" />
-              <Text className="ml-1.5 text-xs font-bold text-white">
-                {holdMutation.isPending ? 'Holding…' : 'Hold current sale'}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Clear Current Order"
-              onPress={() => {
-                clearCart();
-                router.back();
-              }}
-              className="min-h-10 flex-row items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 active:bg-red-100"
-            >
-              <Feather name="trash-2" size={15} color="#DC2626" />
-              <Text className="ml-1.5 text-xs font-bold text-red-700">Clear</Text>
-            </Pressable>
-          </View>
-        ) : null}
       </View>
 
       <Modal visible={holdModalVisible} transparent animationType="fade">

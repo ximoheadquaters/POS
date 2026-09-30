@@ -1,8 +1,9 @@
 import { renderHook, render, fireEvent } from '@testing-library/react-native';
 import { TextInput } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useVisibleNavigation, AppSidebarProvider } from './app-sidebar';
 import { ExpandableSection, Header } from './ui';
-import { QuickAccess } from './quick-access';
+import { QuickAccess, QuickActionBar } from './quick-access';
 
 let mockUser: any;
 jest.mock(
@@ -66,6 +67,25 @@ it('shows only permitted quick links and caps them at six', async () => {
   expect(screen.getAllByRole('button')).toHaveLength(6);
   expect(screen.getByText('New sale')).toBeTruthy();
   expect(screen.queryByText('Purchasing')).toBeNull();
+});
+
+it('mounts the quick-action bar on Android without browser keyboard events', async () => {
+  mockUser = { ...mockUser, role: 'owner', modules: ['pos', 'products'] };
+  const addEventListener = window.addEventListener;
+  Object.defineProperty(window, 'addEventListener', { configurable: true, value: undefined });
+  try {
+    const screen = await render(
+      <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 400, height: 800 }, insets: { top: 0, right: 0, bottom: 0, left: 0 } }}>
+        <QuickActionBar />
+      </SafeAreaProvider>,
+    );
+    expect(screen.getByText('New sale')).toBeTruthy();
+  } finally {
+    Object.defineProperty(window, 'addEventListener', {
+      configurable: true,
+      value: addEventListener,
+    });
+  }
 });
 
 it('keeps input state mounted when a section collapses', async () => {

@@ -5,12 +5,15 @@ import { result } from '../test/fakes.js';
 import { ReturnService } from './return-service.js';
 
 class ReturnDatabase implements Database {
+  shiftQuery = '';
+
   async query<T extends QueryResultRow>(text: string) {
     const sql = text.replace(/\s+/g, ' ').trim();
     if (sql.startsWith('select branch_id, status')) {
       return result([{ branch_id: 'branch', status: 'completed' } as unknown as T]);
     }
     if (sql.includes('from register_shifts')) {
+      this.shiftQuery = sql;
       return result([{ '?column?': 1 } as unknown as T]);
     }
     if (sql.startsWith('select si.id, si.product_id')) {
@@ -37,7 +40,8 @@ class ReturnDatabase implements Database {
 
 describe('returns', () => {
   it('cannot return more than the remaining sold quantity', async () => {
-    const service = new ReturnService(new ReturnDatabase());
+    const database = new ReturnDatabase();
+    const service = new ReturnService(database);
     await expect(
       service.create(
         {
@@ -51,10 +55,15 @@ describe('returns', () => {
           shiftId: '44444444-4444-4444-8444-444444444444',
           reason: 'Damaged item',
           refundMethod: 'cash',
+          managerPin: '1234',
           items: [{ saleItemId: '77777777-7777-4777-8777-777777777777', quantity: 2 }],
         },
       ),
     ).rejects.toMatchObject({ code: 'RETURN_QUANTITY_EXCEEDED' });
+    expect(database.shiftQuery).toContain('rs.starting_cash');
+    expect(database.shiftQuery).toContain("cm.type='cash_in'");
+    expect(database.shiftQuery).toContain("cm.type='cash_out'");
+    expect(database.shiftQuery).not.toContain('opening_cash');
   });
 
   it('one returned box of 12 restores 12 base units', async () => {
@@ -68,7 +77,7 @@ describe('returns', () => {
         if (sql.includes('from register_shifts')) {
           return result([
             {
-              opening_cash: '100.00',
+              starting_cash: '100.00',
               cash_sales: '500.00',
               cash_refunds: '0.00',
               cash_in: '0.00',
@@ -125,6 +134,7 @@ describe('returns', () => {
         shiftId: '44444444-4444-4444-8444-444444444444',
         reason: 'Customer return',
         refundMethod: 'cash',
+        managerPin: '1234',
         items: [{ saleItemId: '77777777-7777-4777-8777-777777777777', quantity: 1 }],
       },
     );
@@ -142,7 +152,7 @@ describe('returns', () => {
         if (sql.includes('from register_shifts')) {
           return result([
             {
-              opening_cash: '100.00',
+              starting_cash: '100.00',
               cash_sales: '500.00',
               cash_refunds: '0.00',
               cash_in: '0.00',
@@ -199,6 +209,7 @@ describe('returns', () => {
         shiftId: '44444444-4444-4444-8444-444444444444',
         reason: 'Customer return',
         refundMethod: 'cash',
+        managerPin: '1234',
         items: [{ saleItemId: '77777777-7777-4777-8777-777777777777', quantity: 2 }],
       },
     );
@@ -217,7 +228,7 @@ describe('returns', () => {
         if (sql.includes('from register_shifts')) {
           return result([
             {
-              opening_cash: '100.00',
+              starting_cash: '100.00',
               cash_sales: '500.00',
               cash_refunds: '0.00',
               cash_in: '0.00',
@@ -275,6 +286,7 @@ describe('returns', () => {
         shiftId: '44444444-4444-4444-8444-444444444444',
         reason: 'Customer return',
         refundMethod: 'cash',
+        managerPin: '1234',
         items: [{ saleItemId: '77777777-7777-4777-8777-777777777777', quantity: 1 }],
       },
     );
@@ -293,7 +305,7 @@ describe('returns', () => {
         if (sql.includes('from register_shifts')) {
           return result([
             {
-              opening_cash: '100.00',
+              starting_cash: '100.00',
               cash_sales: '500.00',
               cash_refunds: '0.00',
               cash_in: '0.00',
@@ -351,6 +363,7 @@ describe('returns', () => {
         shiftId: '44444444-4444-4444-8444-444444444444',
         reason: 'Customer return',
         refundMethod: 'cash',
+        managerPin: '1234',
         items: [{ saleItemId: '77777777-7777-4777-8777-777777777777', quantity: 1 }],
       },
     );

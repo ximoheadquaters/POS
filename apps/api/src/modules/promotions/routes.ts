@@ -297,6 +297,21 @@ export function promotionsRouter(database: Database): Router {
           ],
         );
 
+        if (input.items && input.items.length > 0) {
+          for (const item of input.items) {
+            const validProduct = await tx.query(
+              `select 1 from products
+               where id=$1 and organization_id=$2 and branch_id=$3 and status='active'
+               union all
+               select 1 from promotion_items
+               where product_id=$1 and organization_id=$2 and promotion_id=$4
+               limit 1`,
+              [item.productId, organizationId, input.branchId, id],
+            );
+            if (!validProduct.rowCount) throw notFound('Product');
+          }
+        }
+
         await tx.query(
           `delete from promotion_items where promotion_id = $1 and organization_id = $2`,
           [id, organizationId],
@@ -304,12 +319,6 @@ export function promotionsRouter(database: Database): Router {
 
         if (input.items && input.items.length > 0) {
           for (const item of input.items) {
-            const validProduct = await tx.query(
-              `select 1 from products
-               where id=$1 and organization_id=$2 and branch_id=$3 and status='active'`,
-              [item.productId, organizationId, input.branchId],
-            );
-            if (!validProduct.rowCount) throw notFound('Product');
             await tx.query(
               `insert into promotion_items (organization_id, promotion_id, product_id, role, required_quantity)
                values ($1, $2, $3, $4, $5)`,
@@ -342,19 +351,19 @@ export function promotionsRouter(database: Database): Router {
     validateBody(z.object({ branchId: uuidSchema })),
     requireBranchAccess('body'),
     async (request, response) => {
-    const id = uuidSchema.parse(request.params.id);
-    const { branchId } = request.body as { branchId: string };
-    const organizationId = request.authUser!.organization.id;
+      const id = uuidSchema.parse(request.params.id);
+      const { branchId } = request.body as { branchId: string };
+      const organizationId = request.authUser!.organization.id;
 
-    const result = await database.query(
-      `update promotions set is_active = not is_active, updated_at = now()
-       where id = $1 and organization_id = $2 and branch_id = $3
-       returning id, is_active as "isActive"`,
-      [id, organizationId, branchId],
-    );
+      const result = await database.query(
+        `update promotions set is_active = not is_active, updated_at = now()
+         where id = $1 and organization_id = $2 and branch_id = $3
+         returning id, is_active as "isActive"`,
+        [id, organizationId, branchId],
+      );
 
-    if (!result.rows[0]) throw notFound('Promotion');
-    sendData(response, result.rows[0]);
+      if (!result.rows[0]) throw notFound('Promotion');
+      sendData(response, result.rows[0]);
     },
   );
 

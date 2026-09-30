@@ -61,8 +61,15 @@ function UserDetailContent() {
   const canEditPin = isSelf || canManage;
 
   const mutation = useMutation({
-    mutationFn: () =>
-      api(`/users/${id}`, {
+    mutationFn: () => {
+      if (isSelf) {
+        return api('/users/me/pin', {
+          method: 'PATCH',
+          body: JSON.stringify({ pin: pin.trim() }),
+        });
+      }
+
+      return api(`/users/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           role: selectedRole,
@@ -70,7 +77,8 @@ function UserDetailContent() {
           branchIds: selectedBranches,
           ...(pin.trim() ? { pin: pin.trim() } : {}),
         }),
-      }),
+      });
+    },
     onSuccess: async () => {
       setDirty(false);
       setPin('');
