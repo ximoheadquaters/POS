@@ -131,3 +131,18 @@ it('expands the active catalog and closes it when inventory opens', async () => 
   expect(screen.queryByRole('button', { name: 'Go to Categories' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Go to Stock Overview' })).toBeTruthy();
 });
+
+it('opens the reports overview from the compact sidebar', async () => {
+  mockUser = { ...mockUser, role: 'owner', modules: ['reports'] };
+  const navigate = router.navigate as jest.Mock;
+  navigate.mockClear();
+  const screen = await render(
+    <AppSidebarProvider>
+      <Header title="Reports" />
+    </AppSidebarProvider>,
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Open Navigation Menu' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Toggle Reports group' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Go to Reports overview' }));
+  expect(navigate).toHaveBeenCalledWith('/reports/overview');
+});

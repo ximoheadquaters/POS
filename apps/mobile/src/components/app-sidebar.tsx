@@ -387,10 +387,12 @@ function compactNavigation(sections: SidebarSection[]): SidebarSection[] {
           id: 'reports',
           title: 'Reports',
           icon: 'bar-chart-2',
-          children: reports.map((group) => ({
-            title: group.id === 'reports' ? 'Reports overview' : group.title,
-            href: group.href!,
-          })),
+          children: reports.flatMap((group) => {
+            const href = group.href ?? group.children?.[0]?.href;
+            return href
+              ? [{ title: group.id === 'reports' ? 'Reports overview' : group.title, href }]
+              : [];
+          }),
         });
       return { ...section, sectionTitle: undefined, groups };
     }

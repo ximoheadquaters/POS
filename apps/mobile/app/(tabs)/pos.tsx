@@ -1336,7 +1336,7 @@ export default function PosScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Add ${product.name} to cart`}
                     disabled={soldOut}
-                    className={`min-h-16 flex-1 flex-row items-center rounded-xl border border-slate-100 bg-white active:border-brand-300 active:bg-brand-50 ${
+                    className={`min-h-16 flex-row items-center rounded-xl border border-slate-100 bg-white active:border-brand-300 active:bg-brand-50 ${
                       phone ? 'px-3 py-2.5' : 'px-4 py-3'
                     } ${
                       soldOut ? 'opacity-50' : ''
