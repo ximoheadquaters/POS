@@ -640,8 +640,9 @@ export class CheckoutService {
        join organization_settings os on os.organization_id = b.organization_id
        where b.organization_id = $1 and b.id = $2 and b.is_active
          and r.id = $3 and r.is_active and rs.id = $4 and rs.status = 'open'
+         and rs.cashier_id = $5
        for update of rs`,
-      [actor.organizationId, input.branchId, input.registerId, input.shiftId],
+      [actor.organizationId, input.branchId, input.registerId, input.shiftId, actor.userId],
     );
     if (!result.rows[0]) {
       throw forbidden('INVALID_CHECKOUT_CONTEXT', 'Branch, register, or active shift is invalid');

@@ -301,10 +301,9 @@ describe('API authorization boundaries', () => {
     });
 
     await request(app)
-      .post(
-        `/api/v1/promotions/${database.promotionId}/toggle?branchId=${database.promotionBranchId}`,
-      )
+      .post(`/api/v1/promotions/${database.promotionId}/toggle`)
       .set('authorization', 'Bearer valid-token')
+      .send({ branchId: database.promotionBranchId })
       .expect(200);
 
     const toggleCall = database.calls.find((call) =>
@@ -318,9 +317,98 @@ describe('API authorization boundaries', () => {
     ]);
 
     await request(app)
-      .post(`/api/v1/promotions/${database.promotionId}/toggle?branchId=${database.otherBranchId}`)
+      .post(`/api/v1/promotions/${database.promotionId}/toggle`)
       .set('authorization', 'Bearer valid-token')
+      .send({ branchId: database.otherBranchId })
       .expect(404);
+  });
+
+  it('requires promotion manage permission for promotion changes', async () => {
+    const database = new AuthorizationDatabase(testUser({
+      modules: ['pos', 'promotions'],
+      permissions: ['promotions:read'],
+    }));
+    const app = createApp({ database, verifyToken: async () => ({ id: database.user.id, email: database.user.email }), authActions });
+
+    await request(app)
+      .post('/api/v1/promotions/88888888-8888-4888-8888-888888888888/toggle')
+      .set('authorization', 'Bearer valid-token')
+      .send({ branchId: database.user.branches[0]!.id })
+      .expect(403);
+    expect(database.calls.some((call) => call.text.includes('update promotions set is_active'))).toBe(false);
+  });
+
+  it('lets a cashier load active discount rules without browsing the promotion catalog', async () => {
+    const database = new AuthorizationDatabase(testUser({
+      modules: ['pos', 'promotions'],
+      permissions: ['sales:create'],
+    }));
+    const app = createApp({ database, verifyToken: async () => ({ id: database.user.id, email: database.user.email }), authActions });
+    const branchId = database.user.branches[0]!.id;
+
+    await request(app)
+      .get(`/api/v1/promotions/active-rules?branchId=${branchId}`)
+      .set('authorization', 'Bearer valid-token')
+      .expect(200);
+    await request(app)
+      .get(`/api/v1/promotions?branchId=${branchId}`)
+      .set('authorization', 'Bearer valid-token')
+      .expect(403);
+  });
+
+  it('prevents cashiers from assigning another cashier to a shift', async () => {
+    const database = new AuthorizationDatabase(testUser({
+      modules: ['pos'],
+      permissions: ['shifts:open'],
+    }));
+    const app = createApp({ database, verifyToken: async () => ({ id: database.user.id, email: database.user.email }), authActions });
+
+    await request(app)
+      .post('/api/v1/registers/shifts/open')
+      .set('authorization', 'Bearer valid-token')
+      .send({
+        branchId: database.user.branches[0]!.id,
+        registerId: '33333333-3333-4333-8333-333333333333',
+        startingCash: '0.00',
+        cashierId: '55555555-5555-4555-8555-555555555555',
+      })
+      .expect(403);
+    expect(database.calls.some((call) => call.text.includes('insert into register_shifts'))).toBe(false);
+  });
+
+  it('uses transfer permissions instead of inventory adjustment for transfers', async () => {
+    const database = new AuthorizationDatabase(testUser({
+      modules: ['stock_transfers'],
+      permissions: ['transfers:read'],
+    }));
+    const app = createApp({ database, verifyToken: async () => ({ id: database.user.id, email: database.user.email }), authActions });
+    const branchId = database.user.branches[0]!.id;
+
+    await request(app)
+      .get(`/api/v1/stock-transfers?branchId=${branchId}`)
+      .set('authorization', 'Bearer valid-token')
+      .expect(200);
+    await request(app)
+      .post('/api/v1/stock-transfers/88888888-8888-4888-8888-888888888888/receive')
+      .set('authorization', 'Bearer valid-token')
+      .expect(403);
+  });
+
+  it('allows register staff to view only their own shift history without reports access', async () => {
+    const database = new AuthorizationDatabase(testUser({
+      modules: ['pos'],
+      permissions: ['registers:read', 'shifts:open'],
+    }));
+    const app = createApp({ database, verifyToken: async () => ({ id: database.user.id, email: database.user.email }), authActions });
+    const branchId = database.user.branches[0]!.id;
+
+    await request(app)
+      .get(`/api/v1/reports/shifts?branchId=${branchId}&from=2026-10-01T00:00:00.000Z&to=2026-10-02T00:00:00.000Z`)
+      .set('authorization', 'Bearer valid-token')
+      .expect(200);
+    const shiftQuery = database.calls.find((call) => call.text.includes('from register_shifts rs'));
+    expect(shiftQuery?.text).toContain('rs.cashier_id=$9::uuid');
+    expect(shiftQuery?.values).toContain(database.user.id);
   });
 
   it('limits combo promotions to branches with enough component stock', async () => {

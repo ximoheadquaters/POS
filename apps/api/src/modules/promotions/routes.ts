@@ -7,7 +7,7 @@ import {
   uuidSchema,
 } from '@ximo/shared';
 import type { Database } from '../../database/types.js';
-import { requireBranchAccess, requireModule } from '../../middleware/auth.js';
+import { requireBranchAccess, requireModule, requirePermission } from '../../middleware/auth.js';
 import { validateBody, validateQuery } from '../../middleware/validation.js';
 import { notFound } from '../../shared/errors.js';
 import { sendData, sendPage } from '../../shared/http.js';
@@ -21,6 +21,7 @@ export function promotionsRouter(database: Database): Router {
   // GET /promotions -> List promotions
   router.get(
     '/',
+    requirePermission('promotions:read', 'promotions:manage'),
     validateQuery(
       paginationSchema.extend({
         branchId: uuidSchema,
@@ -63,6 +64,7 @@ export function promotionsRouter(database: Database): Router {
   // Must be registered before /:id — active combo bundles for the POS catalog.
   router.get(
     '/pos-catalog',
+    requirePermission('promotions:read', 'sales:create'),
     validateQuery(
       z.object({
         branchId: uuidSchema,
@@ -156,8 +158,55 @@ export function promotionsRouter(database: Database): Router {
     },
   );
 
+  router.get(
+    '/active-rules',
+    requirePermission('sales:create'),
+    validateQuery(z.object({ branchId: uuidSchema })),
+    requireBranchAccess('query'),
+    async (request, response) => {
+      const result = await database.query(
+        `select p.id,p.name,p.type,p.min_order_quantity as "minOrderQuantity",
+           p.discount_percentage::text as "discountPercentage",
+           p.discount_amount::text as "discountAmount",
+           p.combo_price::text as "comboPrice",p.is_active as "isActive",
+           coalesce((select jsonb_agg(jsonb_build_object(
+             'productId',pi.product_id,'role',pi.role,
+             'requiredQuantity',pi.required_quantity
+           )) from promotion_items pi
+             where pi.promotion_id=p.id and pi.organization_id=p.organization_id),'[]'::jsonb) as items
+         from promotions p
+         where p.organization_id=$1 and p.branch_id=$2 and p.is_active
+         order by p.name`,
+        [request.authUser!.organization.id, request.query.branchId],
+      );
+      sendData(response, result.rows);
+    },
+  );
+
+  router.get(
+    '/products',
+    requirePermission('promotions:manage'),
+    validateQuery(z.object({
+      branchId: uuidSchema,
+      search: z.string().trim().max(120).optional(),
+    })),
+    requireBranchAccess('query'),
+    async (request, response) => {
+      const { branchId, search } = request.query as { branchId: string; search?: string };
+      const result = await database.query(
+        `select id,name,sku from products
+         where organization_id=$1 and branch_id=$2 and status='active'
+           and inventory_role in ('sellable','both')
+           and ($3::text is null or name ilike '%'||$3||'%' or sku ilike '%'||$3||'%')
+         order by name limit 50`,
+        [request.authUser!.organization.id, branchId, search || null],
+      );
+      sendData(response, result.rows);
+    },
+  );
+
   // GET /promotions/:id -> Get single promotion details with components
-  router.get('/:id', async (request, response) => {
+  router.get('/:id', requirePermission('promotions:read', 'promotions:manage'), async (request, response) => {
     const id = uuidSchema.parse(request.params.id);
     const organizationId = request.authUser!.organization.id;
 
@@ -195,6 +244,7 @@ export function promotionsRouter(database: Database): Router {
   // POST /promotions -> Create advanced promotion / combo deal
   router.post(
     '/',
+    requirePermission('promotions:manage'),
     validateBody(createPromotionSchema),
     requireBranchAccess('body'),
     async (request, response) => {
@@ -340,14 +390,15 @@ export function promotionsRouter(database: Database): Router {
     };
 
     // PUT /promotions/:id -> Update promotion / combo deal
-    router.put('/:id', validateBody(updatePromotionSchema), updateHandler);
+    router.put('/:id', requirePermission('promotions:manage'), validateBody(updatePromotionSchema), updateHandler);
 
     // POST /promotions/:id -> Update alias
-    router.post('/:id', validateBody(updatePromotionSchema), updateHandler);
+    router.post('/:id', requirePermission('promotions:manage'), validateBody(updatePromotionSchema), updateHandler);
 
   // POST /promotions/:id/toggle -> Enable or disable promotion for the selected branch
   router.post(
     '/:id/toggle',
+    requirePermission('promotions:manage'),
     validateBody(z.object({ branchId: uuidSchema })),
     requireBranchAccess('body'),
     async (request, response) => {

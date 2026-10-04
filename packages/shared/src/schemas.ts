@@ -390,6 +390,7 @@ export const supplierRefundSchema = z.object({
 export const openShiftSchema = z.object({
   registerId: uuidSchema,
   startingCash: moneyStringSchema,
+  cashierId: uuidSchema.optional(),
 });
 
 export const cashMovementSchema = z.object({

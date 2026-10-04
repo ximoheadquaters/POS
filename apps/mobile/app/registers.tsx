@@ -1,8 +1,8 @@
 import { navigateOnce } from '@/lib/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { appAlert } from '@/providers/ios-alert';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { minorToMoney, moneyToMinor } from '@ximo/shared';
@@ -49,6 +49,11 @@ interface ActiveShiftDetail {
   transactions: number;
 }
 
+interface CashierOption {
+  id: string;
+  displayName: string;
+}
+
 function validMoney(value: string) {
   return /^(0|[1-9]\d{0,11})(\.\d{1,2})?$/.test(value.trim());
 }
@@ -84,11 +89,18 @@ function RegistersContent() {
   const [addCounterOpen, setAddCounterOpen] = useState(false);
   const [counterName, setCounterName] = useState('');
   const [counterCode, setCounterCode] = useState('');
+  const [openingForCashierId, setOpeningForCashierId] = useState<string | null>(null);
   const client = useQueryClient();
 
-  const canManageRegisters =
-    Boolean(currentUser?.permissions?.includes('registers:manage')) ||
-    ['owner', 'administrator', 'manager'].includes(currentUser?.role ?? '');
+  const canManageRegisters = Boolean(currentUser?.permissions.includes('registers:manage'));
+  const canOpenShift = Boolean(currentUser?.permissions.includes('shifts:open'));
+  const canCloseShift = Boolean(currentUser?.permissions.includes('shifts:close'));
+  const canMoveCash = Boolean(currentUser?.permissions.includes('cash:move'));
+  const canAssignCashier =
+    ['owner', 'administrator', 'manager'].includes(currentUser?.role ?? '') &&
+    Boolean(currentUser?.permissions.includes('users:manage')) && canOpenShift;
+  const canAccessRegisterScreen = currentUser?.permissions.some((permission) =>
+    ['registers:read', 'shifts:open', 'shifts:close', 'cash:move'].includes(permission)) ?? false;
 
   useEffect(() => void hydrateBranch(), [hydrateBranch]);
   useEffect(() => void hydrate(), [hydrate]);
@@ -107,8 +119,16 @@ function RegistersContent() {
       if (!branch) throw new Error('Select a branch before opening registers.');
       return api<Register[]>(`/registers?branchId=${branch.id}`);
     },
-    enabled: Boolean(branch),
+    enabled: Boolean(branch && canAccessRegisterScreen),
   });
+
+  const cashiersQuery = useQuery({
+    queryKey: ['shift-cashiers', branch?.id],
+    queryFn: () => api<CashierOption[]>(`/registers/eligible-cashiers?branchId=${branch!.id}`),
+    enabled: Boolean(branch && canAssignCashier),
+    staleTime: 60_000,
+  });
+  const assignableCashiers = cashiersQuery.data ?? [];
 
   const shiftDetailQuery = useQuery({
     queryKey: ['shift-report', shift?.id],
@@ -118,7 +138,13 @@ function RegistersContent() {
   });
 
   const shiftDetail = shiftDetailQuery.data;
-  const isModuleEnabled = currentUser?.modules.includes('registers');
+  const isModuleEnabled = currentUser?.modules.includes('registers') || currentUser?.modules.includes('pos');
+
+  useFocusEffect(useCallback(() => {
+    if (branch && isModuleEnabled && canAccessRegisterScreen) {
+      void query.refetch();
+    }
+  }, [branch?.id, isModuleEnabled, canAccessRegisterScreen, query.refetch]));
 
   const refreshShiftData = async () => {
     if (!branch) return;
@@ -175,24 +201,30 @@ function RegistersContent() {
   const open = useMutation({
     mutationFn: async (register: Register) => {
       if (!branch) throw new Error('Select a branch before opening a shift.');
-      const opened = await api<{ id: string }>('/registers/shifts/open', {
+      const opened = await api<{ id: string; cashierId: string }>('/registers/shifts/open', {
         method: 'POST',
         body: JSON.stringify({
           branchId: branch.id,
           registerId: register.id,
           startingCash: startingCash.trim(),
+          ...(openingForCashierId ? { cashierId: openingForCashierId } : {}),
         }),
       });
-      await setActive({
-        id: opened.id,
-        registerId: register.id,
-        registerName: register.name,
-        branchId: branch.id,
-      });
+      if (opened.cashierId === currentUser?.id) {
+        await setActive({
+          id: opened.id,
+          registerId: register.id,
+          registerName: register.name,
+          branchId: branch.id,
+        });
+      }
+      return opened;
     },
-    onSuccess: () => {
+    onSuccess: (opened) => {
       void refreshShiftData();
-      appAlert('Shift opened', 'You can now start accepting sales.');
+      appAlert('Shift opened', opened.cashierId === currentUser?.id
+        ? 'You can now start accepting sales.'
+        : 'The assigned cashier can open Registers & Shifts to use this counter.');
     },
     onError: (error) => appAlert('Could not open shift', error.message),
   });
@@ -395,7 +427,7 @@ function RegistersContent() {
                   </View>
                 ) : null}
 
-                <View className="border-t border-slate-100 p-5">
+                {canMoveCash ? <View className="border-t border-slate-100 p-5">
                   <View className="mb-3 flex-row items-center">
                     <Feather name="repeat" size={15} color="#64748B" />
                     <Text className="ml-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
@@ -475,10 +507,10 @@ function RegistersContent() {
                     disabled={cashMovement.isPending || !movementValid}
                     onPress={() => cashMovement.mutate()}
                   />
-                </View>
+                </View> : null}
               </View>
 
-              <SectionLabel>Close Shift</SectionLabel>
+              {canCloseShift ? <><SectionLabel>Close Shift</SectionLabel>
               <View className="mb-7 rounded-2xl border border-slate-200 bg-white p-5">
                 <View className="mb-4 flex-row items-start">
                   <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
@@ -524,7 +556,7 @@ function RegistersContent() {
                     Enter the counted cash to enable closing.
                   </Text>
                 ) : null}
-              </View>
+              </View></> : null}
             </>
           ) : (
             <>
@@ -554,6 +586,33 @@ function RegistersContent() {
                   }
                 />
               </View>
+              {canAssignCashier ? (
+                <View className="mb-7 rounded-2xl border border-slate-200 bg-white p-5">
+                  <SectionLabel>Open shift for</SectionLabel>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: openingForCashierId === null }}
+                    onPress={() => setOpeningForCashierId(null)}
+                    className={`mb-2 min-h-11 justify-center rounded-xl border px-4 ${openingForCashierId === null ? 'border-brand-700 bg-brand-50' : 'border-slate-200'}`}
+                  >
+                    <Text className="text-sm text-slate-900">Myself</Text>
+                  </Pressable>
+                  {assignableCashiers.map((cashier) => (
+                    <Pressable
+                      key={cashier.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: openingForCashierId === cashier.id }}
+                      onPress={() => setOpeningForCashierId(cashier.id)}
+                      className={`mb-2 min-h-11 justify-center rounded-xl border px-4 ${openingForCashierId === cashier.id ? 'border-brand-700 bg-brand-50' : 'border-slate-200'}`}
+                    >
+                      <Text className="text-sm text-slate-900">{cashier.displayName}</Text>
+                    </Pressable>
+                  ))}
+                  {cashiersQuery.isError ? (
+                    <Text className="text-sm text-red-700">Could not load cashiers for this branch. Refresh this page and try again.</Text>
+                  ) : null}
+                </View>
+              ) : null}
             </>
           )}
 
@@ -577,6 +636,9 @@ function RegistersContent() {
                 <Text className="text-xs font-semibold text-brand-800">+ Add Counter</Text>
               </Pressable>
             ) : null}
+            <Pressable accessibilityRole="button" accessibilityLabel="Refresh registers" onPress={() => void query.refetch()} className="ml-2 min-h-9 justify-center rounded-xl bg-slate-100 px-3">
+              <Text className="text-xs font-medium text-slate-700">Refresh</Text>
+            </Pressable>
           </View>
           {query.isLoading ? (
             <View className="min-h-40 rounded-2xl border border-slate-200 bg-white">
@@ -591,11 +653,13 @@ function RegistersContent() {
               {query.data.map((register) => {
                 const current = register.id === shift?.registerId;
                 const occupied = Boolean(register.activeShiftId);
-                const disabled = Boolean(shift) || occupied || open.isPending || !startingCashValid;
+                const disabled = !canOpenShift || Boolean(shift) || occupied || open.isPending || !startingCashValid;
                 const status = current
                   ? 'Your active shift'
                   : occupied
                     ? 'In use by another cashier'
+                    : !canOpenShift
+                      ? 'Opening shifts is not permitted for your role'
                     : shift
                       ? 'Available after you close your shift'
                       : 'Available · Tap to open';

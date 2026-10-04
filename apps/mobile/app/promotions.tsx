@@ -44,13 +44,6 @@ interface ProductItem {
   sellingPrice?: string;
 }
 
-interface InventoryLookupRow {
-  productId: string;
-  name: string;
-  sku: string;
-  inventoryRole?: 'sellable' | 'ingredient' | 'both';
-}
-
 type PromoType = PromotionSummary['type'];
 
 function normalizeMoneyInput(value: string): string | undefined {
@@ -140,6 +133,7 @@ function PromotionsContent() {
   const [debouncedProductSearch, setDebouncedProductSearch] = useState('');
 
   const hasModule = currentUser?.modules.includes('promotions') ?? false;
+  const canManagePromotions = currentUser?.permissions.includes('promotions:manage') ?? false;
   const activeType = PROMO_TYPES.find((item) => item.type === type) ?? PROMO_TYPES[0];
   const needsProducts = type === 'combo_bundle' || type === 'buy_x_get_y' || type === 'tiered_quantity';
   const branch = activeBranch ?? currentUser?.branches?.[0] ?? null;
@@ -246,47 +240,15 @@ function PromotionsContent() {
     getNextPageParam: (last, pages) => (last.length === 30 ? pages.length + 1 : undefined),
   });
 
-  // Use inventory search (same source as Stock Overview) — more reliable for branch
-  // catalogs than /products, which can 403 without products:read or miss unit joins.
   const productsQuery = useQuery({
     queryKey: ['promo-product-lookup', branch?.id, debouncedProductSearch],
-    enabled: modalVisible && needsProducts && hasModule && Boolean(branch?.id),
+    enabled: modalVisible && needsProducts && hasModule && canManagePromotions && Boolean(branch?.id),
     queryFn: async () => {
       if (!branch?.id) throw new Error('No branch selected');
 
-      const params = new URLSearchParams({
-        branchId: branch.id,
-        page: '1',
-        pageSize: '50',
-        sort: 'name',
-        activeOnly: 'true',
-      });
+      const params = new URLSearchParams({ branchId: branch.id });
       if (debouncedProductSearch) params.set('search', debouncedProductSearch);
-
-      try {
-        const inventoryRows = await api<InventoryLookupRow[]>(`/inventory?${params.toString()}`);
-        const seen = new Set<string>();
-        const fromInventory: ProductItem[] = [];
-        for (const row of inventoryRows) {
-          if (!row.productId || seen.has(row.productId)) continue;
-          if (row.inventoryRole === 'ingredient') continue;
-          seen.add(row.productId);
-          fromInventory.push({ id: row.productId, name: row.name, sku: row.sku });
-        }
-        if (fromInventory.length > 0) return fromInventory;
-      } catch {
-        // Fall through to products catalog.
-      }
-
-      const productParams = new URLSearchParams({
-        branchId: branch.id,
-        page: '1',
-        pageSize: '50',
-        status: 'active',
-        inventoryRole: 'sellable,both',
-      });
-      if (debouncedProductSearch) productParams.set('search', debouncedProductSearch);
-      return api<ProductItem[]>(`/products?${productParams.toString()}`);
+      return api<ProductItem[]>(`/promotions/products?${params.toString()}`);
     },
   });
 
@@ -510,7 +472,7 @@ function PromotionsContent() {
       <Header
         title="Promotions & Combos"
         subtitle="Combo deals, BOGO, and discounts"
-        action={
+        action={canManagePromotions ?
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Create new promotion"
@@ -520,7 +482,7 @@ function PromotionsContent() {
             <Feather name="plus" size={16} color="#FFFFFF" />
             <Text className="ml-1.5 text-sm font-semibold text-white">New</Text>
           </Pressable>
-        }
+        : undefined}
       />
 
       <View className="border-b border-slate-100 bg-white px-4 py-3">
@@ -564,6 +526,7 @@ function PromotionsContent() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Edit ${item.name}`}
+              disabled={!canManagePromotions}
               onPress={() => void openEditModal(item)}
               className="rounded-2xl border border-slate-100 bg-white p-4 active:bg-slate-50"
             >
@@ -619,7 +582,7 @@ function PromotionsContent() {
                 <Text className="text-xs text-slate-500">
                   {item.itemCount} product{item.itemCount === 1 ? '' : 's'}
                 </Text>
-                <View className="ml-auto flex-row items-center gap-2">
+                {canManagePromotions ? <View className="ml-auto flex-row items-center gap-2">
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={item.isActive ? 'Turn off promotion' : 'Turn on promotion'}
@@ -651,7 +614,7 @@ function PromotionsContent() {
                     <Feather name="edit-2" size={13} color="#0D5C3A" />
                     <Text className="ml-1.5 text-xs font-semibold text-brand-800">Edit</Text>
                   </View>
-                </View>
+                </View> : null}
               </View>
             </Pressable>
           );

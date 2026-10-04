@@ -12,6 +12,8 @@ import { useBranchStore } from '@/store/branch';
 
 interface StockTransferItemSummary {
   id: string;
+  fromBranchId: string;
+  toBranchId: string;
   transferNumber: string;
   status: 'in_transit' | 'completed' | 'cancelled';
   fromBranchName: string;
@@ -50,6 +52,8 @@ function StockTransfersContent() {
   const { currentUser } = useSession();
   const branch = useBranchStore((state) => state.activeBranch)!;
   const branches = currentUser?.branches ?? [];
+  const canManageTransfers = currentUser?.permissions.includes('transfers:manage') ?? false;
+  const canReceiveTransfers = currentUser?.permissions.includes('transfers:receive') ?? false;
   const client = useQueryClient();
 
   const [search, setSearch] = useState('');
@@ -82,8 +86,8 @@ function StockTransfersContent() {
 
   const productsQuery = useQuery({
     queryKey: ['products-lookup', branch.id, trimmedProductSearch],
-    enabled: modalVisible && hasModule,
-    queryFn: () => api<ProductItem[]>(`/products?branchId=${branch.id}&pageSize=20&search=${encodeURIComponent(trimmedProductSearch)}`),
+    enabled: modalVisible && hasModule && canManageTransfers,
+    queryFn: () => api<ProductItem[]>(`/stock-transfers/products?branchId=${branch.id}&search=${encodeURIComponent(trimmedProductSearch)}`),
   });
 
   const createMutation = useMutation({
@@ -199,7 +203,7 @@ function StockTransfersContent() {
       <Header
         title="Stock Transfers"
         subtitle={`Active Branch: ${branch?.name ?? 'Main'}`}
-        action={
+        action={canManageTransfers ?
           <Button
             title="+ New Transfer"
             onPress={() => {
@@ -211,7 +215,7 @@ function StockTransfersContent() {
               setModalVisible(true);
             }}
           />
-        }
+        : undefined}
       />
 
       <View className="gap-3 border-b border-slate-200 bg-white p-4">
@@ -302,8 +306,10 @@ function StockTransfersContent() {
                 <Text className="mt-2 text-xs text-slate-600">Note: {item.notes}</Text>
               ) : null}
 
-              {isInTransit ? (
+              {isInTransit && ((canReceiveTransfers && item.toBranchId === branch.id) ||
+                (canManageTransfers && item.fromBranchId === branch.id)) ? (
                 <View className="mt-4 flex-row gap-2 border-t border-slate-100 pt-3">
+                  {canReceiveTransfers && item.toBranchId === branch.id ? (
                   <Pressable
                     disabled={receiveMutation.isPending}
                     onPress={() =>
@@ -323,7 +329,9 @@ function StockTransfersContent() {
                   >
                     <Text className="text-xs font-bold text-white">Receive Transfer</Text>
                   </Pressable>
+                  ) : null}
 
+                  {canManageTransfers && item.fromBranchId === branch.id ? (
                   <Pressable
                     disabled={cancelMutation.isPending}
                     onPress={() =>
@@ -344,6 +352,7 @@ function StockTransfersContent() {
                   >
                     <Text className="text-xs font-bold text-red-600">Cancel</Text>
                   </Pressable>
+                  ) : null}
                 </View>
               ) : null}
             </View>

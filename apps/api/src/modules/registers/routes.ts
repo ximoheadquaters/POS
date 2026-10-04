@@ -6,6 +6,7 @@ import { requireBranchAccess, requireAnyModule, requirePermission } from '../../
 import { validateBody } from '../../middleware/validation.js';
 import { sendData } from '../../shared/http.js';
 import { ShiftService } from '../../registers/shift-service.js';
+import { forbidden } from '../../shared/errors.js';
 
 export function registersRouter(database: Database): Router {
   const router = Router();
@@ -13,7 +14,7 @@ export function registersRouter(database: Database): Router {
   router.use(requireAnyModule('registers', 'pos'));
   router.get(
     '/',
-    requirePermission('registers:read'),
+    requirePermission('registers:read', 'shifts:open', 'shifts:close', 'cash:move'),
     requireBranchAccess('query'),
     async (request, response) => {
       const result = await database.query(
@@ -21,6 +22,28 @@ export function registersRouter(database: Database): Router {
           rs.id as "activeShiftId",rs.cashier_id as "activeCashierId"
          from registers r left join register_shifts rs on rs.register_id=r.id and rs.status='open'
          where r.organization_id=$1 and r.branch_id=$2 order by r.name`,
+        [request.authUser!.organization.id, request.query.branchId],
+      );
+      sendData(response, result.rows);
+    },
+  );
+  router.get(
+    '/eligible-cashiers',
+    requirePermission('shifts:open'),
+    requirePermission('users:manage'),
+    requireBranchAccess('query'),
+    async (request, response) => {
+      if (!['owner', 'administrator', 'manager'].includes(request.authUser!.role)) {
+        throw forbidden('SHIFT_ASSIGNMENT_DENIED', 'You cannot assign cashier shifts');
+      }
+      const result = await database.query(
+        `select p.id,p.display_name as "displayName"
+         from profiles p
+         join roles role on role.id=p.role_id and role.organization_id=p.organization_id
+         join user_branches ub on ub.user_id=p.id and ub.organization_id=p.organization_id
+         where p.organization_id=$1 and p.is_active and role.code='cashier'
+           and ub.branch_id=$2
+         order by p.display_name`,
         [request.authUser!.organization.id, request.query.branchId],
       );
       sendData(response, result.rows);
@@ -52,7 +75,13 @@ export function registersRouter(database: Database): Router {
     validateBody(openShiftSchema.extend({ branchId: uuidSchema })),
     async (request, response) => {
       const result = await shifts.open(
-        { userId: request.authUser!.id, organizationId: request.authUser!.organization.id },
+        {
+          userId: request.authUser!.id,
+          organizationId: request.authUser!.organization.id,
+          canAssignCashier:
+            ['owner', 'administrator', 'manager'].includes(request.authUser!.role) &&
+            request.authUser!.permissions.includes('users:manage'),
+        },
         request.body.branchId,
         request.body,
       );

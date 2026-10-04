@@ -31,7 +31,7 @@ export interface SidebarSubItem {
   badge?: string | number;
   badgeColor?: 'emerald' | 'amber' | 'red' | 'blue' | 'gray';
   module?: ModuleCode;
-  permission?: Permission;
+  permission?: Permission | Permission[];
 }
 
 export interface SidebarGroup {
@@ -41,7 +41,7 @@ export interface SidebarGroup {
   href?: Href;
   children?: SidebarSubItem[];
   module?: ModuleCode;
-  permission?: Permission;
+  permission?: Permission | Permission[];
 }
 
 export interface SidebarSection {
@@ -117,7 +117,7 @@ const sidebarSections: SidebarSection[] = [
         icon: 'tag',
         href: '/promotions',
         module: 'promotions',
-        permission: 'promotions:read',
+        permission: ['promotions:read', 'promotions:manage'],
       },
     ],
   },
@@ -128,7 +128,6 @@ const sidebarSections: SidebarSection[] = [
         id: 'inventory_tools',
         title: 'Inventory',
         icon: 'archive',
-        permission: 'inventory:read',
         children: [
           {
             title: 'Stock Overview',
@@ -152,7 +151,7 @@ const sidebarSections: SidebarSection[] = [
             title: 'Branch Transfers',
             href: '/stock-transfers',
             module: 'stock_transfers',
-            permission: 'transfers:read',
+            permission: ['transfers:read', 'transfers:manage', 'transfers:receive'],
           },
           {
             title: 'Repacking',
@@ -172,19 +171,19 @@ const sidebarSections: SidebarSection[] = [
         title: 'Registers & Shifts',
         icon: 'credit-card',
         module: 'registers',
-        permission: 'registers:read',
+        permission: ['registers:read', 'shifts:open', 'shifts:close', 'cash:move'],
         children: [
           {
             title: 'Active Register',
             href: '/registers',
             module: 'registers',
-            permission: 'registers:read',
+            permission: ['registers:read', 'shifts:open', 'shifts:close', 'cash:move'],
           },
           {
             title: 'Shift History',
             href: '/shift-reports',
             module: 'registers',
-            permission: 'registers:read',
+            permission: ['registers:read', 'shifts:open', 'shifts:close'],
           },
         ],
       },
@@ -314,6 +313,9 @@ export function useVisibleNavigation(): SidebarSection[] {
   const { currentUser } = useSession();
   const hasModuleAccess = (module?: ModuleCode, groupId?: string) => {
     if (!module) return true;
+    if (module === 'registers') {
+      return Boolean(currentUser?.modules.includes('registers') || currentUser?.modules.includes('pos'));
+    }
     if (groupId === 'dashboard') {
       return (
         Boolean(currentUser?.modules.includes('dashboard')) ||
@@ -323,10 +325,11 @@ export function useVisibleNavigation(): SidebarSection[] {
     return Boolean(currentUser?.modules.includes(module));
   };
 
-  const hasPermissionAccess = (permission?: Permission) => {
+  const hasPermissionAccess = (permission?: Permission | Permission[]) => {
     if (!permission) return true;
     const isOwnerOrAdmin = currentUser?.role === 'owner' || currentUser?.role === 'administrator';
-    return isOwnerOrAdmin || Boolean(currentUser?.permissions.includes(permission));
+    const choices = Array.isArray(permission) ? permission : [permission];
+    return isOwnerOrAdmin || choices.some((choice) => currentUser?.permissions.includes(choice));
   };
 
   const filterVisibleChildren = (children?: SidebarSubItem[]) => {

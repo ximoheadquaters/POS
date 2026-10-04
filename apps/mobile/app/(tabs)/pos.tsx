@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import {
   FlatList,
   Keyboard,
@@ -11,7 +11,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { navigateOnce } from '@/lib/navigation';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Feather from '@expo/vector-icons/Feather';
@@ -184,6 +184,40 @@ export default function PosScreen() {
   const promotionsEnabled = currentUser?.modules.includes('promotions') ?? false;
   const activeShift = useShiftStore((state) => state.activeShift);
   const hydrateShift = useShiftStore((state) => state.hydrate);
+  const setActiveShift = useShiftStore((state) => state.setActive);
+  const clearActiveShift = useShiftStore((state) => state.clear);
+
+  useFocusEffect(useCallback(() => {
+    const canReadRegisters = currentUser?.permissions.some((permission) =>
+      ['registers:read', 'shifts:open', 'shifts:close', 'cash:move'].includes(permission)) &&
+      currentUser.modules.some((module) => module === 'registers' || module === 'pos');
+    if (!branch?.id || !currentUser?.id || !canReadRegisters) return;
+    let cancelled = false;
+    void (async () => {
+      await hydrateShift();
+      const registers = await api<Array<{
+        id: string;
+        name: string;
+        activeShiftId?: string;
+        activeCashierId?: string;
+      }>>(`/registers?branchId=${branch.id}`);
+      if (cancelled) return;
+      const mine = registers.find((register) => register.activeCashierId === currentUser.id);
+      const stored = useShiftStore.getState().activeShift;
+      if (mine?.activeShiftId && stored?.id !== mine.activeShiftId) {
+        await setActiveShift({
+          id: mine.activeShiftId,
+          registerId: mine.id,
+          registerName: mine.name,
+          branchId: branch.id,
+        });
+      } else if (!mine && stored?.branchId === branch.id) {
+        await clearActiveShift();
+      }
+    })().catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [branch?.id, currentUser?.id, currentUser?.permissions, currentUser?.modules,
+    hydrateShift, setActiveShift, clearActiveShift]));
   const reservedByProduct = useConnectivityStore((state) => state.reservedByProduct);
   const { showAlert } = useIosAlert();
   const [holdModalVisible, setHoldModalVisible] = useState(false);
@@ -193,13 +227,9 @@ export default function PosScreen() {
     queryKey: ['pos-active-promotions-rules', branch?.id],
     queryFn: async () => {
       if (!branch?.id) return [];
-      const res = await api<any[]>(`/promotions?branchId=${branch.id}&pageSize=50`);
-      const list = Array.isArray(res)
-        ? res
-        : ((res as any)?.pages?.flat() ?? (res as any)?.data ?? []);
-      return list.filter((p: any) => p.isActive);
+      return api<PromotionRule[]>(`/promotions/active-rules?branchId=${branch.id}`);
     },
-    enabled: Boolean(branch?.id),
+    enabled: Boolean(branch?.id && promotionsEnabled && currentUser?.permissions.includes('sales:create')),
     staleTime: 30_000,
   });
 
@@ -319,7 +349,6 @@ export default function PosScreen() {
     }, 300);
   };
 
-  useEffect(() => void hydrateShift(), [hydrateShift]);
 
   // Do not focus search on arrival; scanner input still focuses it through the global key listener below.
   useEffect(() => {

@@ -168,11 +168,11 @@ export function stockTransfersRouter(database: Database): Router {
 
   // Enforce SaaS module enablement flag!
   router.use(requireModule('stock_transfers'));
-  router.use(requirePermission('inventory:adjust'));
 
   // GET /stock-transfers -> List transfers
   router.get(
     '/',
+    requirePermission('transfers:read', 'transfers:manage', 'transfers:receive'),
     validateQuery(
       paginationSchema.extend({
         branchId: uuidSchema,
@@ -186,6 +186,7 @@ export function stockTransfersRouter(database: Database): Router {
 
       const result = await database.query(
         `select st.id, st.transfer_number as "transferNumber", st.status,
+          st.from_branch_id as "fromBranchId", st.to_branch_id as "toBranchId",
           st.notes, st.created_at as "createdAt", st.completed_at as "completedAt",
           fb.name as "fromBranchName", tb.name as "toBranchName",
           p.display_name as "createdByName",
@@ -220,8 +221,34 @@ export function stockTransfersRouter(database: Database): Router {
     },
   );
 
+  router.get(
+    '/products',
+    requirePermission('transfers:manage'),
+    validateQuery(paginationSchema.pick({ search: true }).extend({ branchId: uuidSchema })),
+    async (request, response) => {
+      const { branchId, search } = request.query as { branchId: string; search?: string };
+      assertBranchAccess(request, branchId);
+      const result = await database.query(
+        `select p.id,p.name,p.sku,p.unit,
+           coalesce((select jsonb_agg(jsonb_build_object(
+             'variantId',v.id,'name',v.name,'unit',v.unit,
+             'unitsPerBase',v.units_per_base::float8,
+             'isPortioningContainer',v.is_portioning_container
+           )) from product_variants v
+             where v.product_id=p.id and v.organization_id=p.organization_id and v.is_active),'[]')
+             as "sellingUnits"
+         from products p
+         where p.organization_id=$1 and p.branch_id=$2 and p.status='active'
+           and ($3::text is null or p.name ilike '%'||$3||'%' or p.sku ilike '%'||$3||'%')
+         order by p.name limit 20`,
+        [request.authUser!.organization.id, branchId, search || null],
+      );
+      sendData(response, result.rows);
+    },
+  );
+
   // GET /stock-transfers/:id -> Get transfer details
-  router.get('/:id', async (request, response) => {
+  router.get('/:id', requirePermission('transfers:read', 'transfers:manage', 'transfers:receive'), async (request, response) => {
     const id = uuidSchema.parse(request.params.id);
     const organizationId = request.authUser!.organization.id;
 
@@ -276,6 +303,7 @@ export function stockTransfersRouter(database: Database): Router {
   // POST /stock-transfers -> Dispatch stock transfer
   router.post(
     '/',
+    requirePermission('transfers:manage'),
     validateBody(createStockTransferSchema),
     async (request, response) => {
       const input = request.body;
@@ -481,7 +509,7 @@ export function stockTransfersRouter(database: Database): Router {
   );
 
   // POST /stock-transfers/:id/receive -> Receive transfer at target branch
-  router.post('/:id/receive', async (request, response) => {
+  router.post('/:id/receive', requirePermission('transfers:receive'), async (request, response) => {
     const id = uuidSchema.parse(request.params.id);
     const organizationId = request.authUser!.organization.id;
     const userId = request.authUser!.id;
@@ -614,7 +642,7 @@ export function stockTransfersRouter(database: Database): Router {
   });
 
   // POST /stock-transfers/:id/cancel -> Cancel transfer & restore stock to sender
-  router.post('/:id/cancel', async (request, response) => {
+  router.post('/:id/cancel', requirePermission('transfers:manage'), async (request, response) => {
     const id = uuidSchema.parse(request.params.id);
     const organizationId = request.authUser!.organization.id;
     const userId = request.authUser!.id;

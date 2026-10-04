@@ -47,7 +47,20 @@ export function reportsRouter(database: Queryable): Router {
   const inventoryReportService = new InventoryReportService(db);
   const transactionDetailService = new TransactionDetailService(db);
 
-  router.use(requireAnyModule('dashboard', 'reports'), requirePermission('reports:read'));
+  const requireReportModule = requireAnyModule('dashboard', 'reports');
+  const requireReportRead = requirePermission('reports:read');
+  router.use((request, response, next) => {
+    // Register staff may inspect their own shifts without access to business reports.
+    const shiftView = request.method === 'GET' &&
+      (request.path === '/shifts' || /^\/shifts\/[0-9a-f-]+$/i.test(request.path));
+    if (shiftView && request.authUser?.modules.some((module) => module === 'registers' || module === 'pos') &&
+        request.authUser.permissions.some((permission) =>
+          ['registers:read', 'shifts:open', 'shifts:close', 'cash:move'].includes(permission))) {
+      return next();
+    }
+    return requireReportModule(request, response, (error) =>
+      error ? next(error) : requireReportRead(request, response, next));
+  });
 
   router.get('/catalog', (request, response) => {
     const user = request.authUser!;
@@ -973,7 +986,10 @@ export function reportsRouter(database: Queryable): Router {
       typeof shiftReportFilter
     >;
     const organizationId = request.authUser!.organization.id;
-    const allBranches = request.authUser!.permissions.includes('sales:read_all');
+    const canViewReports = request.authUser!.permissions.includes('reports:read') &&
+      request.authUser!.modules.some((module) => module === 'dashboard' || module === 'reports');
+    const ownShiftsOnly = !canViewReports;
+    const allBranches = canViewReports && request.authUser!.permissions.includes('sales:read_all');
     const allowedBranchIds = request.authUser!.branches.map((branch) => branch.id);
     if (
       branchId &&
@@ -990,6 +1006,8 @@ export function reportsRouter(database: Queryable): Router {
       status ?? null,
       allBranches,
       allowedBranchIds,
+      ownShiftsOnly,
+      request.authUser!.id,
     ] as const;
     const [summary, shifts] = await Promise.all([
       database.query(
@@ -1015,7 +1033,8 @@ export function reportsRouter(database: Queryable): Router {
          where rs.organization_id=$1 and rs.opened_at >= $2 and rs.opened_at < $3
            and ($4::uuid is null or rs.branch_id=$4)
            and ($5::shift_status is null or rs.status=$5)
-           and ($6::boolean or rs.branch_id=any($7::uuid[]))`,
+           and ($6::boolean or rs.branch_id=any($7::uuid[]))
+           and (not $8::boolean or rs.cashier_id=$9::uuid)`,
         values,
       ),
       database.query(
@@ -1040,7 +1059,8 @@ export function reportsRouter(database: Queryable): Router {
            and ($4::uuid is null or rs.branch_id=$4)
            and ($5::shift_status is null or rs.status=$5)
            and ($6::boolean or rs.branch_id=any($7::uuid[]))
-         order by rs.opened_at desc limit $8 offset $9`,
+           and (not $8::boolean or rs.cashier_id=$9::uuid)
+         order by rs.opened_at desc limit $10 offset $11`,
         [...values, pageSize, (page - 1) * pageSize],
       ),
     ]);
@@ -1056,7 +1076,10 @@ export function reportsRouter(database: Queryable): Router {
   router.get('/shifts/:id', async (request, response) => {
     const id = uuidSchema.parse(request.params.id);
     const organizationId = request.authUser!.organization.id;
-    const allBranches = request.authUser!.permissions.includes('sales:read_all');
+    const canViewReports = request.authUser!.permissions.includes('reports:read') &&
+      request.authUser!.modules.some((module) => module === 'dashboard' || module === 'reports');
+    const ownShiftsOnly = !canViewReports;
+    const allBranches = canViewReports && request.authUser!.permissions.includes('sales:read_all');
     const result = await database.query<any>(
       `select rs.id,rs.status,rs.opened_at as "openedAt",rs.closed_at as "closedAt",
         rs.starting_cash::text as "startingCash",rs.cash_sales::text as "cashSales",
@@ -1074,8 +1097,10 @@ export function reportsRouter(database: Queryable): Router {
        join registers r on r.id=rs.register_id
        join profiles p on p.id=rs.cashier_id
        where rs.id=$1 and rs.organization_id=$2
-         and ($3::boolean or rs.branch_id=any($4::uuid[]))`,
-      [id, organizationId, allBranches, request.authUser!.branches.map((branch) => branch.id)],
+         and ($3::boolean or rs.branch_id=any($4::uuid[]))
+         and (not $5::boolean or rs.cashier_id=$6::uuid)`,
+      [id, organizationId, allBranches, request.authUser!.branches.map((branch) => branch.id),
+        ownShiftsOnly, request.authUser!.id],
     );
     if (!result.rows[0]) throw notFound('Shift');
     const [movements, payments, sales, refunds] = await Promise.all([

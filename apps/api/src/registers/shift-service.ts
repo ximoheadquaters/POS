@@ -6,6 +6,7 @@ import { conflict, forbidden, notFound } from '../shared/errors.js';
 interface ShiftActor {
   userId: string;
   organizationId: string;
+  canAssignCashier?: boolean;
 }
 
 export class ShiftService {
@@ -13,6 +14,21 @@ export class ShiftService {
 
   open(actor: ShiftActor, branchId: string, input: OpenShiftInput) {
     return this.database.transaction(async (tx) => {
+      const cashierId = input.cashierId ?? actor.userId;
+      if (cashierId !== actor.userId) {
+        if (!actor.canAssignCashier) {
+          throw forbidden('SHIFT_ASSIGNMENT_DENIED', 'You cannot open a shift for another cashier');
+        }
+        const cashier = await tx.query(
+          `select 1 from profiles p
+           join roles role on role.id=p.role_id and role.organization_id=p.organization_id
+           join user_branches ub on ub.user_id=p.id and ub.organization_id=p.organization_id
+           where p.id=$1 and p.organization_id=$2 and p.is_active
+             and role.code='cashier' and ub.branch_id=$3`,
+          [cashierId, actor.organizationId, branchId],
+        );
+        if (!cashier.rowCount) throw notFound('Active cashier assigned to this branch');
+      }
       const register = await tx.query(
         `select 1 from registers where id = $1 and organization_id = $2
          and branch_id = $3 and is_active for update`,
@@ -22,7 +38,7 @@ export class ShiftService {
       const active = await tx.query(
         `select 1 from register_shifts where organization_id = $1 and status = 'open'
          and (register_id = $2 or cashier_id = $3)`,
-        [actor.organizationId, input.registerId, actor.userId],
+        [actor.organizationId, input.registerId, cashierId],
       );
       if (active.rowCount)
         throw conflict('SHIFT_ALREADY_OPEN', 'Register or cashier already has an open shift');
@@ -31,15 +47,15 @@ export class ShiftService {
           organization_id, branch_id, register_id, cashier_id, starting_cash
          ) values ($1,$2,$3,$4,$5)
          returning id, status, starting_cash::text as "startingCash", opened_at as "openedAt"`,
-        [actor.organizationId, branchId, input.registerId, actor.userId, input.startingCash],
+        [actor.organizationId, branchId, input.registerId, cashierId, input.startingCash],
       );
       await tx.query(
         `insert into audit_logs (
           organization_id, branch_id, actor_id, action, entity_type, entity_id, after_data
          ) values ($1,$2,$3,'shift.opened','register_shift',$4,$5::jsonb)`,
-        [actor.organizationId, branchId, actor.userId, shift.rows[0]!.id, JSON.stringify(input)],
+        [actor.organizationId, branchId, actor.userId, shift.rows[0]!.id, JSON.stringify({ ...input, cashierId })],
       );
-      return shift.rows[0];
+      return { ...shift.rows[0], cashierId };
     });
   }
 

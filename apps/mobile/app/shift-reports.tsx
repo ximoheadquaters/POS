@@ -138,7 +138,7 @@ function ShiftReportsContent() {
   const [draftFrom, setDraftFrom] = useState(defaultCustomRange.from);
   const [draftTo, setDraftTo] = useState(defaultCustomRange.to);
   const [dateRangeError, setDateRangeError] = useState('');
-  const isModuleEnabled = currentUser?.modules.includes('registers');
+  const isModuleEnabled = currentUser?.modules.includes('registers') || currentUser?.modules.includes('pos');
 
   const range = useMemo(() => {
     if (period === 'custom') {

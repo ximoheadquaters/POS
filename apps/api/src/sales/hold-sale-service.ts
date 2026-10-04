@@ -470,8 +470,9 @@ export class HoldSaleService {
        where b.organization_id = $1 and b.id = $2 and b.is_active
          and rs.id = $3 and rs.status = 'open' and r.is_active
          and ($4::uuid is null or r.id = $4)
+         and rs.cashier_id = $5
        for update of rs`,
-      [actor.organizationId, input.branchId, input.shiftId, input.registerId ?? null],
+      [actor.organizationId, input.branchId, input.shiftId, input.registerId ?? null, actor.userId],
     );
     if (!result.rows[0]) {
       throw forbidden(
