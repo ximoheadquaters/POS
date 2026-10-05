@@ -529,7 +529,9 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
           authOwner = undefined;
         }
       }
-      const invitedAt = authOwner?.invitedAt ?? owner?.invitationSentAt ?? null;
+      // This is the invitation for this organization, rather than any historical
+      // invitation the Auth account may have received before it was attached here.
+      const invitedAt = owner?.invitationSentAt ?? null;
       const lastSignInAt = authOwner?.lastSignInAt ?? null;
       sendData(response, {
         ...result.rows[0],
@@ -537,7 +539,7 @@ export function platformRouter(database: Database, authActions: AuthActions): Ro
           ? {
               email: owner.email,
               displayName: owner.displayName,
-              invitationStatus: lastSignInAt ? 'accepted' : invitedAt ? 'pending' : 'unknown',
+              invitationStatus: lastSignInAt || !invitedAt ? 'accepted' : 'pending',
               invitedAt,
               createdAt: authOwner?.createdAt ?? owner.createdAt,
               lastSignInAt,

@@ -238,6 +238,7 @@ describe('Platform owner invitations', () => {
   it('returns safe invitation metadata with organization details', async () => {
     const token = createPlatformToken();
     const database = new OwnerInvitationDatabase(token.tokenHash);
+    const invitationSentAt = database.invitationSentAt;
     const response = await request(app(database, authFixture().actions))
       .get(`/api/v1/platform/organizations/${ORGANIZATION_ID}`)
       .set('authorization', `Bearer ${token.token}`)
@@ -247,8 +248,26 @@ describe('Platform owner invitations', () => {
       email: 'owner@example.com',
       displayName: 'Client Owner',
       invitationStatus: 'pending',
-      invitedAt: '2026-07-20T00:01:00.000Z',
+      invitedAt: invitationSentAt,
       createdAt: '2026-07-20T00:00:00.000Z',
+      lastSignInAt: null,
+    });
+  });
+
+  it('does not treat a historical Auth invitation as pending for a newly attached owner', async () => {
+    const token = createPlatformToken();
+    const database = new OwnerInvitationDatabase(token.tokenHash);
+    database.invitationSentAt = null;
+
+    const response = await request(app(database, authFixture().actions))
+      .get(`/api/v1/platform/organizations/${ORGANIZATION_ID}`)
+      .set('authorization', `Bearer ${token.token}`)
+      .expect(200);
+
+    expect(response.body.data.owner).toMatchObject({
+      email: 'owner@example.com',
+      invitationStatus: 'accepted',
+      invitedAt: null,
       lastSignInAt: null,
     });
   });

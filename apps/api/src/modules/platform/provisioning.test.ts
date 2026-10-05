@@ -181,6 +181,7 @@ function authFixture(
     duplicateAuth?: boolean;
     existingUser?: boolean;
     existingAuthByEmail?: boolean;
+    existingAuthHasNotSignedIn?: boolean;
   } = {},
 ) {
   const invitations: string[] = [];
@@ -207,7 +208,9 @@ function authFixture(
             email,
             createdAt: '2026-08-10T00:00:00.000Z',
             invitedAt: null,
-            lastSignInAt: '2026-08-10T00:05:00.000Z',
+            lastSignInAt: options.existingAuthHasNotSignedIn
+              ? null
+              : '2026-08-10T00:05:00.000Z',
           }
         : null,
     getUser: async (userId) =>
@@ -393,6 +396,29 @@ describe('Platform organization provisioning', () => {
     expect(auth.invitations).toHaveLength(0);
     const profileInsert = database.calls.find((call) => call.text.includes('insert into profiles'));
     expect(profileInsert?.values?.[0]).toBe(OWNER_ID);
+    expect(profileInsert?.values?.[5]).toBe(false);
+  });
+
+  it('attaches an existing POS Auth account that has not signed in without creating an invitation state', async () => {
+    const token = createPlatformToken();
+    const database = new ProvisioningDatabase(token.tokenHash);
+    const auth = authFixture({ existingAuthByEmail: true, existingAuthHasNotSignedIn: true });
+    const response = await request(createProvisioningApp(database, auth.actions))
+      .post('/api/v1/platform/organizations')
+      .set('authorization', `Bearer ${token.token}`)
+      .set('idempotency-key', 'website-order-existing-auth-not-signed-in-1001')
+      .send(requestBody)
+      .expect(201);
+
+    expect(response.body.data.owner).toMatchObject({
+      email: requestBody.ownerEmail,
+      invitationStatus: 'accepted',
+    });
+    expect(auth.invitations).toHaveLength(0);
+    const profileInsert = database.calls.find((call) => call.text.includes('insert into profiles'));
+    expect(profileInsert?.text).toContain('case when $6 then now() else null end');
+    expect(profileInsert?.values?.[0]).toBe(OWNER_ID);
+    expect(profileInsert?.values?.[5]).toBe(false);
   });
 
   it('links a website-authenticated owner instead of sending another invitation', async () => {

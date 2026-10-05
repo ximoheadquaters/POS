@@ -249,7 +249,12 @@ export class PlatformProvisioningService {
         }
 
         let ownerAuthUser: { id: string; email: string };
-        let ownerInvitationStatus: 'pending' | 'accepted' = 'pending';
+        // Only a newly created POS Auth invitation needs a pending invitation
+        // state and a forced password setup. An existing POS Auth user may not
+        // have signed in yet, but attaching that user to a new organization
+        // must not manufacture a second pending invitation.
+        let ownerWasInvited = false;
+        let ownerInvitationStatus: 'pending' | 'accepted' = 'accepted';
         if (input.ownerUserId) {
           const existingOwner = await this.authActions.getUser(input.ownerUserId);
           if (!existingOwner || existingOwner.email.trim().toLowerCase() !== input.ownerEmail) {
@@ -259,18 +264,18 @@ export class PlatformProvisioningService {
             );
           }
           ownerAuthUser = existingOwner;
-          ownerInvitationStatus = existingOwner.lastSignInAt ? 'accepted' : 'pending';
         } else {
           const existingOwner = await this.authActions.findUserByEmail?.(input.ownerEmail);
           if (existingOwner) {
             ownerAuthUser = existingOwner;
-            ownerInvitationStatus = existingOwner.lastSignInAt ? 'accepted' : 'pending';
           } else {
             ownerAuthUser = await this.authActions.inviteUser({
               email: input.ownerEmail,
               displayName: input.ownerName!,
             });
             invitedAuthUserId = ownerAuthUser.id;
+            ownerWasInvited = true;
+            ownerInvitationStatus = 'pending';
           }
         }
 
@@ -368,14 +373,14 @@ export class PlatformProvisioningService {
           `insert into profiles (
             id,organization_id,role_id,display_name,email,is_active,invitation_sent_at,
             must_change_password
-           ) values ($1,$2,$3,$4,$5,true,now(),$6)`,
+           ) values ($1,$2,$3,$4,$5,true,case when $6 then now() else null end,$6)`,
           [
             ownerAuthUser.id,
             organizationId,
             ownerRole.id,
             input.ownerName,
             ownerAuthUser.email,
-            !input.ownerUserId,
+            ownerWasInvited,
           ],
         );
         const branch = await transaction.query<{ id: string; name: string; code: string }>(
