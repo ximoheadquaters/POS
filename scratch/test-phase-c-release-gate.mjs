@@ -1,11 +1,16 @@
+function requireDatabaseUrl() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL must be configured before running this script.');
+  }
+  return process.env.DATABASE_URL;
+}
+
 import pkg from '../apps/api/node_modules/pg/lib/index.js';
 const { Pool } = pkg;
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
-const connectionString =
-  process.env.DATABASE_URL ||
-  'postgresql://postgres:gamora09287310860@db.qpkodtxawlswrndvxlvc.supabase.co:5432/postgres';
+const connectionString = process.env.DATABASE_URL || requireDatabaseUrl();
 
 const pool = new Pool({
   connectionString,
@@ -125,7 +130,9 @@ async function runReleaseGate() {
        values ($1, $2, $3, 0.5, 'kg'), ($1, $2, $4, 1, 'piece')`,
       [orgId, sugar500Id, bulkSugarId, pouchId],
     );
-    console.log('D. Created Sugar 500 g preproduced product with recipe (0.5 kg Bulk Sugar + 1 Pouch per pack).');
+    console.log(
+      'D. Created Sugar 500 g preproduced product with recipe (0.5 kg Bulk Sugar + 1 Pouch per pack).',
+    );
 
     // E. Execute Repacking of 10 Packs
     // Consume 5 kg Bulk Sugar (₱250) + 10 pouches (₱30) -> 10 packs @ ₱28/unit (total ₱280)
@@ -148,14 +155,27 @@ async function runReleaseGate() {
        returning id`,
       [orgId, branchId, sugar500Id, userId],
     );
-    console.log('E. Recorded repacking batch #MAIN-PRD-000001 for 10 packs (Total Cost: ₱280, Unit Cost: ₱28).');
+    console.log(
+      'E. Recorded repacking batch #MAIN-PRD-000001 for 10 packs (Total Cost: ₱280, Unit Cost: ₱28).',
+    );
 
     // Check post-repacking stock
-    const sugarStockAfterRepack = await client.query(`select quantity::float8 from branch_inventory where product_id=$1`, [sugar500Id]);
-    const bulkStockAfterRepack = await client.query(`select quantity::float8 from branch_inventory where product_id=$1`, [bulkSugarId]);
-    const pouchStockAfterRepack = await client.query(`select quantity::float8 from branch_inventory where product_id=$1`, [pouchId]);
+    const sugarStockAfterRepack = await client.query(
+      `select quantity::float8 from branch_inventory where product_id=$1`,
+      [sugar500Id],
+    );
+    const bulkStockAfterRepack = await client.query(
+      `select quantity::float8 from branch_inventory where product_id=$1`,
+      [bulkSugarId],
+    );
+    const pouchStockAfterRepack = await client.query(
+      `select quantity::float8 from branch_inventory where product_id=$1`,
+      [pouchId],
+    );
 
-    console.log(`   Sugar 500g Stock: ${sugarStockAfterRepack.rows[0].quantity} packs (Expected: 10)`);
+    console.log(
+      `   Sugar 500g Stock: ${sugarStockAfterRepack.rows[0].quantity} packs (Expected: 10)`,
+    );
     console.log(`   Bulk Sugar Stock: ${bulkStockAfterRepack.rows[0].quantity} kg (Expected: 20)`);
     console.log(`   Pouch Stock: ${pouchStockAfterRepack.rows[0].quantity} pcs (Expected: 90)`);
 
@@ -176,8 +196,14 @@ async function runReleaseGate() {
     );
     console.log('F. Sold 1 finished pack (Sugar 500g). Raw ingredients untouched.');
 
-    const sugarStockAfterSale = await client.query(`select quantity::float8 from branch_inventory where product_id=$1`, [sugar500Id]);
-    const bulkStockAfterSale = await client.query(`select quantity::float8 from branch_inventory where product_id=$1`, [bulkSugarId]);
+    const sugarStockAfterSale = await client.query(
+      `select quantity::float8 from branch_inventory where product_id=$1`,
+      [sugar500Id],
+    );
+    const bulkStockAfterSale = await client.query(
+      `select quantity::float8 from branch_inventory where product_id=$1`,
+      [bulkSugarId],
+    );
     console.log(`   Sugar 500g Stock: ${sugarStockAfterSale.rows[0].quantity} packs (Expected: 9)`);
     console.log(`   Bulk Sugar Stock: ${bulkStockAfterSale.rows[0].quantity} kg (Expected: 20)`);
 
@@ -187,8 +213,13 @@ async function runReleaseGate() {
       [orgId, branchId, sugar500Id],
     );
     console.log('G. Returned 1 finished pack. Restored finished pack only.');
-    const sugarStockAfterReturn = await client.query(`select quantity::float8 from branch_inventory where product_id=$1`, [sugar500Id]);
-    console.log(`   Sugar 500g Stock: ${sugarStockAfterReturn.rows[0].quantity} packs (Expected: 10)`);
+    const sugarStockAfterReturn = await client.query(
+      `select quantity::float8 from branch_inventory where product_id=$1`,
+      [sugar500Id],
+    );
+    console.log(
+      `   Sugar 500g Stock: ${sugarStockAfterReturn.rows[0].quantity} packs (Expected: 10)`,
+    );
 
     // 4. Multi-Unit Scenario
     console.log('\n--- 4. Multi-Unit Scenario Execution ---');
@@ -230,11 +261,18 @@ async function runReleaseGate() {
       [orgId, multiSaleRes.rows[0].id, multiProductId, boxVariantId],
     );
 
-    const stockAfterBoxSale = await client.query(`select quantity::float8 from branch_inventory where product_id=$1`, [multiProductId]);
-    console.log(`Sold 1 Box of 12 from 120 base pieces. Stock after sale: ${stockAfterBoxSale.rows[0].quantity} pieces (Expected: 108).`);
+    const stockAfterBoxSale = await client.query(
+      `select quantity::float8 from branch_inventory where product_id=$1`,
+      [multiProductId],
+    );
+    console.log(
+      `Sold 1 Box of 12 from 120 base pieces. Stock after sale: ${stockAfterBoxSale.rows[0].quantity} pieces (Expected: 108).`,
+    );
 
     // Change variant conversion after sale to test historical preservation
-    await client.query(`update product_variants set units_per_base = 15 where id=$1`, [boxVariantId]);
+    await client.query(`update product_variants set units_per_base = 15 where id=$1`, [
+      boxVariantId,
+    ]);
 
     // Return 1 Box using sale_items.units_per_base
     const saleItemRes = await client.query(
@@ -247,14 +285,27 @@ async function runReleaseGate() {
       [orgId, branchId, multiProductId, restoredQty],
     );
 
-    const stockAfterBoxReturn = await client.query(`select quantity::float8 from branch_inventory where product_id=$1`, [multiProductId]);
-    console.log(`Returned 1 Box using historical sale_items.units_per_base (${restoredQty}). Stock after return: ${stockAfterBoxReturn.rows[0].quantity} pieces (Expected: 120).`);
-    console.log(`Historical sale_items.units_per_base remains ${restoredQty} even after variant conversion updated to 15.`);
+    const stockAfterBoxReturn = await client.query(
+      `select quantity::float8 from branch_inventory where product_id=$1`,
+      [multiProductId],
+    );
+    console.log(
+      `Returned 1 Box using historical sale_items.units_per_base (${restoredQty}). Stock after return: ${stockAfterBoxReturn.rows[0].quantity} pieces (Expected: 120).`,
+    );
+    console.log(
+      `Historical sale_items.units_per_base remains ${restoredQty} even after variant conversion updated to 15.`,
+    );
 
     // 5. Database Direct Record Inspection
     console.log('\n--- 5. Direct Database Record Inspection ---');
-    const batchCount = await client.query(`select count(*) from production_batches where organization_id=$1`, [orgId]);
-    const saleItemsCount = await client.query(`select count(*) from sale_items where organization_id=$1`, [orgId]);
+    const batchCount = await client.query(
+      `select count(*) from production_batches where organization_id=$1`,
+      [orgId],
+    );
+    const saleItemsCount = await client.query(
+      `select count(*) from sale_items where organization_id=$1`,
+      [orgId],
+    );
     console.log(`production_batches recorded: ${batchCount.rows[0].count}`);
     console.log(`sale_items recorded: ${saleItemsCount.rows[0].count}`);
     console.log('No duplicate inventory deductions or restorations found.');

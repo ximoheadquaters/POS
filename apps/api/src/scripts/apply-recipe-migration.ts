@@ -1,14 +1,21 @@
+function requireDatabaseUrl() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL must be configured before running this script.');
+  }
+  return process.env.DATABASE_URL;
+}
+
 import dotenv from 'dotenv';
 import pg from 'pg';
 
 dotenv.config({ path: '../../.env' });
 dotenv.config();
 
-const connectionString = 'postgresql://postgres.qpkodtxawlswrndvxlvc:gamora09287310860@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres';
+const connectionString = requireDatabaseUrl();
 
 const pool = new pg.Pool({
   connectionString,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
 });
 
 async function main() {

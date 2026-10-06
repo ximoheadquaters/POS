@@ -1,8 +1,15 @@
+function requireDatabaseUrl() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL must be configured before running this script.');
+  }
+  return process.env.DATABASE_URL;
+}
+
 import pg from 'pg';
 
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:gamora09287310860@db.qpkodtxawlswrndvxlvc.supabase.co:5432/postgres',
-  ssl: { rejectUnauthorized: false }
+  connectionString: requireDatabaseUrl(),
+  ssl: { rejectUnauthorized: false },
 });
 
 async function main() {
